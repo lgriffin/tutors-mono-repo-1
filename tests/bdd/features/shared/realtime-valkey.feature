@@ -60,28 +60,65 @@ Feature: Realtime on Valkey
       And nothing listens to the topic "../admin"
 
   @rule-0484 @ears-unwanted
-  Rule: If a browser asks the reader's server to publish to a topic other than a playground share, or an event other than a share's state or a lecturer's watching, then the reader shall answer 403 or 400 and publish nothing.
+  Rule: If a browser asks the reader's server to publish to a topic other than a playground share, an event other than a share's state or a lecturer's watching, or as anyone but the signed-in student or educator the event needs, then the reader shall answer 400, 401 or 403 and publish nothing.
 
     Scenario: A browser cannot publish a lecturer's broadcast
       Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
-      And a browser streams the broadcasts of "web-dev-101" from the reader
-      When a browser asks the reader to publish "course-broadcast" on "broadcast:web-dev-101"
+      And "eve" streams the broadcasts of "web-dev-101" from the reader
+      When "alice" asks the reader to publish "course-broadcast" on "broadcast:web-dev-101"
       Then the reader answers 403
       And the broadcast stream receives nothing
 
     Scenario: A playground share's state reaches the lecturer's stream
       Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
-      And a browser streams the playground share of the first lab of "web-dev-101" from the reader
-      When a browser asks the reader to publish "state" on the playground share of the first lab
+      And "eve" streams the playground share of the first lab of "web-dev-101" from the reader
+      When "alice" asks the reader to publish "state" for "alice" on the playground share of the first lab
       Then the reader answers 202
-      And the playground stream receives the state
+      And the playground stream receives the state of "alice"
 
     Scenario: A browser cannot publish another event on a playground share
       Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
-      And a browser streams the playground share of the first lab of "web-dev-101" from the reader
-      When a browser asks the reader to publish "course-broadcast" on the playground share of the first lab
+      And "eve" streams the playground share of the first lab of "web-dev-101" from the reader
+      When "alice" asks the reader to publish "course-broadcast" for "alice" on the playground share of the first lab
       Then the reader answers 400
       And the playground stream receives nothing
+
+    Scenario: A signed-out browser cannot publish
+      Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
+      And "eve" streams the playground share of the first lab of "web-dev-101" from the reader
+      When a signed-out browser asks the reader to publish "state" for "alice" on the playground share of the first lab
+      Then the reader answers 401
+      And the playground stream receives nothing
+
+    Scenario: A student cannot share another student's work
+      Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
+      And "eve" streams the playground share of the first lab of "web-dev-101" from the reader
+      When "mallory" asks the reader to publish "state" for "alice" on the playground share of the first lab
+      Then the reader answers 403
+      And the playground stream receives nothing
+
+    Scenario: A student cannot announce they are watching
+      Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
+      And "alice" streams the playground share of the first lab of "web-dev-101" from the reader
+      When "mallory" asks the reader to publish "watching" for "mallory" on the playground share of the first lab
+      Then the reader answers 403
+      And the playground stream receives nothing
+
+  @rule-0560 @ears-event-driven
+  Rule: When a browser that is not signed in as an educator of the course streams a playground share, the reader shall send it only the lecturers' watching announcements.
+
+    Scenario: A sharing student hears the lecturer watching but sees no one's work
+      Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
+      And "alice" streams the playground share of the first lab of "web-dev-101" from the reader
+      When "bob" asks the reader to publish "state" for "bob" on the playground share of the first lab
+      And "eve" asks the reader to publish "watching" for "eve" on the playground share of the first lab
+      Then the playground stream receives only the watching announcement
+
+    Scenario: A signed-out browser cannot stream a playground share
+      Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
+      When a signed-out browser asks the reader for the stream of the playground share of the first lab
+      Then the reader answers 401
+      And nothing listens to the playground share
 
   @rule-0485 @ears-unwanted
   Rule: If a browser's realtime stream fails, then tutors shall close the stream and reopen it after the realtime gateway's full-jitter backoff instead of the browser's own fixed retry.

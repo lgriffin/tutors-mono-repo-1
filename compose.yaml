@@ -138,7 +138,9 @@ services:
   #
   # Realtime without Supabase uses the same Valkey:
   #
-  #   PUBLIC_REALTIME=valkey docker compose --profile realtime-valkey up --build
+  #   PUBLIC_ANON_MODE=FALSE PUBLIC_REALTIME=valkey docker compose --profile realtime-valkey up --build
+  #
+  # (In anonymous mode the reader publishes and streams nothing, so realtime needs sign-in on.)
   #
   # The reader's server publishes to it and the reader and live servers stream
   # each topic to browsers over server-sent events (/api/realtime/stream).

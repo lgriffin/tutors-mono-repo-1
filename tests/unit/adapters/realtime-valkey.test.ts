@@ -16,6 +16,8 @@ import {
   connectValkey,
   MAX_BROWSER_MESSAGE_BYTES,
   memoryRealtimeHub,
+  activityTopicOf,
+  playgroundOf,
   playgroundTopic,
   playgroundTopicOf,
   publishBrowserMessage,
@@ -131,6 +133,35 @@ describe("valkeyRealtimeHub", () => {
     expect(hub.subscribed()).toEqual(["cs101"]);
   });
 
+  it("subscribes again only after an UNSUBSCRIBE still in flight, so a stream that reopens at once stays subscribed", async () => {
+    const conn = pair();
+    let finishLeaving: () => void = () => {};
+    conn.subscriber.unsubscribe.mockImplementationOnce(
+      (channel: string) =>
+        new Promise<void>((resolve) => {
+          finishLeaving = () => {
+            conn.subscriber.channels.delete(channel);
+            resolve();
+          };
+        })
+    );
+    const hub = valkeyRealtimeHub(async () => conn);
+    const leave = await hub.subscribe("cs101", () => {});
+    const leaving = leave();
+    await vi.waitFor(() => expect(conn.subscriber.unsubscribe).toHaveBeenCalledOnce());
+
+    const heard: unknown[] = [];
+    const rejoined = hub.subscribe("cs101", (m) => heard.push(m));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(conn.subscriber.subscribe).toHaveBeenCalledOnce();
+    finishLeaving();
+    await leaving;
+    await rejoined;
+    expect(conn.subscriber.subscribe).toHaveBeenCalledTimes(2);
+    conn.subscriber.channels.get(`${CHANNEL_PREFIX}cs101`)!(JSON.stringify({ event: "lo-event", payload: {} }));
+    expect(heard).toEqual([{ event: "lo-event", payload: {} }]);
+  });
+
   it("keeps delivering to the other listeners when one throws", async () => {
     const hub = memoryRealtimeHub();
     const heard: string[] = [];
@@ -202,6 +233,15 @@ describe("realtimeStream", () => {
     await vi.waitFor(() => expect(hub.subscribed()).toEqual([]));
   });
 
+  it("sends a browser only the messages it may see", async () => {
+    const hub = memoryRealtimeHub();
+    const response = await realtimeStream(hub, "playground:cs101:/lab/1", { only: (m) => m.event === "watching" });
+    await hub.publish("playground:cs101:/lab/1", { event: "state", payload: { studentId: "ann" } });
+    await hub.publish("playground:cs101:/lab/1", { event: "watching", payload: {} });
+    expect(await blocks(response, 2)).toEqual([": subscribed", `data: ${JSON.stringify({ event: "watching", payload: {} })}`]);
+    await response.body!.cancel();
+  });
+
   it("subscribes to nothing for a browser that has already gone", async () => {
     const hub = memoryRealtimeHub();
     const gone = new AbortController();
@@ -230,11 +270,24 @@ describe("topics a browser may stream and publish to", () => {
       "playground:web-dev-101",
       "playground::lo",
       "playground:cs101:has space",
-      "x".repeat(701),
+      "x".repeat(801),
+      `playground:cs101:/${"x".repeat(512)}`,
       "-leading"
     ]) {
       expect(streamableTopic(refused), String(refused)).toBeNull();
     }
+  });
+
+  it("accepts a learning object id as long as the reader's data API does", () => {
+    const loId = `/${"x".repeat(511)}`;
+    expect(playgroundOf(`playground:cs101:${loId}`)).toEqual({ topic: `playground:cs101:${loId}`, courseId: "cs101", loId });
+    expect(streamableTopic(`playground:cs101:${loId}`)).toBe(`playground:cs101:${loId}`);
+  });
+
+  it("streams only activity from Tutors Live", () => {
+    expect(activityTopicOf("tutors-all-course-access")).toBe(topics.platformActivity());
+    expect(activityTopicOf("web-dev-101")).toBe("web-dev-101");
+    for (const refused of [null, "playground:cs101:/lab/1", "snippets:cs101", "broadcast:cs101", "../admin"]) expect(activityTopicOf(refused), String(refused)).toBeNull();
   });
 
   it("publishes from a browser only to a playground topic", () => {
@@ -281,31 +334,44 @@ describe("publishBrowserMessage", () => {
   const body = (overrides: Record<string, unknown> = {}) =>
     JSON.stringify({ topic: "playground:cs101:/lab/1", event: "state", payload: { studentId: "ann" }, from: "tab-1", ...overrides });
   const always = () => true;
+  const educators = ["eve"];
+  const as = (login: string) => ({ login, isEducator: async (courseId: string) => courseId === "cs101" && educators.includes(login) });
 
-  it("publishes a share's state with the tab it came from", async () => {
+  it("publishes a student's own state and an educator's watching, with the tab it came from", async () => {
     const hub = memoryRealtimeHub();
     const heard: unknown[] = [];
     await hub.subscribe("playground:cs101:/lab/1", (m) => heard.push(m));
-    expect(await publishBrowserMessage(body(), hub, always)).toEqual({ status: 202 });
-    expect(await publishBrowserMessage(body({ event: "watching", payload: undefined, from: "x".repeat(65) }), hub, always)).toEqual({ status: 202 });
+    expect(await publishBrowserMessage(body(), hub, always, as("ann"))).toEqual({ status: 202 });
+    expect(await publishBrowserMessage(body({ event: "watching", payload: undefined, from: "x".repeat(65) }), hub, always, as("eve"))).toEqual({ status: 202 });
     expect(heard).toEqual([
       { event: "state", payload: { studentId: "ann" }, from: "tab-1" },
       { event: "watching", payload: {} }
     ]);
   });
 
-  it("refuses anything but a playground share's two events", async () => {
+  it("refuses anything but a playground share's two events, from anyone but who they need", async () => {
     const hub = memoryRealtimeHub();
-    expect((await publishBrowserMessage("x".repeat(MAX_BROWSER_MESSAGE_BYTES + 1), hub, always)).status).toBe(413);
-    expect((await publishBrowserMessage("{", hub, always)).status).toBe(400);
-    expect((await publishBrowserMessage("null", hub, always)).status).toBe(400);
-    expect((await publishBrowserMessage(body({ topic: "broadcast:cs101" }), hub, always)).status).toBe(403);
-    expect((await publishBrowserMessage(body({ event: "lo-event" }), hub, always)).status).toBe(400);
-    expect((await publishBrowserMessage(body(), hub, () => false)).status).toBe(429);
-    expect((await publishBrowserMessage(body(), { ...hub, publish: () => Promise.reject(new Error("down")) }, always)).status).toBe(502);
+    const ann = as("ann");
+    expect((await publishBrowserMessage("x".repeat(MAX_BROWSER_MESSAGE_BYTES + 1), hub, always, ann)).status).toBe(413);
+    expect((await publishBrowserMessage("{", hub, always, ann)).status).toBe(400);
+    expect((await publishBrowserMessage("null", hub, always, ann)).status).toBe(400);
+    expect((await publishBrowserMessage(body({ topic: "broadcast:cs101" }), hub, always, ann)).status).toBe(403);
+    expect((await publishBrowserMessage(body({ event: "lo-event" }), hub, always, ann)).status).toBe(400);
+    expect((await publishBrowserMessage(body(), hub, always, as("mallory"))).status).toBe(403);
+    expect((await publishBrowserMessage(body({ payload: null }), hub, always, ann)).status).toBe(403);
+    expect((await publishBrowserMessage(body({ event: "watching" }), hub, always, ann)).status).toBe(403);
+    expect((await publishBrowserMessage(body(), hub, () => false, ann)).status).toBe(429);
+    expect((await publishBrowserMessage(body(), { ...hub, publish: () => Promise.reject(new Error("down")) }, always, ann)).status).toBe(502);
   });
 
-  it("limits each topic to its messages per second, whoever sends them", () => {
+  it("limits each sender on a topic, not the class sharing it", async () => {
+    const hub = memoryRealtimeHub();
+    const keys: string[] = [];
+    await publishBrowserMessage(body(), hub, (key) => (keys.push(key), true), as("ann"));
+    expect(keys).toEqual(["playground:cs101:/lab/1|ann"]);
+  });
+
+  it("limits each key to its messages per second", () => {
     let now = 0;
     const allow = topicRateLimiter(2, () => now);
     expect([allow("a"), allow("a"), allow("a"), allow("b")]).toEqual([true, true, false, true]);
@@ -346,7 +412,9 @@ class FakeSource implements EventSourceLike {
 /** `fetch` for a tab's sends: POST /api/realtime/publish into the same hub. */
 function publishFetch(hub: RealtimeHub): typeof fetch {
   return (async (_url: string, init: RequestInit) => {
-    const result = await publishBrowserMessage(String(init.body), hub, () => true);
+    // Signed in as whoever the message needs: the student it names, or an educator watching.
+    const login = (JSON.parse(String(init.body)) as { payload?: { studentId?: string } }).payload?.studentId ?? "eve";
+    const result = await publishBrowserMessage(String(init.body), hub, () => true, { login, isEducator: async () => true });
     return new Response(null, { status: result.status });
   }) as typeof fetch;
 }

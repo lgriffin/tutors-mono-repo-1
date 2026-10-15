@@ -17,6 +17,8 @@ export type StreamOptions = {
   /** Extra response headers, such as CORS for another Tutors app's origin. */
   headers?: Record<string, string>;
   keepAliveMs?: number;
+  /** Which messages this browser may see; the default sends every one. */
+  only?: (message: HubMessage) => boolean;
 };
 
 export async function realtimeStream(hub: RealtimeHub, topic: string, options: StreamOptions = {}): Promise<Response> {
@@ -41,7 +43,9 @@ export async function realtimeStream(hub: RealtimeHub, topic: string, options: S
     }
   };
 
-  const unsubscribe = await hub.subscribe(topic, (message: HubMessage) => write(encoder.encode(`data: ${JSON.stringify(message)}\n\n`)));
+  const unsubscribe = await hub.subscribe(topic, (message: HubMessage) => {
+    if (!options.only || options.only(message)) write(encoder.encode(`data: ${JSON.stringify(message)}\n\n`));
+  });
 
   async function stop(): Promise<void> {
     if (closed) return;

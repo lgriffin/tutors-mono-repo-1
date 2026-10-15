@@ -86,6 +86,8 @@ export function valkeyRealtimeHub(connect: () => Promise<PubSubPair>): RealtimeH
     return connection;
   };
   const topics = new Map<string, { listeners: Set<HubListener>; ready: Promise<unknown> }>();
+  /** UNSUBSCRIBEs still in flight; a new SUBSCRIBE to the same topic waits for them, or it would be undone. */
+  const leaving = new Map<string, Promise<void>>();
 
   return {
     kind: "valkey",
@@ -99,7 +101,7 @@ export function valkeyRealtimeHub(connect: () => Promise<PubSubPair>): RealtimeH
       let entry = topics.get(topic);
       if (!entry) {
         const listeners = new Set<HubListener>();
-        const ready = pair().then(({ subscriber }) =>
+        const ready = Promise.all([pair(), leaving.get(topic)]).then(([{ subscriber }]) =>
           subscriber.subscribe(CHANNEL_PREFIX + topic, (raw) => {
             const message = decode(raw);
             if (message) deliver(listeners, message);
@@ -126,8 +128,17 @@ export function valkeyRealtimeHub(connect: () => Promise<PubSubPair>): RealtimeH
         current.listeners.delete(listener);
         if (current.listeners.size > 0 || topics.get(topic) !== current) return;
         topics.delete(topic);
-        const { subscriber } = await pair();
-        await subscriber.unsubscribe(CHANNEL_PREFIX + topic);
+        const done = (async () => {
+          await leaving.get(topic)?.catch(() => undefined);
+          const { subscriber } = await pair();
+          await subscriber.unsubscribe(CHANNEL_PREFIX + topic);
+        })();
+        const settled = done.catch(() => undefined);
+        leaving.set(topic, settled);
+        void settled.then(() => {
+          if (leaving.get(topic) === settled) leaving.delete(topic);
+        });
+        await done;
       };
     },
 

@@ -8,7 +8,7 @@
 export { connectValkey, type PubSubClient, type PubSubPair } from "./client.ts";
 export { CHANNEL_PREFIX, memoryRealtimeHub, realtimeHub, valkeyRealtimeHub, type HubListener, type HubMessage, type RealtimeHub } from "./hub.ts";
 export { KEEPALIVE_MS, realtimeStream, type StreamOptions } from "./stream.ts";
-export { PLAYGROUND_EVENTS, playgroundTopic, playgroundTopicOf, streamableTopic } from "./topics.ts";
+export { PLAYGROUND_EVENTS, activityTopicOf, playgroundOf, playgroundTopic, playgroundTopicOf, streamableTopic } from "./topics.ts";
 export {
   BROWSER_MESSAGES_PER_SECOND,
   LO_EVENT,

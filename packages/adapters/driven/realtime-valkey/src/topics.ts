@@ -17,27 +17,42 @@ export const PLAYGROUND_EVENTS = ["state", "watching"] as const;
 
 /** As the reader's data API validates a course id. */
 const COURSE_ID = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,251}[A-Za-z0-9])?$/;
-/** A learning object id is a route; printable ASCII without spaces. */
-const LO_ID = /^[\x21-\x7e]{1,400}$/;
+/** A learning object id is a route; printable ASCII without spaces, as long as the reader's data API allows. */
+const LO_ID = /^[\x21-\x7e]{1,512}$/;
+/** "playground:" + a course id + ":" + a learning object id. */
+const MAX_TOPIC_LENGTH = 800;
 
 function courseIdOf(value: string): string | null {
   return COURSE_ID.test(value) && !value.includes("..") ? value : null;
 }
 
-/** The topic of a playground share, or null for any other topic. */
-export function playgroundTopicOf(raw: unknown): Topic | null {
-  if (typeof raw !== "string" || !raw.startsWith("playground:")) return null;
+/** A playground share's course and exercise, or null for any other topic. */
+export function playgroundOf(raw: unknown): { topic: Topic; courseId: string; loId: string } | null {
+  if (typeof raw !== "string" || raw.length > MAX_TOPIC_LENGTH || !raw.startsWith("playground:")) return null;
   const rest = raw.slice("playground:".length);
   const colon = rest.indexOf(":");
   if (colon < 0) return null;
   const courseId = courseIdOf(rest.slice(0, colon));
   const loId = rest.slice(colon + 1);
-  return courseId && LO_ID.test(loId) ? playgroundTopic(courseId, loId) : null;
+  return courseId && LO_ID.test(loId) ? { topic: playgroundTopic(courseId, loId), courseId, loId } : null;
+}
+
+/** The topic of a playground share, or null for any other topic. */
+export function playgroundTopicOf(raw: unknown): Topic | null {
+  return playgroundOf(raw)?.topic ?? null;
+}
+
+/** A course's or the platform's activity topic, or null: all Tutors Live streams. */
+export function activityTopicOf(raw: unknown): Topic | null {
+  if (typeof raw !== "string") return null;
+  if (raw === topics.platformActivity()) return topics.platformActivity();
+  const id = courseIdOf(raw);
+  return id ? topics.courseActivity(id) : null;
 }
 
 /** A topic Tutors publishes, or null: the stream subscribes to nothing else. */
 export function streamableTopic(raw: unknown): Topic | null {
-  if (typeof raw !== "string" || raw.length > 700) return null;
+  if (typeof raw !== "string" || raw.length > MAX_TOPIC_LENGTH) return null;
   if (raw === topics.platformActivity()) return topics.platformActivity();
   if (raw.startsWith("snippets:")) {
     const id = courseIdOf(raw.slice("snippets:".length));
@@ -48,6 +63,5 @@ export function streamableTopic(raw: unknown): Topic | null {
     return id ? topics.courseBroadcasts(id) : null;
   }
   if (raw.startsWith("playground:")) return playgroundTopicOf(raw);
-  const id = courseIdOf(raw);
-  return id ? topics.courseActivity(id) : null;
+  return activityTopicOf(raw);
 }

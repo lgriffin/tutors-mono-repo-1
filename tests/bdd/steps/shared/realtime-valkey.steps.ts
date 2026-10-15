@@ -21,7 +21,7 @@ import { createRealtimeGateway, topics, type Subscription } from "@tutors/realti
 import { playgroundTopic, realtimeHub, sseRealtimeAdapter, type EventSourceLike } from "@tutors/realtime-valkey";
 import { GET as liveStream } from "../../../../apps/live/src/routes/api/realtime/stream/+server.ts";
 import { freshBrowser, githubUser, labsOf, publishedCourse, signIn } from "../../support/connect.ts";
-import { readerRequest } from "../../support/reader-api.ts";
+import { readerRequest, setReaderSession } from "../../support/reader-api.ts";
 import { publicEnv, recorder } from "../../support/supabase-recorder.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/realtime-valkey.feature");
@@ -108,8 +108,11 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     expect(streams[stream].frames).toEqual([]);
   };
   const answers = (_ctx: unknown, status: number) => expect(response.status).toBe(status);
-  const browserPublishes = async (event: string, topic: string) => {
-    response = await readerRequest("POST", "/api/realtime/publish", { topic, event, payload: { studentId: "alice", files: [] }, from: "tab-1" });
+  /** The browser of `name` (null: signed out) sends the request; the reader sees its session. */
+  const as = (name: string | null) => setReaderSession(name ? githubUser(name) : null);
+  const publishes = async (name: string | null, event: string, topic: string, studentId = name ?? "") => {
+    as(name);
+    response = await readerRequest("POST", "/api/realtime/publish", { topic, event, payload: { studentId, files: [] }, from: "tab-1" });
   };
 
   AfterEachScenario(async () => {
@@ -119,6 +122,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     tabSubscription = undefined;
     sources = [];
     publicEnv.PUBLIC_REALTIME = "";
+    as(null);
     vi.useRealTimers();
     // The hub lives as long as the server process, as in production: closing the streams unsubscribed them.
     await vi.waitFor(() => expect(hub().subscribed()).toEqual([]));
@@ -222,32 +226,103 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   });
 
   Rule(
-    "If a browser asks the reader's server to publish to a topic other than a playground share, or an event other than a share's state or a lecturer's watching, then the reader shall answer 403 or 400 and publish nothing.",
+    "If a browser asks the reader's server to publish to a topic other than a playground share, an event other than a share's state or a lecturer's watching, or as anyone but the signed-in student or educator the event needs, then the reader shall answer 400, 401 or 403 and publish nothing.",
     ({ RuleScenario }) => {
+      const streamsPlayground = (_ctx: unknown, name: string) => {
+        as(name);
+        return streamFromReader("playground", playground());
+      };
+      const publishesOnPlayground = (_ctx: unknown, name: string, event: string, studentId: string) => publishes(name, event, playground(), studentId);
+
       RuleScenario("A browser cannot publish a lecturer's broadcast", ({ Given, And, When, Then }) => {
         Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("a browser streams the broadcasts of {string} from the reader", (_ctx, courseId: string) => streamFromReader("broadcast", topics.courseBroadcasts(courseId)));
-        When("a browser asks the reader to publish {string} on {string}", (_ctx, event: string, topic: string) => browserPublishes(event, topic));
+        And("{string} streams the broadcasts of {string} from the reader", (_ctx, name: string, courseId: string) => {
+          as(name);
+          return streamFromReader("broadcast", topics.courseBroadcasts(courseId));
+        });
+        When("{string} asks the reader to publish {string} on {string}", (_ctx, name: string, event: string, topic: string) => publishes(name, event, topic));
         Then("the reader answers {number}", answers);
         And("the broadcast stream receives nothing", receivesNothing("broadcast"));
       });
 
       RuleScenario("A playground share's state reaches the lecturer's stream", ({ Given, And, When, Then }) => {
         Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("a browser streams the playground share of the first lab of {string} from the reader", () => streamFromReader("playground", playground()));
-        When("a browser asks the reader to publish {string} on the playground share of the first lab", (_ctx, event: string) => browserPublishes(event, playground()));
+        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", publishesOnPlayground);
         Then("the reader answers {number}", answers);
-        And("the playground stream receives the state", async () => {
-          await vi.waitFor(() => expect(streams.playground.frames).toEqual([{ event: "state", payload: { studentId: "alice", files: [] }, from: "tab-1" }]));
+        And("the playground stream receives the state of {string}", async (_ctx, studentId: string) => {
+          await vi.waitFor(() => expect(streams.playground.frames).toEqual([{ event: "state", payload: { studentId, files: [] }, from: "tab-1" }]));
         });
       });
 
       RuleScenario("A browser cannot publish another event on a playground share", ({ Given, And, When, Then }) => {
         Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("a browser streams the playground share of the first lab of {string} from the reader", () => streamFromReader("playground", playground()));
-        When("a browser asks the reader to publish {string} on the playground share of the first lab", (_ctx, event: string) => browserPublishes(event, playground()));
+        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", publishesOnPlayground);
         Then("the reader answers {number}", answers);
         And("the playground stream receives nothing", receivesNothing("playground"));
+      });
+
+      RuleScenario("A signed-out browser cannot publish", ({ Given, And, When, Then }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        When("a signed-out browser asks the reader to publish {string} for {string} on the playground share of the first lab", (_ctx, event: string, studentId: string) =>
+          publishes(null, event, playground(), studentId)
+        );
+        Then("the reader answers {number}", answers);
+        And("the playground stream receives nothing", receivesNothing("playground"));
+      });
+
+      RuleScenario("A student cannot share another student's work", ({ Given, And, When, Then }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", publishesOnPlayground);
+        Then("the reader answers {number}", answers);
+        And("the playground stream receives nothing", receivesNothing("playground"));
+      });
+
+      RuleScenario("A student cannot announce they are watching", ({ Given, And, When, Then }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", publishesOnPlayground);
+        Then("the reader answers {number}", answers);
+        And("the playground stream receives nothing", receivesNothing("playground"));
+      });
+    }
+  );
+
+  Rule(
+    "When a browser that is not signed in as an educator of the course streams a playground share, the reader shall send it only the lecturers' watching announcements.",
+    ({ RuleScenario }) => {
+      RuleScenario("A sharing student hears the lecturer watching but sees no one's work", ({ Given, And, When, Then }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        And("{string} streams the playground share of the first lab of {string} from the reader", (_ctx, name: string) => {
+          as(name);
+          return streamFromReader("playground", playground());
+        });
+        When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", async (_ctx, name: string, event: string, studentId: string) => {
+          await publishes(name, event, playground(), studentId);
+          expect(response.status).toBe(202);
+        });
+        And("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", async (_ctx, name: string, event: string, studentId: string) => {
+          await publishes(name, event, playground(), studentId);
+          expect(response.status).toBe(202);
+        });
+        Then("the playground stream receives only the watching announcement", async () => {
+          await vi.waitFor(() => expect(streams.playground.frames).toEqual([{ event: "watching", payload: { studentId: "eve", files: [] }, from: "tab-1" }]));
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          expect(streams.playground.frames.map((f) => f.event)).toEqual(["watching"]);
+        });
+      });
+
+      RuleScenario("A signed-out browser cannot stream a playground share", ({ Given, When, Then, And }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        When("a signed-out browser asks the reader for the stream of the playground share of the first lab", async () => {
+          as(null);
+          response = await readerRequest("GET", `/api/realtime/stream?topic=${encodeURIComponent(playground())}`);
+        });
+        Then("the reader answers {number}", answers);
+        And("nothing listens to the playground share", () => expect(hub().subscribed()).toEqual([]));
       });
     }
   );
