@@ -3,7 +3,7 @@ import { topics, type Topic } from "@tutors/realtime";
 /**
  * Which topics a browser may stream and which it may publish to. The stream answers only the
  * topics Tutors publishes (a course's activity, the platform's, a course's snippet pings and
- * broadcasts, an exercise's live share); the only messages a browser publishes itself are a live
+ * broadcasts, an exercise's live share, a course's help queue); the only messages a browser publishes itself are a live
  * share's state and a lecturer's "watching" announcement.
  */
 
@@ -22,7 +22,8 @@ const LO_ID = /^[\x21-\x7e]{1,512}$/;
 /** "playground:" + a course id + ":" + a learning object id. */
 const MAX_TOPIC_LENGTH = 800;
 
-function courseIdOf(value: string): string | null {
+/** A course id as the reader's data API accepts it, or null. */
+export function courseIdOf(value: string): string | null {
   return COURSE_ID.test(value) && !value.includes("..") ? value : null;
 }
 
@@ -63,5 +64,9 @@ export function streamableTopic(raw: unknown): Topic | null {
     return id ? topics.courseBroadcasts(id) : null;
   }
   if (raw.startsWith("playground:")) return playgroundTopicOf(raw);
+  if (raw.startsWith("assistance:")) {
+    const id = courseIdOf(raw.slice("assistance:".length));
+    return id ? (`assistance:${id}` as Topic) : null;
+  }
   return activityTopicOf(raw);
 }

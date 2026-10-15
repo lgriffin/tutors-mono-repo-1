@@ -8,9 +8,20 @@
  * is no data: the routes answer 503. PUBLIC_REALTIME picks how the server publishes to Tutors Live
  * and course notices: Supabase Realtime over the service client (the default), or `valkey`, Valkey
  * pub/sub at PRIVATE_VALKEY_URL that the realtime stream routes fan out over server-sent events
- * (realtime-valkey, Rule 0481).
+ * (realtime-valkey, Rule 0481). Help requests are kept only on Postgres and their queue changes
+ * travel only on Valkey (PR B of the learning plan): no Supabase table or channel is added for them.
  */
-import type { AccessStore, LearningEventSink, LearningRecords, ProfilePort, ScormRecords, SnippetStore, WhiteboardStore } from "@tutors/application/ports";
+import type {
+  AccessStore,
+  AssistanceFeed,
+  AssistanceStore,
+  LearningEventSink,
+  LearningRecords,
+  ProfilePort,
+  ScormRecords,
+  SnippetStore,
+  WhiteboardStore
+} from "@tutors/application/ports";
 import { createAuthorization, listFromEnv, type Authorization } from "@tutors/application";
 import { clock } from "@tutors/clock";
 import { httpCourseFacts } from "@tutors/course-http";
@@ -18,6 +29,7 @@ import {
   checkPostgres,
   insertAppErrors as insertPostgresAppErrors,
   postgresAccessStore,
+  postgresAssistanceStore,
   postgresCatalogue,
   postgresClient,
   postgresLearningEventSink,
@@ -56,7 +68,7 @@ import {
   type SupabaseClient
 } from "@tutors/store-supabase";
 import { publishCourseNotice, receiveLiveActivity, watchLiveTopic, type LiveActivityResponse, type LiveBudgetTier } from "@tutors/realtime-supabase";
-import { publishLiveActivity, publishNotice, realtimeHub, realtimeKindOf, type RealtimeHub } from "@tutors/realtime-valkey";
+import { publishLiveActivity, publishNotice, realtimeHub, realtimeKindOf, valkeyAssistanceFeed, type RealtimeHub } from "@tutors/realtime-valkey";
 import type { CourseNotice } from "@tutors/application/ports";
 import type { TutorsConnectLatestRow } from "@tutors/domain/learning";
 import log, { withRequestId } from "@tutors/logger";
@@ -108,6 +120,8 @@ export type ReaderServerData = {
   playground: PlaygroundSnapshotRows;
   /** The error log (POST /api/errors). */
   recordErrors(rows: AppErrorRow[]): Promise<void>;
+  /** Help requests (/api/assistance): Postgres only, as no new Supabase table is added; null on Supabase, where the routes answer 503. */
+  assistance: AssistanceStore | null;
 };
 
 /** What the server publishes to browsers, over the broker PUBLIC_REALTIME picks. */
@@ -121,6 +135,8 @@ type ServerRealtime = {
   watchLive(topic: string, watcher: string): Promise<LiveBudgetTier | null>;
   /** The hub the realtime stream and publish routes use: Valkey's, or null on Supabase and in anonymous mode. */
   hub: RealtimeHub | null;
+  /** Help queue changes for the course's educators (Rule 0391): on Valkey's hub, so nothing is published on Supabase Realtime. */
+  assistance: AssistanceFeed;
 };
 
 export type ReaderServer = {
@@ -172,7 +188,8 @@ function supabaseData(db: SupabaseClient): ReaderServerData {
     scorm: supabaseScormRecords(db),
     snippets: supabaseSnippetStore(db),
     playground: supabasePlaygroundSnapshotRows(db),
-    recordErrors: (rows) => insertAppErrors(db, rows)
+    recordErrors: (rows) => insertAppErrors(db, rows),
+    assistance: null
   };
 }
 
@@ -192,7 +209,8 @@ function postgresData(sql: SqlClient): ReaderServerData {
     scorm: postgresScormRecords(sql),
     snippets: postgresSnippetStore(sql),
     playground: postgresPlaygroundSnapshotRows(sql),
-    recordErrors: (rows) => insertPostgresAppErrors(sql, rows)
+    recordErrors: (rows) => insertPostgresAppErrors(sql, rows),
+    assistance: postgresAssistanceStore(sql)
   };
 }
 
@@ -203,7 +221,8 @@ function supabaseRealtime(client: SupabaseClient | null): ServerRealtime {
     activity: (raw) => receiveLiveActivity(raw, client ?? undefined),
     notice: (notice) => publishCourseNotice(client ?? undefined, notice),
     watchLive: (topic, watcher) => (client ? watchLiveTopic(client, topic, watcher) : Promise.resolve(null)),
-    hub: null
+    hub: null,
+    assistance: valkeyAssistanceFeed(null)
   };
 }
 
@@ -216,7 +235,8 @@ function valkeyRealtime(env: ReaderServerEnv): ServerRealtime {
     activity: (raw) => publishLiveActivity(raw, hub),
     notice: (notice) => publishNotice(hub, notice),
     watchLive: async () => (hub ? "normal" : null),
-    hub
+    hub,
+    assistance: valkeyAssistanceFeed(hub)
   };
 }
 

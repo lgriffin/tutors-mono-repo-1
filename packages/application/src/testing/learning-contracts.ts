@@ -62,6 +62,41 @@ export function assistanceStoreContract(make: Make<AssistanceStore>): ContractCa
       }
     },
     {
+      name: "a second live request for the same learner and course is refused, and one is allowed again once the first has ended",
+      run: async () => {
+        const store = await make();
+        const first = await store.open(ask("cs101", "alice"));
+        let refused = false;
+        await store.open(ask("cs101", "alice", "2026-01-05T09:01:00.000Z")).catch(() => (refused = true));
+        assert(refused, "second live request refused");
+        await store.open(ask("cs102", "alice"));
+        assert(await store.replace({ ...first, state: "withdrawn", closed: { by: "alice", at: "2026-01-05T09:02:00.000Z", reason: "withdrawn" } }, "open"), "withdrawn");
+        const again = await store.open(ask("cs101", "alice", "2026-01-05T09:03:00.000Z"));
+        assertEqual(
+          (await store.live("cs101")).map((r) => r.id),
+          [again.id],
+          "live after asking again"
+        );
+      }
+    },
+    {
+      name: "every field of a moved request reads back as it was replaced",
+      run: async () => {
+        const store = await make();
+        const r = await store.open({ ...ask("cs101", "alice"), kind: "hint" });
+        const answered: HelpRequest = {
+          ...r,
+          ref: step("cs101", "03", "/lab/cs101/topic-02/book-b"),
+          state: "resolved",
+          acknowledged: { by: "lecturer", at: "2026-01-05T09:01:00.000Z" },
+          closed: { by: "lecturer", at: "2026-01-05T09:04:00.000Z", reason: "hint" },
+          hintText: "Check the loop bound."
+        };
+        assert(await store.replace(answered, "open"), "replaced");
+        assertEqual(await store.get(r.id), answered, "read back");
+      }
+    },
+    {
       name: "what is read back is a copy",
       run: async () => {
         const store = await make();

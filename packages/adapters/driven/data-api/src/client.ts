@@ -4,11 +4,14 @@ import type {
   Catalogue,
   CourseVisitReport,
   ErrorReport,
+  HelpPost,
+  HelpQueue,
   LiveWatch,
   LiveWatchTier,
   LockChange,
   LockRemoval,
   Locks,
+  MyHelpRequest,
   MyStatus,
   MyStatusChange,
   PlaygroundRemoval,
@@ -32,11 +35,17 @@ export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
  * fire-and-forget. (Anonymous mode calls nothing: the composition root composes the in-memory
  * adapters instead of these.)
  */
-async function send(fetchFn: FetchFn, method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<Response | null> {
+async function send(
+  fetchFn: FetchFn,
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown,
+  credentials: RequestCredentials = "same-origin"
+): Promise<Response | null> {
   try {
     const response = await fetchFn(path, {
       method,
-      credentials: "same-origin",
+      credentials,
       headers: body === undefined ? undefined : { "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body)
     });
@@ -105,7 +114,14 @@ export function createDataApi(fetchFn: FetchFn = (input, init) => globalThis.fet
     savePlayground: (save: PlaygroundSave) => send(call, "PUT", "/api/playground", save),
     removePlayground: (removal: PlaygroundRemoval) => send(call, "DELETE", "/api/playground", removal),
     reportErrors: (report: ErrorReport) => send(call, "POST", "/api/errors", report),
-    watchLive: (watch: LiveWatch) => sendJson<LiveWatchTier>("POST", "/api/live/watch", watch)
+    watchLive: (watch: LiveWatch) => sendJson<LiveWatchTier>("POST", "/api/live/watch", watch),
+    // Help requests carry the session even from Tutors Live's origin: the reader decides from it who may act.
+    postHelp: (post: HelpPost) => send(call, "POST", "/api/assistance", post, "include"),
+    getMyHelpRequest: (courseId: string) => getJson<MyHelpRequest>(withQuery("/api/assistance/mine", { courseId })),
+    getHelpQueue: async (courseId: string) => {
+      const response = await send(call, "GET", withQuery("/api/assistance", { courseId }), undefined, "include");
+      return response?.ok ? ((await response.json()) as HelpQueue) : null;
+    }
   };
 }
 

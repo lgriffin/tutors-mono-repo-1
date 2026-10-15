@@ -3,7 +3,7 @@
  * anonymous reader compose until the real adapters arrive. Each keeps copies, so changing what it
  * returns never changes what it stores.
  */
-import type { HelpRequest, HelpState, NewHelpRequest } from "@tutors/domain/assistance";
+import { isLive, type HelpRequest, type HelpState, type NewHelpRequest } from "@tutors/domain/assistance";
 import type { Annotation, NewAnnotation, NewReflection, Reflection } from "@tutors/domain/feedback";
 import { stepKey, type Note, type StepRef } from "@tutors/domain/learning";
 import type { AssistanceChange, AssistanceFeed } from "../ports/assistance-feed.ts";
@@ -26,6 +26,9 @@ export class InMemoryAssistanceStore implements AssistanceStore {
   async open(request: NewHelpRequest): Promise<HelpRequest> {
     this.check();
     if (!request.ref?.courseId || !request.learnerId) throw new Error("a help request needs a step and a learner");
+    if (this.rows.some((r) => r.ref.courseId === request.ref.courseId && r.learnerId === request.learnerId && isLive(r))) {
+      throw new Error("the learner already has a live help request in the course");
+    }
     const row: HelpRequest = { ...copy(request), id: `help-${this.nextId++}` };
     this.rows.push(row);
     return copy(row);
@@ -37,7 +40,7 @@ export class InMemoryAssistanceStore implements AssistanceStore {
   }
   async live(courseId: string): Promise<HelpRequest[]> {
     this.check();
-    return this.rows.filter((r) => r.ref.courseId === courseId && (r.state === "open" || r.state === "acknowledged")).map(copy);
+    return this.rows.filter((r) => r.ref.courseId === courseId && isLive(r)).map(copy);
   }
   async replace(next: HelpRequest, from: HelpState): Promise<boolean> {
     this.check();

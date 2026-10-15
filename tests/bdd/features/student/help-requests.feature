@@ -6,7 +6,8 @@ Feature: Help requests in labs
 
   A signed-in student raises one help request per course; it carries the step, the kind and the
   time. These Rules drive the Assistance use cases over the in-memory adapters; the reader's
-  server route, the live feed adapter and the help button come in later pull requests.
+  server routes, the Postgres store and the Valkey feed are shared/help-request-server.feature,
+  and the help button comes in a later pull request.
 
   Background:
     Given "alice" is signed in and on the step "02" of the lab "/lab/cs101/lab-01" in the course "cs101"

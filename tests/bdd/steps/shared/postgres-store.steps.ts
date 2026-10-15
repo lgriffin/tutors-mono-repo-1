@@ -29,6 +29,7 @@ vi.mock("pg", () => {
 import type { Course } from "../../../../packages/jsr/model/src/tutors.ts";
 import {
   accessStoreContract,
+  assistanceStoreContract,
   learningEventSinkContract,
   playgroundSnapshotsContract,
   profileContract,
@@ -40,6 +41,7 @@ import type { PlaygroundSnapshots } from "@tutors/application/ports";
 import {
   migrate,
   postgresAccessStore,
+  postgresAssistanceStore,
   postgresLearningEventSink,
   postgresPlaygroundSnapshotRows,
   postgresProfile,
@@ -70,7 +72,8 @@ const STORE_TABLES = [
   "playground_snapshots",
   "app_errors",
   "assignments",
-  "assignments_submissions"
+  "assignments_submissions",
+  "assistance_requests"
 ];
 
 const DATABASE_URL = "postgres://tutors@db.invalid/tutors";
@@ -193,7 +196,7 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     RuleScenario("The Postgres store keeps every store port's contract", ({ When, Then }) => {
       const failures: string[] = [];
       When(
-        "the contract suites of ProfilePort, AccessStore, LearningEventSink, ScormRecords, SnippetStore and PlaygroundSnapshots run against the Postgres store",
+        "the contract suites of ProfilePort, AccessStore, LearningEventSink, ScormRecords, SnippetStore, PlaygroundSnapshots and AssistanceStore run against the Postgres store",
         async () => {
           const sql: SqlClient = db.sql;
           const rows = postgresPlaygroundSnapshotRows(sql);
@@ -211,7 +214,8 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
             ...learningEventSinkContract(() => postgresLearningEventSink(sql)),
             ...scormRecordsContract(() => postgresScormRecords(sql)),
             ...snippetStoreContract(() => postgresSnippetStore(sql), new Date().toISOString()),
-            ...playgroundSnapshotsContract(snapshots)
+            ...playgroundSnapshotsContract(snapshots),
+            ...assistanceStoreContract(() => postgresAssistanceStore(sql))
           ];
           expect(suites.length).toBeGreaterThan(20);
           for (const c of suites) {

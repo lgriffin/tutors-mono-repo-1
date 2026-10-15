@@ -10,6 +10,7 @@ import { afterEach, expect, vi } from "vitest";
 import {
   attemptsFromRecords,
   evidenceAtStep,
+  learningObjectRoute,
   noteKey,
   stepRef,
   type Attempt,
@@ -44,6 +45,7 @@ import {
 } from "../../../../packages/application/src/testing/index.ts";
 import type { StepDiagnostic } from "@tutors/domain/insights";
 import type { Annotation } from "@tutors/domain/feedback";
+import type { Lo } from "@tutors/domain/course";
 import type { HelpRequest } from "@tutors/domain/assistance";
 import { localStorageNotes, type NotesStorage } from "@tutors/notes-localstorage";
 import { anonymousAdapters, configureAdapters } from "../../../../packages/adapters/driving/svelte-state/src/adapters.ts";
@@ -104,7 +106,7 @@ describeFeature(feature, ({ Background, Rule }) => {
   let fetchSpy: ReturnType<typeof vi.fn>;
 
   const at = (stepId: string): StepRef => ({ courseId, labRoute, stepId });
-  const lab = (): LabSteps => ({ courseId, labRoute, recordRoute: `/lab/${courseId}`, stepIds });
+  const lab = (): LabSteps => ({ courseId, labRoute, stepIds });
   const write = (body: string, stepId: string) => saveNote({ notes: store, clock })({ ref: at(stepId), body, labTitle: "Lab One", stepTitle: `Step ${stepId}` });
 
   let browser: TestStorage;
@@ -152,18 +154,30 @@ describeFeature(feature, ({ Background, Rule }) => {
     });
   });
 
-  const visited = (_ctx: unknown, learner: string, first: string, times: number, second: string) => {
-    const row = (stepId: string, count: number): LearningRecordRow => ({
+  /**
+   * A learner's record of a lab page as the reader writes it: the route parameter of
+   * `/lab/[courseid]/[...loid]` is the page's address after the course id, the lab's path and the
+   * step id, or the lab's path alone when the lab is opened at its own address.
+   */
+  const row = (learner: string, count: number, stepId?: string, route = labRoute): LearningRecordRow => {
+    const loid = [...route.split("/").slice(3), ...(stepId ? [stepId] : [])].join("/");
+    return {
       course_id: courseId,
       student_id: learner,
-      lo_id: `/lab/${courseId}/${stepId}`,
+      lo_id: learningObjectRoute({ route } as Lo, loid),
       duration: count * 2,
       count,
       date_last_accessed: "2026-01-05T09:00:00.000Z",
       type: "step"
-    });
-    records = [row(first, times), row(second, 1)];
+    };
+  };
+  const keep = (rows: LearningRecordRow[]) => {
+    records = rows;
     recordsPort = new InMemoryLearningRecords([], records as never, []);
+  };
+  const visited = (_ctx: unknown, learner: string, first: string, times: number, second: string) => keep([row(learner, times, first), row(learner, 1, second)]);
+  const onlyAttempt = (_ctx: unknown, learner: string, visits: number, stepId: string) => {
+    expect(attempts.map((x) => [x.learnerId, x.ref.stepId, x.visits])).toEqual([[learner, stepId, visits]]);
   };
   const readAttempts = async () => {
     const read = vi.spyOn(recordsPort, "learningRecords");
@@ -226,6 +240,29 @@ describeFeature(feature, ({ Background, Rule }) => {
         expect(attempts.map((a) => a.activeBlocks)).toEqual(records.map((r) => r.duration));
         expect(attempts.map((a) => a.lastAt)).toEqual(records.map((r) => r.date_last_accessed));
       });
+    });
+
+    RuleScenario("Two labs that reuse a step id keep their attempts apart", ({ Given, When, Then }) => {
+      Given(
+        "the learning records show {string} visited the step {string} of the lab {string} {number} times and the step {string} of the lab {string} {number} times",
+        (_ctx, learner: string, a: string, labA: string, first: number, b: string, labB: string, second: number) => {
+          expect(labA).toBe(labRoute);
+          keep([row(learner, first, a, labA), row(learner, second, b, labB)]);
+          // The reader writes each under its own lab, so the rows differ though the step ids do not.
+          expect(records[0].lo_id).not.toBe(records[1].lo_id);
+        }
+      );
+      When("tutors reads the attempts at the lab", readAttempts);
+      Then("{string} shall have {number} visits at the step {string} and no other attempt", onlyAttempt);
+    });
+
+    RuleScenario("Opening the lab at its own address counts toward its first step", ({ Given, When, Then }) => {
+      Given("the learning records show {string} opened the lab {number} times and visited the step {string} once", (_ctx, learner: string, opened: number, stepId: string) => {
+        expect(stepId).toBe(stepIds[0]);
+        keep([row(learner, opened), row(learner, 1, stepId)]);
+      });
+      When("tutors reads the attempts at the lab", readAttempts);
+      Then("{string} shall have {number} visits at the step {string} and no other attempt", onlyAttempt);
     });
   });
 
