@@ -25,6 +25,7 @@ export { valkeyPresence, type ValkeyPresenceOptions } from "./presence.ts";
 export { COURSE_NOTICES_ROUTE, isCourseNotice, noticeEvent, noticeTopic, valkeyCourseNotices, type ValkeyCourseNoticesOptions } from "./notices.ts";
 export { valkeyPlaygroundLive } from "./playground-live.ts";
 export { valkeyBrowserRealtime, type ValkeyBrowserRealtime } from "./browser-realtime.ts";
+export { assistanceCourseOf, assistanceTopic, sseAssistanceFeed, valkeyAssistanceFeed, type SseAssistanceFeedOptions } from "./assistance.ts";
 
 /** Which broker PUBLIC_REALTIME names; anything but `valkey` is Supabase, so the dual release keeps Supabase until a deployment opts in. */
 export function realtimeKindOf(env: { PUBLIC_REALTIME?: string }): "supabase" | "valkey" {

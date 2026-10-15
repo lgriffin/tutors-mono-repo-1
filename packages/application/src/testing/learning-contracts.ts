@@ -41,7 +41,7 @@ export function assistanceStoreContract(make: Make<AssistanceStore>): ContractCa
         const a = await store.open(ask("cs101", "alice"));
         const b = await store.open(ask("cs101", "bob"));
         await store.open(ask("cs102", "carol"));
-        assert(await store.replace({ ...b, state: "resolved", closed: { by: "lecturer", at: "2026-01-05T09:05:00.000Z", reason: "resolved" } }, "open"), "resolved");
+        assert(await store.replace({ ...b, state: "resolved", closed: { by: "lecturer", at: "2026-01-05T09:05:00.000Z", reason: "resolved" } }, b), "resolved");
         assertEqual(
           (await store.live("cs101")).map((r) => r.id),
           [a.id],
@@ -50,15 +50,65 @@ export function assistanceStoreContract(make: Make<AssistanceStore>): ContractCa
       }
     },
     {
-      name: "replace writes only while the stored state is still the expected one",
+      name: "replace writes only while the stored request still has the state it was read in",
       run: async () => {
         const store = await make();
         const r = await store.open(ask("cs101", "alice"));
         const acknowledged: HelpRequest = { ...r, state: "acknowledged", acknowledged: { by: "lecturer", at: "2026-01-05T09:01:00.000Z" } };
-        assert(await store.replace(acknowledged, "open"), "first acknowledge");
-        assertEqual(await store.replace(acknowledged, "open"), false, "second acknowledge");
-        assertEqual(await store.replace({ ...r, id: "no-such-request" }, "open"), false, "missing");
+        assert(await store.replace(acknowledged, r), "first acknowledge");
+        assertEqual(await store.replace(acknowledged, r), false, "second acknowledge");
+        assertEqual(await store.replace({ ...r, id: "no-such-request" }, { ...r, id: "no-such-request" }), false, "missing");
         assertEqual((await store.get(r.id))?.acknowledged, { by: "lecturer", at: "2026-01-05T09:01:00.000Z" }, "kept");
+      }
+    },
+    {
+      name: "replace writes nothing over a request asked again on another kind or step since it was read",
+      run: async () => {
+        const store = await make();
+        const r = await store.open(ask("cs101", "alice"));
+        const askedAgain: HelpRequest = { ...r, kind: "hint", ref: step("cs101", "03") };
+        assert(await store.replace(askedAgain, r), "asked again");
+        const stale: HelpRequest = { ...r, state: "acknowledged", acknowledged: { by: "lecturer", at: "2026-01-05T09:01:00.000Z" } };
+        assertEqual(await store.replace(stale, r), false, "acknowledge from the stale read");
+        assertEqual(await store.get(r.id), askedAgain, "the student's ask kept");
+      }
+    },
+    {
+      name: "a second live request for the same learner and course is refused, and one is allowed again once the first has ended",
+      run: async () => {
+        const store = await make();
+        const first = await store.open(ask("cs101", "alice"));
+        let refused = false;
+        await store.open(ask("cs101", "alice", "2026-01-05T09:01:00.000Z")).catch(() => (refused = true));
+        assert(refused, "second live request refused");
+        await store.open(ask("cs102", "alice"));
+        assert(await store.replace({ ...first, state: "withdrawn", closed: { by: "alice", at: "2026-01-05T09:02:00.000Z", reason: "withdrawn" } }, first), "withdrawn");
+        const again = await store.open(ask("cs101", "alice", "2026-01-05T09:03:00.000Z"));
+        assertEqual(
+          (await store.live("cs101")).map((r) => r.id),
+          [again.id],
+          "live after asking again"
+        );
+      }
+    },
+    {
+      name: "every field of a moved request reads back as it was replaced",
+      run: async () => {
+        const store = await make();
+        const r = await store.open({ ...ask("cs101", "alice"), kind: "hint" });
+        const answered: HelpRequest = {
+          ...r,
+          ref: step("cs102", "03", "/lab/cs102/topic-02/book-b"),
+          learnerId: "alice-2",
+          learnerName: "Alice Two",
+          requestedAt: "2026-01-05T09:00:30.000Z",
+          state: "resolved",
+          acknowledged: { by: "lecturer", at: "2026-01-05T09:01:00.000Z" },
+          closed: { by: "lecturer", at: "2026-01-05T09:04:00.000Z", reason: "hint" },
+          hintText: "Check the loop bound."
+        };
+        assert(await store.replace(answered, r), "replaced");
+        assertEqual(await store.get(r.id), answered, "read back");
       }
     },
     {

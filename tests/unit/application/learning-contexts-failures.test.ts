@@ -61,6 +61,26 @@ describe("assistance when the store or feed fails", () => {
     expect(await requestHelp(d)(ref, "hint", alice)).toEqual({ ok: false, reason: "conflict" });
   });
 
+  it("says conflict when another tab's request was kept as this one was opened", async () => {
+    const d = deps();
+    const open = d.store.open.bind(d.store);
+    d.store.open = async (request) => {
+      await open(request);
+      throw new Error("duplicate key value violates unique constraint");
+    };
+    expect(await requestHelp(d)(ref, "stuck", alice)).toEqual({ ok: false, reason: "conflict" });
+  });
+
+  it("says unavailable when opening fails and nothing was kept, or the store stops answering", async () => {
+    const d = deps();
+    d.store.open = () => Promise.reject(new Error("down"));
+    expect(await requestHelp(d)(ref, "stuck", alice)).toEqual({ ok: false, reason: "unavailable" });
+    const live = d.store.live.bind(d.store);
+    let calls = 0;
+    d.store.live = (courseId) => (++calls > 1 ? Promise.reject(new Error("down")) : live(courseId));
+    expect(await requestHelp(d)(ref, "stuck", alice)).toEqual({ ok: false, reason: "unavailable" });
+  });
+
   it("withdraws a request a lecturer acts on after 4 hours, and refuses the action", async () => {
     const d = deps();
     await requestHelp(d)(ref, "stuck", alice);

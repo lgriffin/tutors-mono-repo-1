@@ -23,34 +23,9 @@ import { GET as liveStream } from "../../../../apps/live/src/routes/api/realtime
 import { freshBrowser, githubUser, labsOf, publishedCourse, signIn } from "../../support/connect.ts";
 import { readerRequest, setReaderSession } from "../../support/reader-api.ts";
 import { publicEnv, recorder } from "../../support/supabase-recorder.ts";
+import { readStream, type OpenStream } from "../../support/sse-stream.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/realtime-valkey.feature");
-
-type Frame = { event: string; payload: unknown; from?: string };
-
-/** A browser reading a server-sent event stream: every `data:` frame it has received, parsed. */
-type OpenStream = { response: Response; frames: Frame[]; close(): Promise<void> };
-
-function readStream(response: Response): OpenStream {
-  const frames: Frame[] = [];
-  const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
-  let buffered = "";
-  void (async () => {
-    for (;;) {
-      const { value, done } = await reader.read().catch(() => ({ value: undefined, done: true }));
-      if (done) return;
-      buffered += decoder.decode(value, { stream: true });
-      let end: number;
-      while ((end = buffered.indexOf("\n\n")) >= 0) {
-        const block = buffered.slice(0, end);
-        buffered = buffered.slice(end + 2);
-        for (const line of block.split("\n")) if (line.startsWith("data: ")) frames.push(JSON.parse(line.slice(6)) as Frame);
-      }
-    }
-  })();
-  return { response, frames, close: () => reader.cancel() };
-}
 
 /** A fake EventSource per stream a tab opens, so a scenario can fail one. */
 class FakeEventSource implements EventSourceLike {

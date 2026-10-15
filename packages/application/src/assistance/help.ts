@@ -57,7 +57,7 @@ async function expireStale({ store, feed, clock }: Pick<AssistanceDeps, "store" 
     }
     const moved = transition(request, "expire", "system", iso(clock));
     if (!moved.ok) continue;
-    const kept = await store.replace(moved.request, request.state).catch(() => false);
+    const kept = await store.replace(moved.request, request).catch(() => false);
     if (kept) await feed.publish({ type: "help-request", courseId: request.ref.courseId, request: moved.request }).catch(() => false);
     else live.push(request);
   }
@@ -71,18 +71,29 @@ async function expireStale({ store, feed, clock }: Pick<AssistanceDeps, "store" 
 export function requestHelp({ store, feed, clock, publish }: Pick<AssistanceDeps, "store" | "feed" | "clock" | "publish">) {
   return async (ref: StepRef, kind: HelpKind, learner: { login: string; name: string | null }): Promise<HelpResult> => {
     if (!learner.login || !isHelpKind(kind) || !isStepRef(ref)) return { ok: false, reason: "invalid" };
-    let request: HelpRequest;
+    let request: HelpRequest | undefined;
     try {
       const live = await expireStale({ store, feed, clock }, await store.live(ref.courseId));
       const mine = live.find((r) => r.learnerId === learner.login);
       if (mine) {
         request = askAgain(mine, ref, kind);
-        if (!(await store.replace(request, mine.state))) return { ok: false, reason: "conflict" };
-      } else {
-        request = await store.open(openRequest(ref, learner, kind, iso(clock)));
+        if (!(await store.replace(request, mine))) return { ok: false, reason: "conflict" };
       }
     } catch {
       return { ok: false, reason: "unavailable" };
+    }
+    if (!request) {
+      try {
+        request = await store.open(openRequest(ref, learner, kind, iso(clock)));
+      } catch {
+        // A durable store refuses a second live request (its unique index): another of the learner's
+        // tabs asked at the same moment, and theirs was kept. Anything else means nothing was kept.
+        const raced = await store
+          .live(ref.courseId)
+          .then((live) => live.some((r) => r.learnerId === learner.login))
+          .catch(() => false);
+        return { ok: false, reason: raced ? "conflict" : "unavailable" };
+      }
     }
     await feed.publish({ type: "help-request", courseId: ref.courseId, request }).catch(() => false);
     await publish?.({ type: "help-requested", request });
@@ -111,7 +122,7 @@ function act(action: HelpAction, { store, feed, clock, educatorsOf, publish }: A
     const actor: HelpActor = { login: caller.login, educator: isEducatorOf(caller.login, { educators }) };
     const moved = transition(current, action, actor, iso(clock), hintText);
     if (!moved.ok) return moved;
-    const kept = await store.replace(moved.request, current.state).catch(() => null);
+    const kept = await store.replace(moved.request, current).catch(() => null);
     if (kept === null) return { ok: false, reason: "unavailable" };
     if (!kept) return { ok: false, reason: "conflict" };
     await feed.publish({ type: "help-request", courseId: moved.request.ref.courseId, request: moved.request }).catch(() => false);
@@ -143,6 +154,18 @@ export const withdrawHelp = (deps: AssistanceDeps) => {
   const run = act("withdraw", deps);
   return (id: string, caller: HelpCaller) => run(id, caller);
 };
+
+/**
+ * The student's own live request in the course, or null, read from stored rows: a student's reader
+ * never streams the course's queue (Rule 0392). A request that has waited 4 hours is withdrawn on
+ * the way, as the queue does.
+ */
+export function myHelpRequest({ store, feed, clock }: Pick<AssistanceDeps, "store" | "feed" | "clock">) {
+  return async (courseId: string, login: string): Promise<HelpRequest | null> => {
+    const live = await expireStale({ store, feed, clock }, await store.live(courseId));
+    return live.find((r) => r.learnerId === login) ?? null;
+  };
+}
 
 /** One row of the lecturer's queue: the request, how long it has waited at this instant, and its escalation. */
 export type QueueEntry = { request: HelpRequest; waitingMs: number; escalation: Escalation };

@@ -23,7 +23,8 @@ export const serverNotices: CourseNotices = {
 /** One limiter for the server's lifetime: one broadcast per course per minute, whoever sends it. */
 export const broadcastLimiter = createBroadcastLimiter();
 
-const educatorsOf = courseEducators({ source: httpCourseSource() });
+/** A course's educator logins from its published enrollment, cached for five minutes; shared by every route that checks one. */
+export const educatorsOf = courseEducators({ source: httpCourseSource() });
 const check = isCourseEducator(educatorsOf);
 
 /** Whether the request's actor teaches the course, read from the course's published enrollment. */

@@ -9,9 +9,11 @@ import { localYyyyMmDd } from "./local-day.ts";
 import type { LearningEvent, PageLoadEvent, TickEvent } from "./events.ts";
 
 /**
- * The route a learning object is recorded under. With a step id (a lab step, a notebook cell),
- * the first three segments of the route are kept and the step id appended, so every step of a
- * lab is its own record under the lab's route.
+ * The route a learning object is recorded under. Inside a lab or a notebook the reader passes its
+ * route parameter (`/lab/[courseid]/[...loid]`), which is the page's address after the course id:
+ * the lab's path and the step id. The first three segments of the route (`/lab/<courseid>`) are
+ * kept and that appended, so every step is its own record under its lab's route, and a step id two
+ * labs share is recorded under each lab (attemptsFromRecords).
  */
 export function learningObjectRoute(lo: Lo, stepId?: string): string {
   if (stepId) {

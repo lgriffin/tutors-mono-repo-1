@@ -2,7 +2,7 @@
   "name": "@tutors/realtime-valkey",
   "version": "0.1.0",
   "license": "MIT",
-  "description": "Realtime without Supabase: the servers publish to Valkey pub/sub and stream each topic to browsers over server-sent events, behind the @tutors/realtime gateway, the PresencePort, CourseNotices and PlaygroundLive",
+  "description": "Realtime without Supabase: the servers publish to Valkey pub/sub and stream each topic to browsers over server-sent events, behind the @tutors/realtime gateway, the PresencePort, CourseNotices, PlaygroundLive and the AssistanceFeed",
   "private": true,
   "type": "module",
   "exports": {

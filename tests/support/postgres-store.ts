@@ -37,7 +37,8 @@ const TABLES = [
   "playground_snapshots",
   "app_errors",
   "assignments",
-  "assignments_submissions"
+  "assignments_submissions",
+  "assistance_requests"
 ];
 
 export interface TestDatabase {

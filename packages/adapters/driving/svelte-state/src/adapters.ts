@@ -6,6 +6,7 @@
  */
 import type {
   AccessStore,
+  AssistanceFeed,
   Clock,
   CodeRuntimePort,
   ContentRenderer,
@@ -27,6 +28,7 @@ import type {
 } from "@tutors/application/ports";
 import {
   InMemoryAccessStore,
+  InMemoryAssistanceFeed,
   InMemoryCourseNotices,
   InMemoryCourseSource,
   InMemorySnippetStore,
@@ -78,6 +80,12 @@ export type Adapters = {
   whiteboard: WhiteboardStore;
   /** A learner's private notes per lab step: the browser's storage, never a server (Rule 0380). */
   notes: NotesStore;
+  /**
+   * A course's help queue as it changes, for an educator's page: Tutors Live streams it from the
+   * reader with the lecturer's session. A student's reader never joins it (Rule 0392), so the reader
+   * composes none; publishing is the reader server's.
+   */
+  assistanceFeed: AssistanceFeed;
 };
 
 const systemClock: Clock = { now: () => new Date(), nowMs: () => Date.now() };
@@ -108,6 +116,7 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     playgroundLive: new InMemoryPlaygroundLive(),
     whiteboard: new InMemoryWhiteboardStore(),
     notes: new InMemoryNotesStore(),
+    assistanceFeed: new InMemoryAssistanceFeed(false),
     ...overrides
   };
 }

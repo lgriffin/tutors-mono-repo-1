@@ -37,6 +37,16 @@ Feature: Learning evidence and private notes
       Then "alice" shall have 3 visits at the step "01" and 1 visit at the step "02"
       And tutors shall have read nothing but the learning records
 
+    Scenario: Two labs that reuse a step id keep their attempts apart
+      Given the learning records show "alice" visited the step "01" of the lab "/lab/cs101/lab-01" 2 times and the step "01" of the lab "/lab/cs101/lab-02" 5 times
+      When tutors reads the attempts at the lab
+      Then "alice" shall have 2 visits at the step "01" and no other attempt
+
+    Scenario: Opening the lab at its own address counts toward its first step
+      Given the learning records show "alice" opened the lab 2 times and visited the step "01" once
+      When tutors reads the attempts at the lab
+      Then "alice" shall have 3 visits at the step "01" and no other attempt
+
   @rule-0377 @ears-event-driven
   Rule: When a learner records evidence at a step, tutors shall publish an evidence-recorded event carrying the step reference and the evidence kind.
 

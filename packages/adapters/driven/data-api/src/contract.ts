@@ -10,7 +10,9 @@
  * the error and watcher reports answer other origins too, so the catalogue, live and time apps call
  * the reader at their PUBLIC_READER_URL (Rule 0471).
  */
+import type { QueueEntry } from "@tutors/application";
 import type { PlaygroundSnapshot, ScormRecord, WhiteboardRoom, WhiteboardScene } from "@tutors/application/ports";
+import type { HelpKind, HelpRequest } from "@tutors/domain/assistance";
 import type { ContentLock } from "@tutors/domain/access";
 import type { CourseVisit } from "@tutors/domain/presence";
 
@@ -152,4 +154,24 @@ export interface LiveWatch {
 /** The answer to POST /api/live/watch: the day's Live budget tier, null when it could not be read. */
 export interface LiveWatchTier {
   tier: "normal" | "slow" | "paused" | null;
+}
+
+/**
+ * POST /api/assistance: a signed-in student asks for help on a step, or anyone acts on a request by
+ * id: the student who asked withdraws or resolves it, an educator of the course acknowledges,
+ * answers a hint or resolves it. Answers `{ request }` (201 for a new one), or `{ message, reason }`.
+ */
+export type HelpPost =
+  | { action: "request"; courseId: string; labRoute: string; stepId: string; kind: HelpKind }
+  | { action: "acknowledge" | "resolve" | "withdraw"; id: string }
+  | { action: "answer-hint"; id: string; hintText: string };
+
+/** GET /api/assistance/mine?courseId=: the student's own live request, from stored rows. */
+export interface MyHelpRequest {
+  request: HelpRequest | null;
+}
+
+/** GET /api/assistance?courseId=: the course's queue, for an educator of the course; Tutors Live calls it with the lecturer's session. */
+export interface HelpQueue {
+  queue: QueueEntry[];
 }

@@ -4,13 +4,15 @@
  * Realtime channels and nothing else: the stored roster and the watcher reports go to the reader's
  * data API at PUBLIC_READER_URL (Rule 0471), which lists this origin in PRIVATE_API_ALLOWED_ORIGINS.
  * With PUBLIC_REALTIME=valkey there is no Supabase client: presence streams from Live's own server
- * (GET /api/realtime/stream, Rule 0482) and reports no watcher, as there is no budget.
+ * (GET /api/realtime/stream, Rule 0482) and reports no watcher, as there is no budget; a course's
+ * help queue streams from the reader's server with the lecturer's session (Rule 0392), and is not
+ * offered on Supabase Realtime.
  */
 import { anonymousAdapters, type Adapters } from "@tutors/svelte-state/adapters";
 import { clock } from "@tutors/clock";
 import { createSupabaseClient } from "@tutors/store-supabase";
 import { realtimeClientOptions, supabasePresence } from "@tutors/realtime-supabase";
-import { realtimeKindOf, valkeyBrowserRealtime } from "@tutors/realtime-valkey";
+import { realtimeKindOf, sseAssistanceFeed, valkeyBrowserRealtime } from "@tutors/realtime-valkey";
 import { createDataApi, readerApiLiveWatch, readerApiPresenceRoster, type DataApi } from "@tutors/data-api";
 import log, { withRequestId } from "@tutors/logger";
 
@@ -27,7 +29,13 @@ export function composeLive(env: LiveEnv): Adapters {
   const key = env.PUBLIC_SUPABASE_ANON_KEY;
   const api = liveDataApi(env);
   if (api && realtimeKindOf(env) === "valkey") {
-    return { ...anonymousAdapters({ clock }), anonymous: false, presence: valkeyBrowserRealtime({ presence: { roster: readerApiPresenceRoster(api) } }).presence };
+    return {
+      ...anonymousAdapters({ clock }),
+      anonymous: false,
+      presence: valkeyBrowserRealtime({ presence: { roster: readerApiPresenceRoster(api) } }).presence,
+      // The help queue streams from the reader, which checks the lecturer's session (Rule 0392).
+      assistanceFeed: sseAssistanceFeed({ streamBase: api.base })
+    };
   }
   const client = api ? createSupabaseClient(url, key, withRequestId(), realtimeClientOptions()) : undefined;
   if (!client || !api) {
