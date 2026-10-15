@@ -76,6 +76,9 @@ export function assistanceStoreContract(make: Make<AssistanceStore>): ContractCa
 
 const change = (courseId: string, id: string): AssistanceChange => ({ type: "help-request", courseId, request: { ...ask(courseId, "alice"), id } });
 
+/** A watcher that notes, under `tag`, the id of each change it hears. */
+const hearer = (heard: string[], tag: string) => (c: AssistanceChange) => heard.push(`${tag}:${c.type === "help-request" ? c.request.id : c.annotation.id}`);
+
 export function assistanceFeedContract(make: Make<AssistanceFeed>): ContractCase[] {
   return [
     {
@@ -83,8 +86,8 @@ export function assistanceFeedContract(make: Make<AssistanceFeed>): ContractCase
       run: async () => {
         const feed = await make();
         const heard: string[] = [];
-        feed.watch("cs101", (c) => heard.push(`cs101:${c.type === "help-request" ? c.request.id : c.annotation.id}`));
-        feed.watch("cs102", () => heard.push("cs102"));
+        feed.watch("cs101", hearer(heard, "cs101"));
+        feed.watch("cs102", hearer(heard, "cs102"));
         assert(await feed.publish(change("cs101", "h1")), "published");
         assertEqual(heard, ["cs101:h1"], "heard");
       }
@@ -94,10 +97,11 @@ export function assistanceFeedContract(make: Make<AssistanceFeed>): ContractCase
       run: async () => {
         const feed = await make();
         const heard: string[] = [];
-        const stop = feed.watch("cs101", () => heard.push("heard"));
+        const stop = feed.watch("cs101", hearer(heard, "stopped"));
+        feed.watch("cs101", hearer(heard, "watching"));
         stop();
         await feed.publish(change("cs101", "h1"));
-        assertEqual(heard, [], "heard");
+        assertEqual(heard, ["watching:h1"], "heard");
       }
     },
     {
