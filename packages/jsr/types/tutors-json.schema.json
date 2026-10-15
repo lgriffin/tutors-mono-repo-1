@@ -235,6 +235,8 @@
                 "notebook",
                 "whiteboard",
                 "quiz",
+                "scorm",
+                "playground",
                 "unit",
                 "side",
                 "topic"

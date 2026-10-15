@@ -9,6 +9,11 @@ import type { EventPublisher } from "../ports/event-publisher.ts";
 import type { PresencePort } from "../ports/presence.ts";
 import type { ProfilePort } from "../ports/profile.ts";
 import type { LearningEventSink } from "../ports/learning-event-sink.ts";
+import type { WorkspaceStore } from "../ports/workspace-store.ts";
+import type { ScormRecords } from "../ports/scorm-records.ts";
+import { SNAPSHOT_OUTPUT_LIMIT, type PlaygroundSnapshots } from "../ports/playground-snapshots.ts";
+import type { PlaygroundLive, PlaygroundLiveState } from "../ports/playground-live.ts";
+import type { CodeRuntime } from "../ports/code-runtime.ts";
 
 export type ContractCase = { name: string; run: () => Promise<void> };
 
@@ -221,6 +226,213 @@ export function learningEventSinkContract(make: Make<LearningEventSink>): Contra
         const sink = await make();
         await sink.record({ kind: "page-load", courseId: "cs101", loId: "/topic/cs101/1", loType: "topic", day: "2026-01-05" }, "ann");
         await sink.record({ kind: "tick", courseId: "cs101", loId: null, day: "2026-01-05" }, "ann");
+      }
+    }
+  ];
+}
+
+export function workspaceStoreContract(make: Make<WorkspaceStore>): ContractCase[] {
+  const workspace = (content: string) => ({ courseId: "cs101", loId: "/playground/cs101/topic/hello", files: [{ path: "main.py", content }], entry: "main.py", updatedAt: "2026-09-10T09:00:00.000Z" });
+  return [
+    {
+      name: "an exercise never saved has no workspace",
+      run: async () => {
+        const store = await make();
+        assertEqual(await store.load("cs101", "/playground/cs101/topic/hello"), null, "load");
+      }
+    },
+    {
+      name: "a saved workspace comes back per course and exercise, and the last save wins",
+      run: async () => {
+        const store = await make();
+        await store.save(workspace("print(1)"));
+        await store.save(workspace("print(2)"));
+        await store.save({ ...workspace("other"), loId: "/playground/cs101/topic/other" });
+        assertEqual((await store.load("cs101", "/playground/cs101/topic/hello"))?.files, [{ path: "main.py", content: "print(2)" }], "files");
+      }
+    },
+    {
+      name: "a removed workspace is gone; removing again changes nothing",
+      run: async () => {
+        const store = await make();
+        await store.save(workspace("print(1)"));
+        await store.remove("cs101", "/playground/cs101/topic/hello");
+        await store.remove("cs101", "/playground/cs101/topic/hello");
+        assertEqual(await store.load("cs101", "/playground/cs101/topic/hello"), null, "load after remove");
+      }
+    }
+  ];
+}
+
+export function scormRecordsContract(make: Make<ScormRecords>): ContractCase[] {
+  const summary = { completionStatus: "incomplete", successStatus: "unknown", totalTime: 30, location: "page-2" };
+  const record = (cmi: Record<string, string>, learnerId = "ada") => ({ courseId: "cs101", learnerId, loId: "/scorm/cs101/topic/quiz", version: "1.2" as const, cmi, summary });
+  return [
+    {
+      name: "a first attempt starts from an empty data model",
+      run: async () => {
+        const records = await make();
+        assertEqual(await records.load("cs101", "ada", "/scorm/cs101/topic/quiz"), {}, "first attempt");
+      }
+    },
+    {
+      name: "the whole data model is kept per learner and the last save wins",
+      run: async () => {
+        const records = await make();
+        await records.save(record({ "cmi.core.lesson_location": "page-1", "cmi.suspend_data": "a=1" }));
+        await records.save(record({ "cmi.core.lesson_location": "page-2", "cmi.suspend_data": "a=2" }));
+        await records.save(record({ "cmi.core.lesson_location": "page-9" }, "bob"));
+        assertEqual(await records.load("cs101", "ada", "/scorm/cs101/topic/quiz"), { "cmi.core.lesson_location": "page-2", "cmi.suspend_data": "a=2" }, "ada");
+        assertEqual(await records.load("cs101", "bob", "/scorm/cs101/topic/quiz"), { "cmi.core.lesson_location": "page-9" }, "bob");
+      }
+    },
+    {
+      name: "nothing is kept without a course, a learner and a learning object",
+      run: async () => {
+        const records = await make();
+        await records.save({ ...record({ "cmi.core.lesson_location": "x" }), learnerId: "" });
+        assertEqual(await records.load("cs101", "", "/scorm/cs101/topic/quiz"), {}, "no learner");
+        assertEqual(await records.load("", "ada", "/scorm/cs101/topic/quiz"), {}, "no course");
+      }
+    }
+  ];
+}
+
+export function playgroundSnapshotsContract(make: Make<PlaygroundSnapshots>): ContractCase[] {
+  const snapshot = (studentId = "ada", lastOutput = "1\n") => ({
+    studentId,
+    studentName: studentId.toUpperCase(),
+    courseId: "cs101",
+    loId: "/playground/cs101/topic/hello",
+    runtime: "python",
+    entry: "main.py",
+    files: [{ path: "main.py", content: "print(1)" }],
+    lastOutput,
+    lastOk: true
+  });
+  return [
+    {
+      name: "a student who has handed in nothing has no snapshot",
+      run: async () => {
+        const snapshots = await make();
+        assertEqual(await snapshots.get("cs101", "/playground/cs101/topic/hello", "ada"), null, "get");
+        assertEqual(await snapshots.list("cs101", "/playground/cs101/topic/hello"), [], "list");
+      }
+    },
+    {
+      name: "a handed-in workspace comes back whole, with what it printed, and the last hand-in wins",
+      run: async () => {
+        const snapshots = await make();
+        assert(await snapshots.save(snapshot("ada", "first\n")), "first save");
+        assert(await snapshots.save(snapshot("ada", "second\n")), "second save");
+        const stored = await snapshots.get("cs101", "/playground/cs101/topic/hello", "ada");
+        assertEqual(stored?.files, [{ path: "main.py", content: "print(1)" }], "files");
+        assertEqual(stored?.lastOutput, "second\n", "output");
+        assertEqual(stored?.lastOk, true, "verdict");
+        assertEqual((await snapshots.list("cs101", "/playground/cs101/topic/hello")).length, 1, "one row per student");
+      }
+    },
+    {
+      name: "a runaway run's output is cut to the limit rather than stored whole",
+      run: async () => {
+        const snapshots = await make();
+        await snapshots.save(snapshot("ada", "x".repeat(SNAPSHOT_OUTPUT_LIMIT + 5000)));
+        assertEqual((await snapshots.get("cs101", "/playground/cs101/topic/hello", "ada"))?.lastOutput.length, SNAPSHOT_OUTPUT_LIMIT, "output length");
+      }
+    },
+    {
+      name: "a removed snapshot is gone",
+      run: async () => {
+        const snapshots = await make();
+        await snapshots.save(snapshot("ada"));
+        await snapshots.remove("cs101", "/playground/cs101/topic/hello", "ada");
+        assertEqual(await snapshots.get("cs101", "/playground/cs101/topic/hello", "ada"), null, "get after remove");
+      }
+    }
+  ];
+}
+
+export function playgroundLiveContract(make: Make<PlaygroundLive>): ContractCase[] {
+  const state = (studentId: string): PlaygroundLiveState => ({ studentId, studentName: studentId, files: [{ path: "main.py", content: "print(1)" }], activePath: "main.py", output: "", running: false, updatedAt: "2026-09-10T09:00:00.000Z" });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  return [
+    {
+      name: "a sharing student's state reaches a lecturer watching the same exercise, and no other",
+      run: async () => {
+        const live = await make();
+        const seen: string[] = [];
+        const elsewhere: string[] = [];
+        const stopWatching = live.watch("cs101", "/playground/cs101/topic/hello", (s) => seen.push(s.studentId));
+        const stopOther = live.watch("cs101", "/playground/cs101/topic/other", (s) => elsewhere.push(s.studentId));
+        const share = live.share("cs101", "/playground/cs101/topic/hello", () => {});
+        share.send(state("ada"));
+        await settle();
+        assertEqual(seen, ["ada"], "watched exercise");
+        assertEqual(elsewhere, [], "other exercise");
+        share.stop();
+        stopWatching();
+        stopOther();
+      }
+    },
+    {
+      name: "a lecturer's arrival is announced to the students sharing",
+      run: async () => {
+        const live = await make();
+        let announced = 0;
+        const share = live.share("cs101", "/playground/cs101/topic/hello", () => announced++);
+        const stop = live.watch("cs101", "/playground/cs101/topic/hello", () => {});
+        await settle();
+        assert(announced >= 1, "announced");
+        share.stop();
+        stop();
+      }
+    },
+    {
+      name: "after stopping, nothing more is delivered either way",
+      run: async () => {
+        const live = await make();
+        const seen: string[] = [];
+        const stop = live.watch("cs101", "/playground/cs101/topic/hello", (s) => seen.push(s.studentId));
+        const share = live.share("cs101", "/playground/cs101/topic/hello", () => {});
+        stop();
+        share.send(state("ada"));
+        await settle();
+        share.stop();
+        share.send(state("ada"));
+        await settle();
+        assertEqual(seen, [], "nothing after stop");
+      }
+    }
+  ];
+}
+
+export function codeRuntimeContract(make: Make<CodeRuntime>): ContractCase[] {
+  const request = { runtime: "python" as const, mode: "script" as const, files: [{ path: "main.py", content: "print(1)" }], entry: "main.py" };
+  return [
+    {
+      name: "a run gathers its output in order and reports whether it succeeded",
+      run: async () => {
+        const runtime = await make();
+        const streamed: string[] = [];
+        runtime.subscribe((event) => void (event.type === "stream" && streamed.push(event.text)));
+        const result = await runtime.execute(request);
+        assertEqual(result.output, streamed.join(""), "output is the streamed text");
+        assertEqual(typeof result.ok, "boolean", "verdict");
+        runtime.dispose();
+      }
+    },
+    {
+      name: "a disposed run-time refuses to run anything",
+      run: async () => {
+        const runtime = await make();
+        runtime.dispose();
+        let refused = false;
+        try {
+          await runtime.execute(request);
+        } catch {
+          refused = true;
+        }
+        assert(refused, "execute after dispose");
       }
     }
   ];

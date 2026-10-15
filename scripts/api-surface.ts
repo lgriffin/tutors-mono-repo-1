@@ -180,6 +180,7 @@ const WORKSPACE_ENTRIES: Record<string, string> = {
   "@tutors/domain": "packages/domain/src/index.ts",
   "@tutors/domain/course": "packages/domain/src/course/index.ts",
   "@tutors/domain/course/vocabulary": "packages/domain/src/course/vocabulary.ts",
+  "@tutors/domain/course/playground": "packages/domain/src/course/playground.ts",
   "@tutors/domain/learning": "packages/domain/src/learning/index.ts",
   "@tutors/domain/presence": "packages/domain/src/presence/index.ts",
   "@tutors/domain/access": "packages/domain/src/access/index.ts",

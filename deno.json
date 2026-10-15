@@ -6,6 +6,7 @@
     "./packages/adapters/driven/render-markdown",
     "./packages/jsr/tutors",
     "./packages/jsr/tutors-lite",
+    "./packages/jsr/tutors-scorm",
     "./packages/jsr/model",
     "./packages/jsr/gen",
     "./packages/jsr/time",
@@ -23,6 +24,7 @@
       "./packages/jsr/model/src/",
       "./packages/jsr/tutors/",
       "./packages/jsr/tutors-lite/",
+      "./packages/jsr/tutors-scorm/",
       "./packages/jsr/types/",
       "./packages/jsr/identity/",
       "./packages/jsr/realtime/"

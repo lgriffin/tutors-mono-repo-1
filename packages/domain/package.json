@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./course": "./src/course/index.ts",
     "./course/vocabulary": "./src/course/vocabulary.ts",
+    "./course/playground": "./src/course/playground.ts",
     "./learning": "./src/learning/index.ts",
     "./presence": "./src/presence/index.ts",
     "./access": "./src/access/index.ts",

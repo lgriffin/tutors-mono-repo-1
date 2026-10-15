@@ -7,6 +7,7 @@
 export { liveService } from "./services/live.svelte.ts";
 export { presenceService } from "./services/presence.svelte.ts";
 export { analyticsService } from "./services/analytics.svelte.ts";
+export { playgroundLiveService, LIVE_SHARE_THROTTLE_MS, type PlaygroundLiveService, type PlaygroundLiveState } from "./services/playground-live.svelte.ts";
 
 // Type exports
 export type { LoUser, LoEvent, TutorsConnectLatestRow } from "./types.svelte.ts";

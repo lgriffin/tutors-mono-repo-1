@@ -12,15 +12,19 @@ import { markdownRenderer } from "@tutors/render-markdown";
 import { httpCourseSource } from "@tutors/course-http";
 import { localStorageProfile } from "@tutors/profile-localstorage";
 import { inProcessPublisher } from "@tutors/bus-inprocess";
+import { wasmCodeRuntime } from "@tutors/runtime-wasm";
+import { indexedDbWorkspaceStore } from "@tutors/workspace-indexeddb";
 import {
   configureSupabase,
   createSupabaseClient,
   supabaseAccessStore,
   supabaseLearningEventSink,
+  supabasePlaygroundSnapshots,
   supabaseProfile,
+  supabaseScormRecords,
   updateCourseList
 } from "@tutors/store-supabase";
-import { realtimeClientOptions, supabasePresence } from "@tutors/realtime-supabase";
+import { realtimeClientOptions, supabasePlaygroundLive, supabasePresence } from "@tutors/realtime-supabase";
 import { initSupabase } from "@tutors/tutors-time-lib";
 import log, { withRequestId } from "@tutors/logger";
 
@@ -43,7 +47,11 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     courseSource: httpCourseSource(),
     profile: { local: localStorageProfile(), signedIn: null },
     publisher,
-    identityClient: options.identityClient ?? null
+    identityClient: options.identityClient ?? null,
+    // Student code runs in the browser whatever the deployment: the engine is a sandboxed
+    // frame on the reader's own host, and the work stays in the student's own browser.
+    codeRuntime: wasmCodeRuntime(),
+    workspaces: indexedDbWorkspaceStore()
   };
 
   if (isAnonymous(env)) {
@@ -67,13 +75,20 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     if (event.type === "course-visit") void updateCourseList(event.course, clock.now());
   });
 
+  const presence = supabasePresence(client, clock.now);
   return {
     ...anonymousAdapters(shared),
     anonymous: false,
     learningEvents: supabaseLearningEventSink(),
-    presence: supabasePresence(client, clock.now),
+    presence,
     profile: { local: localStorageProfile(), signedIn: supabaseProfile() },
     accessStore: supabaseAccessStore(),
-    whiteboardClient: client
+    whiteboardClient: client,
+    scormRecords: supabaseScormRecords(),
+    // Snapshots have an owner, so they are written as the signed-in student with a token the
+    // reader mints at /api/runtime-token (PRIVATE_SUPABASE_JWT_SECRET); without it, nothing is handed in.
+    playgroundSnapshots: supabasePlaygroundSnapshots({ url: url!, key: key! }),
+    // TODO(budget): the live share is browser-published through the gateway; see realtime-supabase/src/playground-live.ts.
+    playgroundLive: supabasePlaygroundLive(presence.gateway)
   };
 }

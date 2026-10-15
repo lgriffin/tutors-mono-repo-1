@@ -1,0 +1,14 @@
+{
+  "name": "@tutors/runtime-wasm",
+  "version": "0.0.1",
+  "license": "MIT",
+  "description": "The driven adapter behind the CodeRuntimePort: student code runs in a sandboxed, off-origin frame on a WebAssembly engine (Pyodide for Python, the TypeScript compiler, plain JavaScript).",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tutors/application": "workspace:*"
+  }
+}

@@ -445,7 +445,43 @@ Tutors est une application open source - le composant de collecte des données [
   "classTime.calendarEntries": "Entrées du calendrier",
   "classTime.notAvailable": "n.d.",
   "classTime.online": "En ligne",
-  "classTime.offline": "Hors ligne"
+  "classTime.offline": "Hors ligne",
+
+  // Playground
+  "playground.run": "Exécuter",
+  "playground.running": "Exécution…",
+  "playground.stop": "Arrêter",
+  "playground.runTests": "Lancer les vérifications",
+  "playground.reset": "Réinitialiser",
+  "playground.resetConfirm": "Abandonner vos modifications et restaurer les fichiers d'origine ?",
+  "playground.share": "Partager",
+  "playground.shareCopied": "Lien copié dans le presse-papiers",
+  "playground.shareReady": "Le lien est dans la barre d'adresse",
+  "playground.newFile": "Nouveau fichier",
+  "playground.deleteFile": "Supprimer le fichier",
+  "playground.output": "Sortie",
+  "playground.clear": "Effacer",
+  "playground.noOutput": "Exécutez le code pour voir sa sortie ici.",
+  "playground.ok": "Terminé",
+  "playground.failed": "Terminé avec des erreurs",
+  "playground.saving": "Enregistrement…",
+  "playground.saved": "Enregistré dans ce navigateur",
+  "playground.sharedNotice": "Espace de travail partagé — les modifications ne sont pas enregistrées",
+  "playground.handIn": "Remettre à votre enseignant",
+  "playground.handedIn": "Remis à",
+  "playground.handInHint": "Votre travail reste dans ce navigateur jusqu'à la remise",
+  "playground.liveShare": "Autoriser mon enseignant à suivre en direct",
+  "playground.liveWatching": "Votre enseignant vous suit",
+  "playground.submissions": "Remises",
+  "playground.refresh": "Actualiser",
+  "playground.watchLive": "Suivre en direct",
+  "playground.noSubmissions": "Aucune remise pour l'instant.",
+  "playground.liveNow": "en direct",
+
+  // Notebook kernel
+  "notebook.runAll": "Exécuter toutes les cellules",
+  "notebook.restartKernel": "Redémarrer le noyau",
+  "notebook.notRunnable": "Ce langage de noyau ne s'exécute pas dans le navigateur."
 };
 
 export default fr;

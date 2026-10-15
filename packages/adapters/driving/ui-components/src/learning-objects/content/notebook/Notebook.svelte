@@ -1,8 +1,10 @@
 <script lang="ts">
   import { afterNavigate } from "$app/navigation";
+  import { onDestroy } from "svelte";
   import { prefersReducedMotion } from "@tutors/a11y";
+  import { t } from "@tutors/i18n";
   import { currentNotebookCellIndex } from "@tutors/svelte-state";
-  import type { NotebookService } from "@tutors/svelte-state/course";
+  import { createNotebookKernel, setNotebookKernel, type NotebookService } from "@tutors/svelte-state/course";
   import { currentCodeTheme } from "@tutors/svelte-state/markdown";
   import { sanitizeHtml } from "@tutors/ui-primitives/utils/sanitize";
   import { copyCode } from "@tutors/svelte-state/markdown";
@@ -13,6 +15,11 @@
     notebook: NotebookService;
   }
   let { notebook }: Props = $props();
+
+  // One kernel for the notebook, handed to the cells through context. Nothing is
+  // downloaded until a cell is actually run.
+  const kernel = createNotebookKernel(notebook.notebook.kernelLanguage);
+  setNotebookKernel(kernel);
 
   /** How far below the top of the view a cell still counts as the one being read, in pixels. */
   const HEADING_REACHED_TOP = 120;
@@ -85,6 +92,8 @@
     currentNotebookCellIndex.value = notebook.outline.findLast(entry => entry.index <= activeIndex)?.index ?? activeIndex;
   });
 
+  onDestroy(() => kernel.dispose());
+
   afterNavigate(() => {
     if (!loaded) {
       loaded = true;
@@ -98,10 +107,12 @@
 </script>
 
 <svelte:head>
-  <link
-    rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/katex@0.18.1/dist/katex.min.css"
-  />
+  <!--
+    Served from here rather than from a CDN, like the code run-times: the reader's content
+    security policy allows stylesheets from itself, and a maths-heavy notebook should not
+    depend on a third-party host being reachable. `pnpm runtimes:sync` puts it there.
+  -->
+  <link rel="stylesheet" href="/runtimes/katex/katex.min.css" />
 </svelte:head>
 
 <div class="notebook-content w-full">
@@ -110,6 +121,18 @@
     <!-- Main content area -->
     <div class="min-w-0 flex-1 reading-panel" use:copyCode>
       <div id="notebook-panel" class="notebook-cells mt-[-60px] block pt-[60px]">
+        {#if kernel.runtime}
+          <div class="bg-surface-100 dark:bg-surface-800 border-surface-200 dark:border-surface-700 mb-2 flex items-center gap-2 rounded-lg border px-3 py-1.5">
+            <button class="bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 rounded-md px-3 py-1 text-xs font-medium disabled:opacity-50" onclick={() => kernel.runAll()} disabled={kernel.busy}>
+              {t("notebook.runAll")}
+            </button>
+            <button class="bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 rounded-md px-3 py-1 text-xs font-medium" onclick={() => kernel.restart()}>
+              {t("notebook.restartKernel")}
+            </button>
+            <div class="flex-1"></div>
+            <span class="text-surface-500 text-xs" aria-live="polite">{kernel.detail || kernel.phase}</span>
+          </div>
+        {/if}
         {#key currentCodeTheme.value}
           {#each notebook.cells as cell, i}
             <NotebookCell

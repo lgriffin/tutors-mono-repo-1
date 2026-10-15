@@ -7,22 +7,32 @@
 import type {
   AccessStore,
   Clock,
+  CodeRuntimePort,
   ContentRenderer,
   CourseSource,
   EventPublisher,
   IdentityClient,
   LearningEventSink,
+  PlaygroundLive,
+  PlaygroundSnapshots,
   PresencePort,
-  ProfilePort
+  ProfilePort,
+  ScormRecords,
+  WorkspaceStore
 } from "@tutors/application/ports";
 import {
   InMemoryAccessStore,
   InMemoryCourseSource,
   InMemoryLearningEventSink,
+  InMemoryPlaygroundLive,
+  InMemoryPlaygroundSnapshots,
   InMemoryPresence,
   InMemoryProfile,
+  InMemoryScormRecords,
+  InMemoryWorkspaceStore,
   PassThroughRenderer,
-  RecordingPublisher
+  RecordingPublisher,
+  ScriptedCodeRuntimePort
 } from "@tutors/application/testing";
 
 export type Adapters = {
@@ -38,6 +48,16 @@ export type Adapters = {
   accessStore: AccessStore;
   publisher: EventPublisher;
   identityClient: IdentityClient | null;
+  /** Where student code runs (playgrounds, notebook cells). */
+  codeRuntime: CodeRuntimePort;
+  /** Where a student's playground edits are kept between visits. */
+  workspaces: WorkspaceStore;
+  /** An imported SCORM package's run-time state, per learner. */
+  scormRecords: ScormRecords;
+  /** Playground workspaces handed in to a lecturer. */
+  playgroundSnapshots: PlaygroundSnapshots;
+  /** A lecturer watching a playground as it is typed. */
+  playgroundLive: PlaygroundLive;
   /**
    * The whiteboard's own persistence client, until it has a port of its own. Typed as unknown
    * here so this package names no vendor; the whiteboard component casts it.
@@ -61,6 +81,12 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     accessStore: new InMemoryAccessStore(systemClock),
     publisher: new RecordingPublisher(),
     identityClient: null,
+    codeRuntime: new ScriptedCodeRuntimePort(),
+    workspaces: new InMemoryWorkspaceStore(),
+    scormRecords: new InMemoryScormRecords(),
+    // Nobody is signed in, so there is nobody to hand work in as.
+    playgroundSnapshots: new InMemoryPlaygroundSnapshots({ enabled: false }),
+    playgroundLive: new InMemoryPlaygroundLive(),
     whiteboardClient: undefined,
     ...overrides
   };

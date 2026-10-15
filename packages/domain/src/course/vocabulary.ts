@@ -22,6 +22,8 @@ export const LO_SIMPLE_TYPES = [
   "notebook",
   "whiteboard",
   "quiz",
+  "scorm",
+  "playground",
 ] as const;
 
 /** Learning objects that contain other learning objects. Same members as model-lib's `loCompositeTypes`. */

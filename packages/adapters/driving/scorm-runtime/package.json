@@ -1,0 +1,16 @@
+{
+  "name": "@tutors/scorm-runtime",
+  "version": "0.0.1",
+  "license": "MIT",
+  "description": "The SCORM run-time API an imported package calls: Tutors as the LMS for a framed SCO (CMI data model, the 1.2 and 2004 profiles, the session, the same-origin asset proxy rules)",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tutors/application": "workspace:*",
+    "@tutors/domain": "workspace:*",
+    "@tutors/logger": "workspace:*"
+  }
+}
