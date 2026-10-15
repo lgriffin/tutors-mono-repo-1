@@ -6,7 +6,7 @@
    * visitors who are not signed in; the lab works the same without it.
    */
   import { tick } from "svelte";
-  import { helpService } from "@tutors/svelte-state/assistance";
+  import { helpService } from "@tutors/svelte-state/assistance/help";
   import { tutorsId } from "@tutors/svelte-state";
   import { HELP_KINDS, isLive, type HelpKind } from "@tutors/domain/assistance";
   import { stepRef } from "@tutors/domain/learning";
