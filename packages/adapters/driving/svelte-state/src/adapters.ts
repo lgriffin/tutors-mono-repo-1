@@ -17,6 +17,7 @@ import type {
   PlaygroundLive,
   PlaygroundSnapshots,
   LiveEventReporter,
+  NotesStore,
   PresencePort,
   ProfilePort,
   ScormRecords,
@@ -30,6 +31,7 @@ import {
   InMemoryCourseSource,
   InMemorySnippetStore,
   InMemoryLearningEventSink,
+  InMemoryNotesStore,
   InMemoryPlaygroundLive,
   InMemoryPlaygroundSnapshots,
   InMemoryPresence,
@@ -74,6 +76,8 @@ export type Adapters = {
   playgroundLive: PlaygroundLive;
   /** Where whiteboard scenes are kept: the reader's data API once signed in, memory otherwise. */
   whiteboard: WhiteboardStore;
+  /** A learner's private notes per lab step: the browser's storage, never a server (Rule 0380). */
+  notes: NotesStore;
 };
 
 const systemClock: Clock = { now: () => new Date(), nowMs: () => Date.now() };
@@ -103,6 +107,7 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     playgroundSnapshots: new InMemoryPlaygroundSnapshots({ enabled: false }),
     playgroundLive: new InMemoryPlaygroundLive(),
     whiteboard: new InMemoryWhiteboardStore(),
+    notes: new InMemoryNotesStore(),
     ...overrides
   };
 }

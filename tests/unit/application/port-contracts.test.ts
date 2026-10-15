@@ -42,6 +42,7 @@ import {
   type ContractCase
 } from "@tutors/application/testing";
 import { localStorageProfile, type KeyValueStorage } from "@tutors/profile-localstorage";
+import { localStorageNotes, type NotesStorage } from "@tutors/notes-localstorage";
 import { inProcessPublisher } from "@tutors/bus-inprocess";
 
 function contract(name: string, cases: ContractCase[]) {
@@ -53,6 +54,20 @@ function contract(name: string, cases: ContractCase[]) {
 function memoryStorage(): KeyValueStorage {
   const items = new Map<string, string>();
   return {
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => void items.set(key, value),
+    removeItem: (key) => void items.delete(key)
+  };
+}
+
+/** A Storage with the key listing the notes adapter walks for a course's notes. */
+function listedStorage(): NotesStorage {
+  const items = new Map<string, string>();
+  return {
+    get length() {
+      return items.size;
+    },
+    key: (i) => [...items.keys()][i] ?? null,
     getItem: (key) => items.get(key) ?? null,
     setItem: (key, value) => void items.set(key, value),
     removeItem: (key) => void items.delete(key)
@@ -88,4 +103,11 @@ contract("AssistanceStore: in memory", assistanceStoreContract(() => new InMemor
 contract("AssistanceFeed: in memory", assistanceFeedContract(() => new InMemoryAssistanceFeed()));
 contract("FeedbackStore: in memory", feedbackStoreContract(() => new InMemoryFeedbackStore()));
 contract("NotesStore: in memory", notesStoreContract(() => new InMemoryNotesStore()));
+contract(
+  "NotesStore: localStorage",
+  notesStoreContract(() => {
+    const storage = listedStorage();
+    return localStorageNotes(() => storage);
+  })
+);
 contract("InsightsRead: in memory", insightsReadContract(({ requests, annotations, reflections }) => new InMemoryInsightsRead(requests, annotations, reflections)));

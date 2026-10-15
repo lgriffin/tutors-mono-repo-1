@@ -250,7 +250,7 @@ tutors-mono-repo/
 │   ├── application/         # Ports and use cases; /testing has in-memory adapters → @tutors/application
 │   ├── adapters/
 │   │   ├── driven/          # One technology behind a port each → @tutors/store-supabase, realtime-supabase,
-│   │   │                    #   course-http, render-markdown, profile-localstorage, bus-inprocess,
+│   │   │                    #   course-http, render-markdown, profile-localstorage, notes-localstorage, bus-inprocess,
 │   │   │                    #   identity-better-auth, moodle, clock
 │   │   └── driving/         # Svelte state and UI → @tutors/svelte-state, themes, i18n, a11y, tour,
 │   │                        #   privacy, ui-primitives, ui-navigators, ui-components

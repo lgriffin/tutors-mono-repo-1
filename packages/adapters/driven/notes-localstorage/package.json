@@ -1,0 +1,12 @@
+{
+  "name": "@tutors/notes-localstorage",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "A learner's private notes in the browser: the NotesStore adapter, which sends nothing to a server",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@tutors/application": "workspace:*",
+    "@tutors/domain": "workspace:*"
+  }
+}
