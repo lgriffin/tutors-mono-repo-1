@@ -8,7 +8,7 @@
     "packages/jsr/gen/src/**": { "statements": 84, "branches": 79, "functions": 87, "lines": 84 },
     "packages/adapters/driving/svelte-state/src/connect/**": { "statements": 100, "branches": 91, "functions": 100, "lines": 100 },
     "packages/domain/src/quiz/**": { "statements": 97, "branches": 97, "functions": 100, "lines": 98 },
-    "packages/adapters/driving/svelte-state/src/**": { "statements": 90, "branches": 81, "functions": 91, "lines": 88 },
+    "packages/adapters/driving/svelte-state/src/**": { "statements": 91, "branches": 84, "functions": 93, "lines": 91 },
     "packages/adapters/driving/svelte-state/src/community/**": { "statements": 100, "branches": 100, "functions": 100, "lines": 100 },
     "packages/domain/src/**": { "statements": 97, "branches": 90, "functions": 99, "lines": 98 },
     "packages/application/src/**": { "statements": 99, "branches": 96, "functions": 100, "lines": 100 },

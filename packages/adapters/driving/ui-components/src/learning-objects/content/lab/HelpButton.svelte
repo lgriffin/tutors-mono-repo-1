@@ -2,10 +2,10 @@
   /**
    * The help control in a lab step's tools (Rules 0385, 0386, 0394, 0399): a signed-in student asks
    * "I'm stuck", "Need a hint" or "Request lecturer help"; once asked, a status chip shows the kind
-   * and how long they have waited, with Withdraw and Solved it. Hidden in anonymous mode and for
+   * and how long they have waited, with Change kind, Withdraw and Solved it. Hidden in anonymous mode and for
    * visitors who are not signed in; the lab works the same without it.
    */
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { helpService } from "@tutors/svelte-state/assistance/help";
   import { tutorsId } from "@tutors/svelte-state";
   import { HELP_KINDS, isLive, type HelpKind } from "@tutors/domain/assistance";
@@ -27,6 +27,9 @@
   $effect(() => {
     if (ref) void helpService.arrive(ref, signedIn);
   });
+
+  // Leaving the lab stops reading the request; arriving at a lab again resumes it.
+  onDestroy(() => helpService.leave());
 
   // The waiting time on the chip moves while a request is live.
   $effect(() => {
@@ -70,20 +73,24 @@
         <span class="help-dot" aria-hidden="true"></span>
         {kindLabel(request.kind)} · {request.state === "acknowledged" ? t("help.acknowledged") : `${t("help.waiting")} ${waited}`}
       </span>
+      <button type="button" class="ui-button help-small help-toggle" aria-expanded={open} aria-controls="help-menu" aria-haspopup="true" disabled={helpService.sending.value} onclick={toggle}>
+        {t("help.change")}
+      </button>
       <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => helpService.solved()}>{t("help.solved")}</button>
       <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => helpService.withdraw()}>{t("help.withdraw")}</button>
     {:else}
       <button type="button" class="ui-button help-small help-toggle" aria-expanded={open} aria-controls="help-menu" aria-haspopup="true" disabled={helpService.sending.value} onclick={toggle}>
         {t("help.button")}
       </button>
-      {#if open}
-        <span id="help-menu" class="help-menu ui-panel" bind:this={menu}>
-          <span class="ui-eyebrow">{t("help.menu")}</span>
-          {#each HELP_KINDS as kind (kind)}
-            <button type="button" class="ui-button" onclick={() => ask(kind)}>{kindLabel(kind)}</button>
-          {/each}
-        </span>
-      {/if}
+    {/if}
+    {#if open}
+      <!-- Asking again while a request is live changes its kind and keeps its waiting time (Rule 0386). -->
+      <span id="help-menu" class="help-menu ui-panel" bind:this={menu}>
+        <span class="ui-eyebrow">{t("help.menu")}</span>
+        {#each HELP_KINDS.filter((kind) => !live || kind !== request?.kind) as kind (kind)}
+          <button type="button" class="ui-button" onclick={() => ask(kind)}>{kindLabel(kind)}</button>
+        {/each}
+      </span>
     {/if}
     {#if failure === "unavailable" || failure === "conflict" || failure === "invalid"}
       <span class="help-failure" role="alert">

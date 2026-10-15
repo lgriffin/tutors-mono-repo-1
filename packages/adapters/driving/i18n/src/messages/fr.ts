@@ -584,6 +584,7 @@ Tutors est une application open source - le composant de collecte des données [
   "help.waiting": "En attente",
   "help.acknowledged": "Votre enseignant arrive",
   "help.withdraw": "Retirer",
+  "help.change": "Changer de type",
   "help.solved": "C'est résolu",
   "help.notSent": "Votre demande n'a pas été envoyée.",
   "help.retry": "Réessayer",

@@ -37,12 +37,19 @@ function createHelpQueueService() {
 
   let stops: Array<() => void> = [];
   let reads = 0;
+  /** Changes heard (stream or the lecturer's own actions) since the read in flight started: reapplied over its answer. */
+  let heardSinceRead: HelpRequest[] = [];
 
   const clockMs = () => adapters().clock.nowMs();
 
   /** Puts a changed request into the queue, or takes it out once it is no longer live. */
   function merge(changed: HelpRequest): void {
     if (changed.ref.courseId !== courseId.value) return;
+    heardSinceRead.push(changed);
+    apply(changed);
+  }
+
+  function apply(changed: HelpRequest): void {
     const others = requests.value.filter((r) => r.id !== changed.id);
     requests.value = isLive(changed) ? [...others, changed] : others;
   }
@@ -51,10 +58,15 @@ function createHelpQueueService() {
     const id = courseId.value;
     if (!id) return;
     const mine = ++reads;
+    heardSinceRead = [];
     try {
       const read = await adapters().helpDesk.queue(id);
       if (mine !== reads || courseId.value !== id) return;
+      // A read answers with the rows as they were when it ran: a change heard meanwhile is newer.
+      const heard = heardSinceRead;
+      heardSinceRead = [];
       requests.value = read;
+      for (const changed of heard) apply(changed);
       readAt.value = clockMs();
       status.value = "ready";
     } catch {
@@ -86,6 +98,7 @@ function createHelpQueueService() {
     for (const s of stops) s();
     stops = [];
     reads++;
+    heardSinceRead = [];
   }
 
   return {

@@ -584,6 +584,7 @@ Tutors is an open source application - the data collection component [is here](h
   "help.waiting": "Waiting",
   "help.acknowledged": "Your lecturer is on the way",
   "help.withdraw": "Withdraw",
+  "help.change": "Change kind",
   "help.solved": "Solved it",
   "help.notSent": "Your request was not sent.",
   "help.retry": "Try again",

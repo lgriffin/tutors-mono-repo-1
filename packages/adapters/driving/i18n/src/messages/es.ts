@@ -584,6 +584,7 @@ Tutors es una aplicación de código abierto; el componente de recopilación de 
   "help.waiting": "Esperando",
   "help.acknowledged": "Tu profesor está en camino",
   "help.withdraw": "Retirar",
+  "help.change": "Cambiar tipo",
   "help.solved": "Resuelto",
   "help.notSent": "Tu solicitud no se envió.",
   "help.retry": "Reintentar",

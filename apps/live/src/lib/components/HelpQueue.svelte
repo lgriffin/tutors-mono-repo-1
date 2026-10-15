@@ -5,16 +5,20 @@
    * time ticking each second, lecturer requests first and then the longest waiting. The lecturer
    * acknowledges, answers a Need-a-hint request with a hint they type, or resolves.
    */
+  import { untrack } from "svelte";
   import { helpQueueService } from "@tutors/svelte-state/assistance/queue";
   import type { HelpKind } from "@tutors/domain/assistance";
   import { t, type MessageKey } from "@tutors/i18n";
 
   let { courseId, online }: { courseId: string; online: (login: string) => boolean } = $props();
 
+  // Only courseId drives this effect: start() and reset() read and write the service's runes, which
+  // would otherwise make the effect depend on them and start the queue again on every read.
   $effect(() => {
-    if (!courseId) return;
-    void helpQueueService.start(courseId);
-    return () => helpQueueService.reset();
+    const id = courseId;
+    if (!id) return;
+    untrack(() => void helpQueueService.start(id));
+    return () => untrack(() => helpQueueService.reset());
   });
 
   const rows = $derived(helpQueueService.rows(online));
@@ -22,8 +26,16 @@
   let hints = $state<Record<string, string>>({});
 
   const kindLabel = (kind: HelpKind) => t(`help.kind.${kind}` as MessageKey);
-  const lastSegment = (route: string) => decodeURIComponent(route.split("/").filter(Boolean).pop() ?? route);
-  const stepLabel = (id: string) => decodeURIComponent(id);
+  /** A malformed escape in a stored route shows as written rather than breaking the queue. */
+  function decoded(text: string): string {
+    try {
+      return decodeURIComponent(text);
+    } catch {
+      return text;
+    }
+  }
+  const lastSegment = (route: string) => decoded(route.split("/").filter(Boolean).pop() ?? route);
+  const stepLabel = (id: string) => decoded(id);
   function waited(ms: number): string {
     const s = Math.floor(ms / 1000);
     const h = Math.floor(s / 3600);

@@ -8,8 +8,8 @@ import { openRequest, type HelpRequest } from "@tutors/domain/assistance";
 import { isRevoked, type Annotation } from "@tutors/domain/feedback";
 import { stepDiagnostics } from "@tutors/domain/insights";
 import { isEvidenceKind, type StepRef } from "@tutors/domain/learning";
-import { annotate, broadcast, recordEvidence, requestHelp, resolveHelp, saveNote, type AssistanceDeps } from "@tutors/application";
-import { FixedClock, InMemoryAssistanceFeed, InMemoryAssistanceStore, InMemoryFeedbackStore, InMemoryNotesStore, RecordingPublisher } from "@tutors/application/testing";
+import { annotate, broadcast, myHelpRequest, rateHelp, recordEvidence, requestHelp, resolveHelp, saveNote, type AssistanceDeps } from "@tutors/application";
+import { FixedClock, InMemoryAssistanceFeed, InMemoryAssistanceStore, InMemoryFeedbackStore, InMemoryHelpDesk, InMemoryNotesStore, RecordingPublisher, SignedOutHelpDesk } from "@tutors/application/testing";
 
 const ref: StepRef = { courseId: "cs101", labRoute: "/lab/cs101/lab-01", stepId: "02" };
 const alice = { login: "alice", name: null };
@@ -105,6 +105,70 @@ describe("assistance when the store or feed fails", () => {
     await requestHelp(d)(ref, "stuck", alice);
     expect((await resolveHelp(d)(d.store.rows[0].id, { login: "alice" })).ok).toBe(true);
     expect(publisher.events.map((e) => e.type)).toEqual(["help-requested"]);
+  });
+
+  it("refuses a rating that is not a yes or no, of a request that is missing, or when the store fails (Rule 0398)", async () => {
+    const d = deps();
+    await requestHelp(d)(ref, "stuck", alice);
+    const id = d.store.rows[0].id;
+    await resolveHelp(d)(id, { login: "alice" });
+    expect(await rateHelp(d)(id, { login: "alice" }, "yes" as unknown as boolean)).toEqual({ ok: false, reason: "invalid" });
+    expect(await rateHelp(d)("missing", { login: "alice" }, true)).toEqual({ ok: false, reason: "not-found" });
+    expect(await rateHelp(d)(id, { login: "bob" }, true)).toEqual({ ok: false, reason: "not-permitted" });
+    const replace = d.store.replace.bind(d.store);
+    d.store.replace = () => Promise.reject(new Error("down"));
+    expect(await rateHelp(d)(id, { login: "alice" }, true)).toEqual({ ok: false, reason: "unavailable" });
+    d.store.replace = async () => false;
+    expect(await rateHelp(d)(id, { login: "alice" }, true)).toEqual({ ok: false, reason: "conflict" });
+    d.store.replace = replace;
+    expect((await rateHelp(d)(id, { login: "alice" }, false)).ok).toBe(true);
+    expect(await rateHelp(d)(id, { login: "alice" }, true)).toEqual({ ok: false, reason: "not-in-state-table" });
+    d.store.unavailable = true;
+    expect(await rateHelp(d)(id, { login: "alice" }, true)).toEqual({ ok: false, reason: "unavailable" });
+  });
+
+  it("shows the student a resolved request only while it has a hint or awaits a rating, within 4 hours", async () => {
+    const d = deps();
+    const mine = () => myHelpRequest(d)("cs101", "alice");
+    expect(await mine()).toBeNull();
+    await requestHelp(d)(ref, "stuck", alice);
+    const id = d.store.rows[0].id;
+    await d.store.replace({ ...d.store.rows[0], state: "withdrawn", closed: { by: "alice", at: d.store.rows[0].requestedAt, reason: "withdrawn" } } as HelpRequest, d.store.rows[0]);
+    expect(await mine()).toBeNull();
+    d.store.rows[0] = { ...d.store.rows[0], state: "resolved", closed: null };
+    expect(await mine()).toBeNull();
+    d.store.rows[0] = { ...d.store.rows[0], closed: { by: "alice", at: d.store.rows[0].requestedAt, reason: "resolved" } } as HelpRequest;
+    expect((await mine())?.id).toBe(id);
+    d.store.rows[0] = { ...d.store.rows[0], helped: true };
+    expect(await mine()).toBeNull();
+    d.store.rows[0] = { ...d.store.rows[0], hintText: "Check the loop" };
+    expect((await mine())?.id).toBe(id);
+    (d.clock as FixedClock).advance(4 * 60 * 60 * 1000);
+    expect(await mine()).toBeNull();
+  });
+});
+
+describe("the help desks in memory", () => {
+  it("refuses everything signed out, and reads nothing", async () => {
+    for (const desk of [new SignedOutHelpDesk(), new InMemoryHelpDesk()]) {
+      expect(await desk.ask(ref, "stuck")).toEqual({ ok: false, reason: "signed-out" });
+      expect(await desk.act("x", "resolve")).toEqual({ ok: false, reason: "signed-out" });
+      expect(await desk.answerHint("x", "hint")).toEqual({ ok: false, reason: "signed-out" });
+      expect(await desk.rate("x", true)).toEqual({ ok: false, reason: "signed-out" });
+      expect(await desk.mine("cs101")).toBeNull();
+      await expect(desk.queue("cs101")).rejects.toThrow();
+    }
+  });
+
+  it("reads a course's queue only for its educators, and acts as whoever it is signed in as", async () => {
+    const desk = new InMemoryHelpDesk({ educators: { cs101: ["ellen"] }, actor: alice });
+    const asked = await desk.ask(ref, "stuck");
+    if (!asked.ok) throw new Error(asked.reason);
+    await expect(desk.queue("cs101")).rejects.toThrow();
+    await expect(desk.as({ login: "ellen", name: null }).queue("cs102")).rejects.toThrow();
+    expect(await desk.as({ login: "ellen", name: null }).queue("cs101")).toHaveLength(1);
+    expect((await desk.as({ login: "ellen", name: null }).act(asked.request.id, "acknowledge")).ok).toBe(true);
+    expect((await desk.act(asked.request.id, "withdraw")).ok).toBe(true);
   });
 });
 

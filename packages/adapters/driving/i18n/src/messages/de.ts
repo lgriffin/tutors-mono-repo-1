@@ -584,6 +584,7 @@ Tutors ist eine Open-Source-Anwendung - die Komponente zur Datenerfassung [finde
   "help.waiting": "Wartet",
   "help.acknowledged": "Ihre Lehrkraft ist unterwegs",
   "help.withdraw": "Zurückziehen",
+  "help.change": "Art ändern",
   "help.solved": "Gelöst",
   "help.notSent": "Ihre Anfrage wurde nicht gesendet.",
   "help.retry": "Erneut versuchen",

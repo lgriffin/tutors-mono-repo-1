@@ -8,7 +8,7 @@ import type { Note, StepRef } from "@tutors/domain/learning";
 import type { AssistanceChange, AssistanceFeed } from "../ports/assistance-feed.ts";
 import type { AssistanceStore } from "../ports/assistance-store.ts";
 import type { FeedbackStore } from "../ports/feedback-store.ts";
-import type { HelpDesk } from "../ports/help-desk.ts";
+import type { HelpDesk, HelpDeskResult } from "../ports/help-desk.ts";
 import type { InsightsRead } from "../ports/insights-read.ts";
 import type { NotesStore } from "../ports/notes-store.ts";
 import { assert, assertEqual, type ContractCase } from "./contracts.ts";
@@ -332,6 +332,15 @@ export function insightsReadContract(
 /** Three desks over the same help requests: a student, the course's educator, and a visitor nobody signed in as. */
 export type HelpDesks = { student: HelpDesk; educator: HelpDesk; visitor: HelpDesk };
 
+/** What a desk answered: "ok", or the reason it refused. */
+const outcome = (result: HelpDeskResult): string => (result.ok ? "ok" : result.reason);
+
+/** The request a desk kept; a refusal fails the case. */
+function kept(result: HelpDeskResult, what: string): HelpRequest {
+  assert(result.ok, `${what}: refused as ${outcome(result)}`);
+  return (result as Extract<HelpDeskResult, { ok: true }>).request;
+}
+
 /**
  * What every HelpDesk must do, as the students and lecturers of the course "cs101" ("alice" asks,
  * "ellen" is its educator): asks are kept as the person signed in, only an educator reads the
@@ -343,10 +352,9 @@ export function helpDeskContract(make: Make<HelpDesks>): ContractCase[] {
       name: "a student's ask is theirs, and they read it back as their own request",
       run: async () => {
         const { student } = await make();
-        const asked = await student.ask(step("cs101"), "stuck");
-        assert(asked.ok, "asked");
+        const asked = kept(await student.ask(step("cs101"), "stuck"), "asked");
         const mine = await student.mine("cs101");
-        assertEqual(mine && [mine.id, mine.kind, mine.state, mine.ref], asked.ok && [asked.request.id, "stuck", "open", step("cs101")], "mine");
+        assertEqual(mine && [mine.id, mine.kind, mine.state, mine.ref], [asked.id, "stuck", "open", step("cs101")], "mine");
         assertEqual(await student.mine("cs102"), null, "nothing in another course");
       }
     },
@@ -354,43 +362,36 @@ export function helpDeskContract(make: Make<HelpDesks>): ContractCase[] {
       name: "only the course's educator reads the queue and acknowledges",
       run: async () => {
         const { student, educator } = await make();
-        const asked = await student.ask(step("cs101"), "lecturer");
-        assert(asked.ok, "asked");
+        const asked = kept(await student.ask(step("cs101"), "lecturer"), "asked");
         assertEqual((await educator.queue("cs101")).map((r) => r.kind), ["lecturer"], "queue");
         let refused = false;
         await student.queue("cs101").catch(() => (refused = true));
         assert(refused, "a student may not read the queue");
-        const refusedAck = await student.act(asked.ok ? asked.request.id : "", "acknowledge");
-        assertEqual(refusedAck.ok ? "ok" : refusedAck.reason, "not-permitted", "a student may not acknowledge");
-        const acked = await educator.act(asked.ok ? asked.request.id : "", "acknowledge");
-        assertEqual(acked.ok && acked.request.acknowledged?.by, "ellen", "acknowledged by the educator");
+        assertEqual(outcome(await student.act(asked.id, "acknowledge")), "not-permitted", "a student may not acknowledge");
+        const acked = kept(await educator.act(asked.id, "acknowledge"), "acknowledged");
+        assertEqual(acked.acknowledged?.by, "ellen", "acknowledged by the educator");
       }
     },
     {
       name: "a typed hint resolves the request, the student reads it and says once whether it helped",
       run: async () => {
         const { student, educator } = await make();
-        const asked = await student.ask(step("cs101"), "hint");
-        const id = asked.ok ? asked.request.id : "";
-        const empty = await educator.answerHint(id, " ");
-        assertEqual(empty.ok ? "ok" : empty.reason, "hint-required", "an empty hint");
-        assert((await educator.answerHint(id, "Check the loop bound.")).ok, "hinted");
+        const { id } = kept(await student.ask(step("cs101"), "hint"), "asked");
+        assertEqual(outcome(await educator.answerHint(id, " ")), "hint-required", "an empty hint");
+        kept(await educator.answerHint(id, "Check the loop bound."), "hinted");
         const mine = await student.mine("cs101");
         assertEqual(mine && [mine.state, mine.hintText, mine.helped], ["resolved", "Check the loop bound.", null], "the student reads the hint");
         assertEqual((await educator.queue("cs101")).length, 0, "gone from the queue");
-        const rated = await student.rate(id, true);
-        assertEqual(rated.ok && rated.request.helped, true, "rated");
-        const again = await student.rate(id, false);
-        assertEqual(again.ok ? "ok" : again.reason, "not-in-state-table", "rated once");
+        assertEqual(kept(await student.rate(id, true), "rated").helped, true, "rated");
+        assertEqual(outcome(await student.rate(id, false)), "not-in-state-table", "rated once");
       }
     },
     {
       name: "the student withdraws their request, and it leaves the queue",
       run: async () => {
         const { student, educator } = await make();
-        const asked = await student.ask(step("cs101"), "stuck");
-        const withdrawn = await student.act(asked.ok ? asked.request.id : "", "withdraw");
-        assertEqual(withdrawn.ok && withdrawn.request.state, "withdrawn", "withdrawn");
+        const asked = kept(await student.ask(step("cs101"), "stuck"), "asked");
+        assertEqual(kept(await student.act(asked.id, "withdraw"), "withdrawn").state, "withdrawn", "withdrawn");
         assertEqual(await student.mine("cs101"), null, "nothing of theirs left");
         assertEqual(await educator.queue("cs101"), [], "queue empty");
       }
@@ -399,8 +400,7 @@ export function helpDeskContract(make: Make<HelpDesks>): ContractCase[] {
       name: "a visitor nobody signed in as is refused",
       run: async () => {
         const { visitor } = await make();
-        const asked = await visitor.ask(step("cs101"), "stuck");
-        assertEqual(asked.ok ? "ok" : asked.reason, "signed-out", "ask refused");
+        assertEqual(outcome(await visitor.ask(step("cs101"), "stuck")), "signed-out", "ask refused");
         assertEqual(await visitor.mine("cs101"), null, "no request of theirs");
       }
     }
