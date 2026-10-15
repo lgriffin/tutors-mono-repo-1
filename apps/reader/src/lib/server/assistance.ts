@@ -42,6 +42,7 @@ export function parseHelpPost(body: Record<string, unknown>): HelpPost | string 
     case "request": {
       const ref = stepRef(text(body.courseId, 200), text(body.labRoute, 512), text(body.stepId, 200));
       if (!ref) return "courseId, labRoute and stepId are required";
+      if (!ref.labRoute.startsWith(`/lab/${ref.courseId}/`)) return "labRoute is a lab of the course, /lab/<courseId>/...";
       if (typeof body.kind !== "string") return "kind is one of stuck, hint, lecturer";
       return { action: "request", ref, kind: body.kind };
     }

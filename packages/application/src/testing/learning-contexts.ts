@@ -3,9 +3,9 @@
  * anonymous reader compose until the real adapters arrive. Each keeps copies, so changing what it
  * returns never changes what it stores.
  */
-import { isLive, type HelpRequest, type HelpState, type NewHelpRequest } from "@tutors/domain/assistance";
+import { isLive, type HelpRequest, type NewHelpRequest } from "@tutors/domain/assistance";
 import type { Annotation, NewAnnotation, NewReflection, Reflection } from "@tutors/domain/feedback";
-import { stepKey, type Note, type StepRef } from "@tutors/domain/learning";
+import { sameStep, stepKey, type Note, type StepRef } from "@tutors/domain/learning";
 import type { AssistanceChange, AssistanceFeed } from "../ports/assistance-feed.ts";
 import type { AssistanceStore } from "../ports/assistance-store.ts";
 import type { FeedbackStore } from "../ports/feedback-store.ts";
@@ -42,10 +42,11 @@ export class InMemoryAssistanceStore implements AssistanceStore {
     this.check();
     return this.rows.filter((r) => r.ref.courseId === courseId && isLive(r)).map(copy);
   }
-  async replace(next: HelpRequest, from: HelpState): Promise<boolean> {
+  async replace(next: HelpRequest, prior: HelpRequest): Promise<boolean> {
     this.check();
     const index = this.rows.findIndex((r) => r.id === next.id);
-    if (index < 0 || this.rows[index].state !== from) return false;
+    const stored = this.rows[index];
+    if (index < 0 || stored.state !== prior.state || stored.kind !== prior.kind || !sameStep(stored.ref, prior.ref)) return false;
     this.rows[index] = copy(next);
     return true;
   }

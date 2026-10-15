@@ -1,8 +1,10 @@
 /**
- * Help requests, wherever an adapter keeps them. Writes are compare-and-set on the state so a
- * request moves to each state once even when two lecturers press at the same moment (Rule 0389).
+ * Help requests, wherever an adapter keeps them. Writes are compare-and-set on the request as it was
+ * read (its state, kind and step) so a request moves to each state once even when two lecturers
+ * press at the same moment (Rule 0389), and a lecturer acting on a stale read never undoes the
+ * student asking again on another step or kind.
  */
-import type { HelpRequest, HelpState, NewHelpRequest } from "@tutors/domain/assistance";
+import type { HelpRequest, NewHelpRequest } from "@tutors/domain/assistance";
 
 export interface AssistanceStore {
   /**
@@ -16,8 +18,8 @@ export interface AssistanceStore {
   /** The course's open and acknowledged requests, in no particular order. */
   live(courseId: string): Promise<HelpRequest[]>;
   /**
-   * Replaces a request with `next` only while its stored state is still `from`; resolves false,
-   * writing nothing, when the request is missing or has moved since.
+   * Replaces every field of a request with `next` only while the stored request still has `prior`'s
+   * state, kind and step; resolves false, writing nothing, when it is missing or has changed since.
    */
-  replace(next: HelpRequest, from: HelpState): Promise<boolean>;
+  replace(next: HelpRequest, prior: HelpRequest): Promise<boolean>;
 }

@@ -2,11 +2,23 @@
  * Help requests in `assistance_requests`; `postgresAssistanceStore` is the application's
  * AssistanceStore over them. Only the reader's server composes it, behind POST /api/assistance,
  * which has checked who is asking. A second live request of a learner in a course is refused by the
- * table's partial unique index, and `replace` is a compare-and-set on the stored state.
+ * table's partial unique index, and `replace` is a compare-and-set on the state, kind and step it
+ * was read with. The use cases answer a failed query as "try again", so each one is logged here.
  */
+import log from "@tutors/logger";
 import type { AssistanceStore } from "@tutors/application/ports";
 import type { HelpClosure, HelpRequest, HelpState, NewHelpRequest } from "@tutors/domain/assistance";
-import { iso, run, type SqlClient } from "./client.ts";
+import { iso, run as runQuery, type SqlClient } from "./client.ts";
+
+/** Runs a query, logging why it failed before the use case turns the failure into a refusal. */
+async function run<T>(what: string, query: () => Promise<T>): Promise<T> {
+  try {
+    return await runQuery(what, query);
+  } catch (error) {
+    log.error("A help request query failed:", what, error);
+    throw error;
+  }
+}
 
 const COLUMNS = `id::text AS id, course_id, lab_route, step_id, learner_id, learner_name, kind, state, requested_at,
   acknowledged_by, acknowledged_at, closed_by, closed_at, closed_reason, hint_text`;
@@ -76,22 +88,29 @@ export function postgresAssistanceStore(sql: SqlClient): AssistanceStore {
       return rows.map(fromRow);
     },
 
-    async replace(next: HelpRequest, from: HelpState): Promise<boolean> {
+    async replace(next: HelpRequest, prior: HelpRequest): Promise<boolean> {
       if (!UUID.test(next.id)) return false;
       const { rows } = await run("assistance_requests update", () =>
         sql.query(
-          `UPDATE assistance_requests SET lab_route = $3, step_id = $4, learner_name = $5, kind = $6, state = $7,
-             acknowledged_by = $8, acknowledged_at = $9::timestamptz, closed_by = $10, closed_at = $11::timestamptz, closed_reason = $12, hint_text = $13
-           WHERE id = $1::uuid AND state = $2
+          `UPDATE assistance_requests SET course_id = $6, lab_route = $7, step_id = $8, learner_id = $9, learner_name = $10, kind = $11, state = $12,
+             requested_at = $13::timestamptz, acknowledged_by = $14, acknowledged_at = $15::timestamptz, closed_by = $16, closed_at = $17::timestamptz,
+             closed_reason = $18, hint_text = $19
+           WHERE id = $1::uuid AND state = $2 AND kind = $3 AND lab_route = $4 AND step_id = $5
            RETURNING id::text AS id`,
           [
             next.id,
-            from,
+            prior.state,
+            prior.kind,
+            prior.ref.labRoute,
+            prior.ref.stepId,
+            next.ref.courseId,
             next.ref.labRoute,
             next.ref.stepId,
+            next.learnerId,
             next.learnerName,
             next.kind,
             next.state,
+            next.requestedAt,
             next.acknowledged?.by ?? null,
             next.acknowledged?.at ?? null,
             next.closed?.by ?? null,

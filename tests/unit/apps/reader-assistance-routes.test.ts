@@ -63,6 +63,8 @@ describe("parseHelpPost", () => {
     expect(parseHelpPost({ ...ask, stepId: " " })).toMatch(/stepId/);
     expect(parseHelpPost({ ...ask, courseId: "x".repeat(201) })).toMatch(/courseId/);
     expect(parseHelpPost({ ...ask, kind: 3 })).toMatch(/kind/);
+    expect(parseHelpPost({ ...ask, labRoute: "/lab/cs102/lab-01" })).toMatch(/lab of the course/);
+    expect(parseHelpPost({ ...ask, labRoute: "/lab/cs1010/lab-01" })).toMatch(/lab of the course/);
     expect(parseHelpPost({ action: "resolve" })).toMatch(/id/);
     expect(parseHelpPost({ action: "answer-hint", id: "h1", hintText: "x".repeat(MAX_HINT_LENGTH + 1) })).toMatch(/at most/);
     expect(parseHelpPost({ action: "delete", id: "h1" })).toMatch(/action is one of/);

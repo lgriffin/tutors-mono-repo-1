@@ -57,7 +57,7 @@ async function expireStale({ store, feed, clock }: Pick<AssistanceDeps, "store" 
     }
     const moved = transition(request, "expire", "system", iso(clock));
     if (!moved.ok) continue;
-    const kept = await store.replace(moved.request, request.state).catch(() => false);
+    const kept = await store.replace(moved.request, request).catch(() => false);
     if (kept) await feed.publish({ type: "help-request", courseId: request.ref.courseId, request: moved.request }).catch(() => false);
     else live.push(request);
   }
@@ -77,7 +77,7 @@ export function requestHelp({ store, feed, clock, publish }: Pick<AssistanceDeps
       const mine = live.find((r) => r.learnerId === learner.login);
       if (mine) {
         request = askAgain(mine, ref, kind);
-        if (!(await store.replace(request, mine.state))) return { ok: false, reason: "conflict" };
+        if (!(await store.replace(request, mine))) return { ok: false, reason: "conflict" };
       }
     } catch {
       return { ok: false, reason: "unavailable" };
@@ -122,7 +122,7 @@ function act(action: HelpAction, { store, feed, clock, educatorsOf, publish }: A
     const actor: HelpActor = { login: caller.login, educator: isEducatorOf(caller.login, { educators }) };
     const moved = transition(current, action, actor, iso(clock), hintText);
     if (!moved.ok) return moved;
-    const kept = await store.replace(moved.request, current.state).catch(() => null);
+    const kept = await store.replace(moved.request, current).catch(() => null);
     if (kept === null) return { ok: false, reason: "unavailable" };
     if (!kept) return { ok: false, reason: "conflict" };
     await feed.publish({ type: "help-request", courseId: moved.request.ref.courseId, request: moved.request }).catch(() => false);
