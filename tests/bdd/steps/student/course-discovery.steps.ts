@@ -8,6 +8,8 @@ import { configureSupabase } from "../../../../packages/adapters/driven/store-su
 const supabase = new MockSupabaseClient();
 configureSupabase(supabase as never);
 
+import log from "@tutors/logger";
+import { catalogueService } from "../../../../packages/adapters/driven/store-supabase/src/index.ts";
 import { flattenLos, type Composite, type Course, type Lo } from "../../../../packages/jsr/model/src/tutors.ts";
 import { load as loadCataloguePage } from "../../../../apps/catalogue/src/routes/+page.ts";
 import type { LoShape } from "../../../support/arbitraries/course-tree.ts";
@@ -103,6 +105,37 @@ describeFeature(feature, ({ Rule }) => {
         const composite = course as unknown as Composite;
         expect(composite.units.standardLos.map((lo) => lo.title)).toEqual(list(expected));
         expect(composite.toc.map((lo) => lo.title)).toEqual(list(expected));
+      });
+    });
+  });
+
+  Rule("If Supabase is not configured, then the catalogue shall show an empty catalogue and a student count of 0 without logging an error.", ({ RuleScenario }) => {
+    RuleScenario("Open the catalogue with no Supabase configured", ({ Given, When, Then, And }) => {
+      let displayed: CourseRecord[];
+      let logError: ReturnType<typeof vi.spyOn>;
+
+      Given("Supabase is not configured", () => {
+        configureSupabase(undefined);
+        logError = vi.spyOn(log, "error");
+      });
+      When("a student opens the catalogue", async () => {
+        const data = (await loadCataloguePage({ fetch } as Parameters<typeof loadCataloguePage>[0])) as { courseRecords: CourseRecord[] };
+        displayed = data.courseRecords;
+      });
+      Then("the catalogue shall display no courses", () => {
+        expect(displayed).toEqual([]);
+      });
+      And("the catalogue shall show a student count of 0", async () => {
+        // The catalogue page asks for the student count once it has rendered.
+        expect(await catalogueService.getStudentCount()).toBe(0);
+      });
+      And("no error shall be logged", () => {
+        try {
+          expect(logError).not.toHaveBeenCalled();
+        } finally {
+          logError.mockRestore();
+          configureSupabase(supabase as never);
+        }
       });
     });
   });

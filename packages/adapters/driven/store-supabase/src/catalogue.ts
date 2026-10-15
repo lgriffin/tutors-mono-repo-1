@@ -18,9 +18,20 @@ export interface CatalogueService {
 }
 import log from "@tutors/logger";
 
+/**
+ * The client module leaves `supabase` undefined when Supabase is not configured (or in anon mode),
+ * promising that such an environment degrades to "no Supabase" instead of throwing.
+ * @returns true when there is no client; the caller returns its empty value without logging an error
+ */
+function noSupabase(operation: string): boolean {
+  if (typeof supabase !== "undefined") return false;
+  log.debug("Supabase is not configured; skipping", { operation });
+  return true;
+}
+
 export const catalogueService: CatalogueService = {
   async getCatalogue() {
-    if (!supabase) return [];
+    if (noSupabase("getCatalogue")) return [];
     try {
       const { data, error } = await supabase!.from("tutors-connect-courses").select("*").order("visited_at", { ascending: false });
 
@@ -37,7 +48,7 @@ export const catalogueService: CatalogueService = {
   },
 
   async getCatalogueCount() {
-    if (!supabase) return 0;
+    if (noSupabase("getCatalogueCount")) return 0;
     try {
       const { count, error } = await supabase!.from("tutors-connect-courses").select("*", { count: "exact", head: true });
 
@@ -53,7 +64,7 @@ export const catalogueService: CatalogueService = {
   },
 
   async getStudentCount() {
-    if (!supabase) return 0;
+    if (noSupabase("getStudentCount")) return 0;
     try {
       const { count, error } = await supabase!.from("tutors-connect-profiles").select("*", { count: "exact", head: true });
 
@@ -91,7 +102,7 @@ export const catalogueService: CatalogueService = {
   },
 
   async deleteCourses(courseIds: string[]) {
-    if (!supabase) return;
+    if (noSupabase("deleteCourses")) return;
     try {
       const { error } = await supabase!.from("tutors-connect-courses").delete().in("course_id", courseIds);
 
