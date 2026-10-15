@@ -1,8 +1,10 @@
 /**
  * Learning evidence and private notes (Rules 0375 to 0384), driven through the Learning domain and
- * use cases over the in-memory adapters: the notes store a browser adapter will implement, the
- * learning records the reader already stores, and the event publisher.
+ * use cases over the in-memory adapters (the notes store, the learning records the reader already
+ * stores, the event publisher), and through the reader's notes panel state over the browser
+ * storage adapter, notes-localstorage, with a Storage the test holds.
  */
+import "../../support/svelte-runes-shim.ts";
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { afterEach, expect, vi } from "vitest";
 import {
@@ -43,10 +45,38 @@ import {
 import type { StepDiagnostic } from "@tutors/domain/insights";
 import type { Annotation } from "@tutors/domain/feedback";
 import type { HelpRequest } from "@tutors/domain/assistance";
+import { localStorageNotes, type NotesStorage } from "@tutors/notes-localstorage";
+import { anonymousAdapters, configureAdapters } from "../../../../packages/adapters/driving/svelte-state/src/adapters.ts";
+import { notesService } from "../../../../packages/adapters/driving/svelte-state/src/learning/notes.svelte.ts";
 
 const feature = await loadFeature("tests/bdd/features/student/learning-evidence.feature");
 
 const READER = "https://reader.example";
+
+/** A browser's Storage the test can read, and fill up: a full one refuses every write as browsers do. */
+class TestStorage implements NotesStorage {
+  readonly items = new Map<string, string>();
+  full = false;
+  get length() {
+    return this.items.size;
+  }
+  key(i: number) {
+    return [...this.items.keys()][i] ?? null;
+  }
+  getItem(key: string) {
+    return this.items.get(key) ?? null;
+  }
+  setItem(key: string, value: string) {
+    if (this.full) throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    this.items.set(key, value);
+  }
+  removeItem(key: string) {
+    this.items.delete(key);
+  }
+  clear() {
+    this.items.clear();
+  }
+}
 const readerUrl = (ref: StepRef) => `${READER}${ref.labRoute.replace(/^\/lab\/[^/]+/, `/lab/${ref.courseId}`)}/${ref.stepId}`;
 
 describeFeature(feature, ({ Background, Rule }) => {
@@ -77,10 +107,37 @@ describeFeature(feature, ({ Background, Rule }) => {
   const lab = (): LabSteps => ({ courseId, labRoute, recordRoute: `/lab/${courseId}`, stepIds });
   const write = (body: string, stepId: string) => saveNote({ notes: store, clock })({ ref: at(stepId), body, labTitle: "Lab One", stepTitle: `Step ${stepId}` });
 
+  let browser: TestStorage;
+  let typedAt: number;
+  let sessionOnlyTold: number;
+
+  // A step is a test of its own, so only the globals are undone after each; the panel's state is
+  // put back at the start of every scenario, in the Background.
   afterEach(() => vi.unstubAllGlobals());
+
+  /** The reader's composition: the notes panel over the browser storage adapter. */
+  const composeReaderNotes = () => {
+    vi.useFakeTimers();
+    notesService.reset();
+    configureAdapters(anonymousAdapters({ notes: localStorageNotes(() => browser), clock }));
+    sessionOnlyTold = 0;
+  };
+  const typeInPanel = async (_ctx: unknown, _learner: string, body: string, stepId: string) => {
+    if (!vi.isFakeTimers()) composeReaderNotes();
+    const before = notesService.sessionOnly.value;
+    await notesService.arrive(at(stepId), { labTitle: "Lab One", stepTitle: `Step ${stepId}` });
+    typedAt = Date.now();
+    notesService.edit(body);
+    await vi.advanceTimersByTimeAsync(1000);
+    if (!before && notesService.sessionOnly.value) sessionOnlyTold++;
+  };
 
   Background(({ Given }) => {
     Given("the lab {string} of the course {string} has the steps {string}", (_ctx, route: string, course: string, steps: string) => {
+      vi.useRealTimers();
+      notesService.reset();
+      configureAdapters(anonymousAdapters());
+      browser = new TestStorage();
       labRoute = route;
       courseId = course;
       stepIds = steps.split(",").map((s) => s.trim());
@@ -245,6 +302,24 @@ describeFeature(feature, ({ Background, Rule }) => {
           expect(publisher.events).toEqual([]);
         });
       });
+      RuleScenario("The notes panel keeps a typed note in the browser's local storage", ({ When, Then, And }) => {
+        When("{string} types {string} in the notes panel at the step {string}", async (ctx, learner: string, body: string, stepId: string) => {
+          fetchSpy = vi.fn();
+          vi.stubGlobal("fetch", fetchSpy);
+          composeReaderNotes();
+          await typeInPanel(ctx, learner, body, stepId);
+        });
+        Then("the browser's local storage shall hold {string} under {string} within 1 second", (_ctx, body: string, key: string) => {
+          const kept = JSON.parse(browser.getItem(key) ?? "null");
+          expect(kept?.body).toBe(body);
+          expect(kept?.ref).toEqual(at("02"));
+          expect(Date.now() - typedAt).toBeLessThanOrEqual(1000);
+          expect(notesService.saveState.value).toBe("saved");
+        });
+        And("nothing shall have been sent to a server", () => {
+          expect(fetchSpy).not.toHaveBeenCalled();
+        });
+      });
     }
   );
 
@@ -329,6 +404,24 @@ describeFeature(feature, ({ Background, Rule }) => {
         });
         And("the export of the course shall contain {string} and {string}", async (_ctx, a: string, b: string) => {
           const doc = await exportCourse("Web Development");
+          expect(doc).toContain(a);
+          expect(doc).toContain(b);
+        });
+      });
+      RuleScenario("The notes panel keeps the session's notes when local storage is full", ({ Given, When, And, Then }) => {
+        Given("the browser's local storage is full", () => {
+          composeReaderNotes();
+          browser.full = true;
+        });
+        When("{string} types {string} in the notes panel at the step {string}", typeInPanel);
+        And("{string} types {string} in the notes panel at the step {string}", typeInPanel);
+        Then("the notes panel shall have said once that the notes are kept for this session only", () => {
+          expect(notesService.sessionOnly.value).toBe(true);
+          expect(sessionOnlyTold).toBe(1);
+          expect(browser.items.size).toBe(0);
+        });
+        And("the notes panel's export of the course shall contain {string} and {string}", async (_ctx, a: string, b: string) => {
+          const doc = await notesService.exportCourse({ courseId, title: "Web Development", readerUrl });
           expect(doc).toContain(a);
           expect(doc).toContain(b);
         });

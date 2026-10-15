@@ -50,6 +50,7 @@ export const workspaceAliases: Record<string, string> = {
   "@tutors/course-http": resolve(root, "packages/adapters/driven/course-http/src/index.ts"),
   "@tutors/data-api": resolve(root, "packages/adapters/driven/data-api/src/index.ts"),
   "@tutors/profile-localstorage": resolve(root, "packages/adapters/driven/profile-localstorage/src/index.ts"),
+  "@tutors/notes-localstorage": resolve(root, "packages/adapters/driven/notes-localstorage/src/index.ts"),
   "@tutors/bus-inprocess": resolve(root, "packages/adapters/driven/bus-inprocess/src/index.ts"),
   "@tutors/moodle": resolve(root, "packages/adapters/driven/moodle/src/index.ts"),
   "@tutors/runtime-wasm": resolve(root, "packages/adapters/driven/runtime-wasm/src/index.ts"),

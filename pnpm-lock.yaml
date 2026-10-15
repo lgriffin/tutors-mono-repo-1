@@ -335,6 +335,9 @@ importers:
       '@tutors/live-events-http':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/live-events-http
+      '@tutors/notes-localstorage':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driven/notes-localstorage
       '@tutors/profile-localstorage':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/profile-localstorage
@@ -676,6 +679,15 @@ importers:
       '@tutors/application':
         specifier: workspace:*
         version: link:../../../application
+
+  packages/adapters/driven/notes-localstorage:
+    dependencies:
+      '@tutors/application':
+        specifier: workspace:*
+        version: link:../../../application
+      '@tutors/domain':
+        specifier: workspace:*
+        version: link:../../../domain
 
   packages/adapters/driven/profile-localstorage:
     dependencies:

@@ -517,7 +517,40 @@ Is feidhmchlár foinse oscailte é Tutors - tá an comhpháirt bailiúcháin son
   // Notebook kernel
   "notebook.runAll": "Rith gach cill",
   "notebook.restartKernel": "Atosaigh an eithne",
-  "notebook.notRunnable": "Ní ritheann an teanga eithne seo sa bhrabhsálaí."
+  "notebook.notRunnable": "Ní ritheann an teanga eithne seo sa bhrabhsálaí.",
+
+  // Private notes on a lab step
+  "notes.button": "Nótaí",
+  "notes.hasNote": "Tá nóta ag an gcéim seo",
+  "notes.title": "Mo nótaí",
+  "notes.restore": "Oscail na nótaí",
+  "notes.resize": "Athraigh méid phainéal na nótaí",
+  "notes.minimise": "Íoslaghdaigh",
+  "notes.close": "Dún",
+  "notes.sessionOnlyTitle": "Níl na nótaí á stóráil",
+  "notes.sessionOnly": "Níl an brabhsálaí seo ag stóráil nótaí, mar sin ní mhaireann siad ach don seisiún seo. Easpórtáil iad chun cóip a choinneáil.",
+  "notes.kind": "Cineál",
+  "notes.kind.note": "Nóta",
+  "notes.kind.discovery": "Fionnachtain",
+  "notes.kind.question": "Ceist",
+  "notes.kind.snippet": "Blúire",
+  "notes.kind.reflection": "Machnamh",
+  "notes.view": "Amharc na nótaí",
+  "notes.write": "Scríobh",
+  "notes.preview": "Réamhamharc",
+  "notes.empty": "Níl aon rud scríofa don chéim seo fós.",
+  "notes.label": "Nóta don chéim seo",
+  "notes.placeholder": "Scríobh nóta príobháideach don chéim seo. Oibríonn markdown.",
+  "notes.saving": "Á shábháil…",
+  "notes.saved": "Sábháilte sa bhrabhsálaí seo",
+  "notes.private": "Príobháideach duit, coinnithe sa bhrabhsálaí seo",
+  "notes.otherSteps": "Céimeanna eile le nótaí",
+  "notes.exportCourse": "Easpórtáil nótaí an chúrsa",
+  "notes.exportLab": "Easpórtáil an tsaotharlann seo",
+  "notes.deleteAll": "Scrios gach nóta don chúrsa seo",
+  "notes.deleteAllConfirm": "Scrios gach nóta a scríobh tú sa chúrsa seo? Ní féidir é seo a chealú.",
+  "notes.deleteAllYes": "Scrios gach ceann",
+  "notes.cancel": "Cealaigh"
 } as const;
 
 export default ga;
