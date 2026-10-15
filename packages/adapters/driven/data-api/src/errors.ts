@@ -15,8 +15,6 @@ const MAX_MESSAGE = 1000;
 export const MAX_REPORT_BYTES = 15 * 1024;
 /** A context larger than this (a stack, a response body) is replaced by a note that it was dropped. */
 const MAX_CONTEXT_BYTES = 2 * 1024;
-/** Entries held between flushes at most. */
-const MAX_BUFFERED = 5 * MAX_ERROR_BATCH;
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
@@ -43,15 +41,6 @@ function entryOf(entry: LogEntry): ErrorReportEntry {
     url: typeof window !== "undefined" ? window.location.href : null,
     courseId: typeof entry.courseId === "string" ? entry.courseId : null
   };
-}
-
-/** The report's JSON, or null when it cannot be serialised (a context with a cycle). */
-function serialise(report: ErrorReport): string | null {
-  try {
-    return JSON.stringify(report);
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -90,8 +79,9 @@ export function dataApiErrorTransport(appName: string, api: DataApi = dataApi): 
 
   const flushOnUnload = () => {
     const report = take();
-    const body = report && serialise(report);
-    if (!body) return;
+    if (!report) return;
+    // Every context was serialised once already (boundedContext), so this cannot throw.
+    const body = JSON.stringify(report);
     const url = `${api.base}/api/errors`;
     // sendBeacon survives page unload where a plain fetch does not; it sends no preflight, so only to the reader's own origin.
     const nav = typeof navigator === "undefined" ? undefined : (navigator as Navigator & { sendBeacon?: (url: string, data: Blob) => boolean });
@@ -109,8 +99,8 @@ export function dataApiErrorTransport(appName: string, api: DataApi = dataApi): 
     if (entry.level !== "warn" && entry.level !== "error") return;
     // A failed report is itself logged (client.ts); reporting that would post forever.
     if (entry.path === "/api/errors") return;
-    // A tab stuck in an error loop keeps the earliest entries rather than growing without bound.
-    if (buffer.length >= MAX_BUFFERED) return;
+    // The buffer stays bounded: twenty entries waiting send a report at once, and what does not fit
+    // under the size limit waits for the next.
     buffer.push(entryOf(entry));
     if (buffer.length >= MAX_ERROR_BATCH) flush();
     else timer ??= setTimeout(flush, FLUSH_INTERVAL_MS);

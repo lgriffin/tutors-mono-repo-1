@@ -118,6 +118,15 @@ describe("loadTime", () => {
     expect(course.labsModel).toBeDefined();
   });
 
+  it("still loads the calendar when the learning records cannot be read, and says why", async () => {
+    scriptedSource([{ calendar: [entry("ann", "2026-01-05", 2)], learningRecords: null as never }]);
+    const course = await new CourseTime().loadTime("cs101", null, null, "CS101");
+    expect(course.data).toHaveLength(1);
+    expect(course.learningRecords).toEqual([]);
+    expect(course.learningRecordsError).toEqual(expect.any(String));
+    expect(course.labsModel).toBeDefined();
+  });
+
   it("needs a course id, and reports a failed read as a failed load", async () => {
     await expect(new CourseTime().loadTime("  ", null, null, "CS101")).rejects.toThrow("Course ID is required");
     scriptedSource([new Error("down")]);

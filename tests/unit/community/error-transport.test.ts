@@ -74,6 +74,37 @@ describe("error transport", () => {
     expect(report.entries[0].context).toEqual({ contextDropped: expect.stringMatching(/bytes$/) });
   });
 
+  it("replaces a context that cannot be serialised with a note", async () => {
+    vi.useFakeTimers();
+    const { send, fetchFn } = transport();
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    send({ ...(entry("error") as object), cycle } as never);
+    await vi.advanceTimersByTimeAsync(5000);
+    const report = JSON.parse(String(fetchFn.mock.calls[0][1]?.body));
+    expect(report.entries[0].context).toEqual({ contextDropped: "not serialisable" });
+  });
+
+  it("survives a report that fails", async () => {
+    vi.useFakeTimers();
+    const { send, fetchFn } = transport();
+    fetchFn.mockRejectedValue(new TypeError("offline"));
+    for (let i = 0; i < 25; i++) send(entry("error", `boom ${i}`));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends nothing on unload with nothing buffered, and survives a fetch that throws", () => {
+    const { send, fetchFn, unload } = transport("https://tutors.dev");
+    unload();
+    expect(fetchFn).not.toHaveBeenCalled();
+    fetchFn.mockImplementation(() => {
+      throw new TypeError("page is unloading");
+    });
+    send(entry("error"));
+    expect(() => unload()).not.toThrow();
+  });
+
   it("does not report its own failed reports, which would post forever", async () => {
     vi.useFakeTimers();
     const { send, fetchFn } = transport();

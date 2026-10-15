@@ -1,22 +1,23 @@
 /**
  * The store-supabase adapters behind the application's ports, run through each port's contract
  * suite over an in-memory PostgREST, so the Supabase adapters and the in-memory ones cannot drift.
- * Beside the contracts: what each adapter does on its own when the database refuses a query.
+ * Beside the contracts: what each adapter does on its own when the database refuses a query. The
+ * playground snapshots are rows the reader's server reads and writes for /api/playground; the browser's
+ * PlaygroundSnapshots runs its contract in playground-snapshots.test.ts.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   accessStoreContract,
-  playgroundSnapshotsContract,
   scormRecordsContract,
   snippetStoreContract,
   type ContractCase
 } from "@tutors/application/testing";
 import {
-  configureSupabase,
   getScormRecord,
+  insertAppErrors,
   StoreError,
   supabaseAccessStore,
-  supabasePlaygroundSnapshots,
+  supabasePlaygroundSnapshotRows,
   supabaseScormRecords,
   supabaseSnippetStore,
   upsertScormRecord,
@@ -34,34 +35,13 @@ function contract(name: string, cases: ContractCase[], diverges: Record<string, 
   });
 }
 
-afterEach(() => configureSupabase(undefined));
-
-/** A token shaped like the one /api/runtime-token signs; nothing here checks the signature. */
-function token(claims: Record<string, unknown>): string {
-  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  return `${encode({ alg: "HS256" })}.${encode(claims)}.signature`;
-}
-
-/** The snapshots adapter as a signed-in student, over `db`. */
-function snapshotsOver(db: ReturnType<typeof fakePostgrest>) {
-  const fetchFn = vi.fn(async () => ({ ok: true, json: async () => ({ token: token({ sub: "ada" }), expiresIn: 3600 }) }) as unknown as Response);
-  return supabasePlaygroundSnapshots({ url: "https://project.supabase.co", key: "anon", fetchFn, clientFor: () => db.client as never });
-}
-
 contract(
   "SnippetStore: Supabase",
   snippetStoreContract(() => supabaseSnippetStore(fakePostgrest().client as never), new Date().toISOString())
 );
 contract(
   "ScormRecords: Supabase",
-  scormRecordsContract(() => {
-    configureSupabase(fakePostgrest().client as never);
-    return supabaseScormRecords();
-  })
-);
-contract(
-  "PlaygroundSnapshots: Supabase",
-  playgroundSnapshotsContract(() => snapshotsOver(fakePostgrest()))
+  scormRecordsContract(() => supabaseScormRecords(fakePostgrest().client as never))
 );
 contract(
   "AccessStore: Supabase with the server's client",
@@ -126,9 +106,8 @@ describe("SCORM records", () => {
 
   it("keeps the summary columns Tutors reports on beside the whole data model", async () => {
     const db = fakePostgrest();
-    configureSupabase(db.client as never);
 
-    await upsertScormRecord(record);
+    await upsertScormRecord(db.client as never, record);
 
     expect(db.rows("scorm_records")[0]).toMatchObject({
       course_id: "cs101",
@@ -144,61 +123,74 @@ describe("SCORM records", () => {
     });
   });
 
-  it("starts from nothing, rather than failing, without Supabase or when the database refuses", async () => {
-    expect(await getScormRecord("cs101", "ada", "/scorm/cs101/quiz")).toEqual({});
-    await upsertScormRecord(record);
-
+  it("starts from nothing, rather than failing, for a missing key or when the database refuses", async () => {
     const db = fakePostgrest();
-    configureSupabase(db.client as never);
+    expect(await getScormRecord(db.client as never, "", "ada", "/scorm/cs101/quiz")).toEqual({});
+    await upsertScormRecord(db.client as never, { ...record, learnerId: "" });
+    expect(db.queries).toEqual([]);
+
     db.failNext("scorm_records", "down", 2);
-    await upsertScormRecord(record);
-    expect(await getScormRecord("cs101", "ada", "/scorm/cs101/quiz")).toEqual({});
+    await upsertScormRecord(db.client as never, record);
+    expect(await getScormRecord(db.client as never, "cs101", "ada", "/scorm/cs101/quiz")).toEqual({});
     expect(log.error).toHaveBeenCalledWith("upsertScormRecord failed:", { message: "down" });
     expect(log.error).toHaveBeenCalledWith("getScormRecord failed:", { message: "down" });
   });
 });
 
-describe("playground snapshots", () => {
-  it("reads one student's snapshot back", async () => {
+describe("playground snapshot rows", () => {
+  const handIn = { studentId: "ada", studentName: "Ada", courseId: "cs101", loId: "lo", runtime: "python", entry: "main.py", files: [{ path: "main.py", content: "print(1)" }], lastOutput: "1", lastOk: true };
+
+  it("lists one exercise's snapshots newest first, every student's or one student's, with the last hand-in winning", async () => {
+    const db = fakePostgrest();
+    const rows = supabasePlaygroundSnapshotRows(db.client as never);
+    await rows.save(handIn);
+    await new Promise((done) => setTimeout(done, 2));
+    await rows.save({ ...handIn, studentId: "bob", studentName: "Bob" });
+    await rows.save({ ...handIn, lastOutput: "2" });
+
+    expect((await rows.list("cs101", "lo", null)).map((row) => [row.studentId, row.lastOutput])).toEqual([
+      ["ada", "2"],
+      ["bob", "1"]
+    ]);
+    expect((await rows.list("cs101", "lo", "bob")).map((row) => row.studentId)).toEqual(["bob"]);
+    expect(await rows.list("cs101", "other", null)).toEqual([]);
+  });
+
+  it("fills a row's missing name, files and output, and removes one student's row", async () => {
     const db = fakePostgrest({
       playground_snapshots: [{ student_id: "ada", student_name: null, course_id: "cs101", lo_id: "lo", runtime: "python", entry: "main.py", files: null, last_output: null, last_ok: false, updated_at: "2026-09-10T09:00:00.000Z" }]
     });
-    expect(await snapshotsOver(db).get("cs101", "lo", "ada")).toEqual({
-      studentId: "ada",
-      studentName: "ada",
-      courseId: "cs101",
-      loId: "lo",
-      runtime: "python",
-      entry: "main.py",
-      files: [],
-      lastOutput: "",
-      lastOk: false,
-      updatedAt: "2026-09-10T09:00:00.000Z"
-    });
+    const rows = supabasePlaygroundSnapshotRows(db.client as never);
+    expect(await rows.list("cs101", "lo", "ada")).toEqual([
+      { studentId: "ada", studentName: "ada", courseId: "cs101", loId: "lo", runtime: "python", entry: "main.py", files: [], lastOutput: "", lastOk: false, updatedAt: "2026-09-10T09:00:00.000Z" }
+    ]);
+    await rows.remove("cs101", "lo", "ada");
+    expect(await rows.list("cs101", "lo", null)).toEqual([]);
   });
 
-  it("answers null for a refused read and logs a refused removal", async () => {
+  it("fails loudly with what it was doing when the database refuses", async () => {
     const db = fakePostgrest();
-    const snapshots = snapshotsOver(db);
-    db.failNext("playground_snapshots", "denied", 2);
-    expect(await snapshots.get("cs101", "lo", "ada")).toBeNull();
-    await snapshots.remove("cs101", "lo", "ada");
-    expect(log.error).toHaveBeenCalledWith("removePlaygroundSnapshot failed:", { message: "denied" });
+    const rows = supabasePlaygroundSnapshotRows(db.client as never);
+    db.failNext("playground_snapshots", "denied", 3);
+    await expect(rows.save(handIn)).rejects.toThrow("playground_snapshots upsert: denied");
+    await expect(rows.list("cs101", "lo", null)).rejects.toThrow("playground_snapshots select: denied");
+    await expect(rows.remove("cs101", "lo", "ada")).rejects.toThrow("playground_snapshots delete: denied");
   });
+});
 
-  it("refuses a hand-in that names no student, and does nothing without a token", async () => {
+describe("insertAppErrors", () => {
+  const row = { app: "reader", level: "error", message: "boom", context: {}, url: null, user_agent: null, course_id: null, student_id: null };
+
+  it("writes a report's rows in one insert, asks nothing for an empty report, and fails loudly when refused", async () => {
     const db = fakePostgrest();
-    expect(await snapshotsOver(db).save({ studentId: "", studentName: "", courseId: "cs101", loId: "lo", runtime: "python", entry: "main.py", files: [], lastOutput: "", lastOk: null })).toBe(false);
-
-    const signedOut = supabasePlaygroundSnapshots({ url: "https://project.supabase.co", key: "anon", fetchFn: (async () => ({ ok: false })) as never });
-    await signedOut.remove("cs101", "lo", "ada");
+    await insertAppErrors(db.client as never, []);
     expect(db.queries).toEqual([]);
-  });
 
-  it("is not a reviewer when the token's claims cannot be read", async () => {
-    const fetchFn = vi.fn(async () => ({ ok: true, json: async () => ({ token: "not-a-jwt", expiresIn: 3600 }) }) as unknown as Response);
-    const snapshots = supabasePlaygroundSnapshots({ url: "https://project.supabase.co", key: "anon", fetchFn, clientFor: () => fakePostgrest().client as never });
-    expect(await snapshots.reviews("cs101")).toBe(false);
+    await insertAppErrors(db.client as never, [row, { ...row, level: "warn" }]);
+    expect(db.rows("app_errors").map((r) => r.level)).toEqual(["error", "warn"]);
+
+    db.failNext("app_errors", "denied");
+    await expect(insertAppErrors(db.client as never, [row])).rejects.toThrow("app_errors insert: denied");
   });
 });
 

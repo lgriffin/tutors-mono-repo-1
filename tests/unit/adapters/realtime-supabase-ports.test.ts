@@ -295,11 +295,19 @@ describe("supabasePresence", () => {
     expect(heard).toEqual(["ann"]);
   });
 
+  /** The data API's stored roster over `rows`: newest first, one course's or every course's, since a time. */
+  const rosterOver = (rows: ReturnType<typeof stored>[]) =>
+    vi.fn(async (courseId: string | undefined, sinceIso: string) =>
+      rows
+        .filter((row) => (!courseId || row.course_id === courseId) && row.received_at >= sinceIso)
+        .sort((x, y) => y.received_at.localeCompare(x.received_at))
+    );
+
   it("reads the stored activity, oldest first, while the day's budget is paused, and reports itself as a watcher every minute", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    const db = fakePostgrest({ "tutors-connect-latest": [stored("ann", 1), stored("bob", 0.5), stored("old", 10), stored("cat", 1, "cs102")] });
-    const client = tab(fakeBroker(), { tier: "paused", db });
-    const presence = supabasePresence(client, () => now, { report: () => {} });
+    const watch = vi.fn(async () => "paused" as const);
+    const roster = rosterOver([stored("ann", 1), stored("bob", 0.5), stored("old", 10), stored("cat", 1, "cs102")]);
+    const presence = supabasePresence(tab(fakeBroker()), () => now, { report: () => {}, roster, watch });
     const heard: string[] = [];
 
     const stop = presence.subscribe((e) => heard.push(e.user!.id), "cs101");
@@ -309,53 +317,55 @@ describe("supabasePresence", () => {
     stop();
     await vi.advanceTimersByTimeAsync(LIVE_WATCH_MS * 3);
 
-    const rpc = (client as unknown as { rpc: ReturnType<typeof vi.fn> }).rpc;
-    expect(rpc).toHaveBeenCalledWith("realtime_watch", { p_topic: "cs101", p_watcher: expect.any(String) });
-    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(watch).toHaveBeenCalledWith(topics.courseActivity("cs101"), expect.any(String));
+    expect(watch).toHaveBeenCalledTimes(2);
+    expect(roster).toHaveBeenCalledWith("cs101", new Date(now.getTime() - LIVE_STORED_WINDOW_MS).toISOString());
     expect(LIVE_STORED_WINDOW_MS).toBe(2 * LIVE_WATCH_MS);
+    vi.useRealTimers();
   });
 
-  it("falls back to the stored activity across every course when the watcher report fails", async () => {
-    const db = fakePostgrest({ "tutors-connect-latest": [stored("ann", 1), stored("cat", 1, "cs102")] });
-    const presence = supabasePresence(tab(fakeBroker(), { rpcError: true, db }), () => now, { report: () => {} });
-    const heard: string[] = [];
-
-    const stop = presence.subscribe((e) => heard.push(e.user!.id));
-    await vi.waitFor(() => expect(heard.sort()).toEqual(["ann", "cat"]));
-    stop();
-    expect(log.warn).toHaveBeenCalledWith("realtime_watch failed:", { message: "no such function" });
+  it("falls back to the stored activity across every course when the watcher report fails, or when nothing reports", async () => {
+    const roster = rosterOver([stored("ann", 1), stored("cat", 1, "cs102")]);
+    for (const watch of [vi.fn(async () => null), undefined]) {
+      const presence = supabasePresence(tab(fakeBroker()), () => now, { report: () => {}, roster, watch });
+      const heard: string[] = [];
+      const stop = presence.subscribe((e) => heard.push(e.user!.id));
+      await vi.waitFor(() => expect(heard.sort()).toEqual(["ann", "cat"]));
+      stop();
+    }
+    expect(roster).toHaveBeenCalledWith(undefined, expect.any(String));
   });
 
   it("does not read the stored activity while the server is publishing, nor after unsubscribing", async () => {
-    const db = fakePostgrest({ "tutors-connect-latest": [stored("ann", 1)] });
-    const live = supabasePresence(tab(fakeBroker(), { tier: "slow", db }), () => now, { report: () => {} });
+    const roster = rosterOver([stored("ann", 1)]);
     const heard: string[] = [];
-    live.subscribe((e) => heard.push(e.user!.id), "cs101")();
+    supabasePresence(tab(fakeBroker()), () => now, { report: () => {}, roster, watch: async () => "slow" }).subscribe((e) => heard.push(e.user!.id), "cs101");
+    const late = supabasePresence(tab(fakeBroker()), () => now, { report: () => {}, roster, watch: async () => "paused" });
+    late.subscribe((e) => heard.push(e.user!.id), "cs101")();
     await new Promise((done) => setTimeout(done, 5));
 
     expect(heard).toEqual([]);
-    expect(db.queries).toEqual([]);
+    expect(roster).not.toHaveBeenCalled();
   });
 
-  it("logs a stored-activity read that fails, for a course or for all of them", async () => {
-    const db = fakePostgrest();
-    const presence = supabasePresence(tab(fakeBroker(), { tier: null, db }), () => now, { report: () => {} });
-    db.failNext("tutors-connect-latest", "timeout", 3);
+  it("answers null when the stored roster cannot be read, or when none is composed", async () => {
+    const roster = vi.fn(async () => null);
+    expect(await supabasePresence(tab(fakeBroker()), () => now, { report: () => {}, roster }).recent("cs101", now.toISOString())).toBeNull();
+    expect(roster).toHaveBeenCalledWith("cs101", now.toISOString());
+    expect(await supabasePresence(tab(fakeBroker()), () => now, { report: () => {} }).recent("cs101", now.toISOString())).toBeNull();
 
-    expect(await presence.recent("cs101", now.toISOString())).toBeNull();
-    const stopAll = presence.subscribe(() => {});
-    const stopCourse = presence.subscribe(() => {}, "cs102");
-    await vi.waitFor(() => expect(log.error).toHaveBeenCalledWith("getTutorsConnectRecentLos failed:", { message: "timeout" }));
-    stopAll();
-    stopCourse();
-    expect(log.error).toHaveBeenCalledWith("getTutorsConnectRecentLosByCourseId failed:", { message: "timeout" });
+    const heard: string[] = [];
+    const stop = supabasePresence(tab(fakeBroker()), () => now, { report: () => {}, roster, watch: async () => "paused" }).subscribe((e) => heard.push(e.user!.id), "cs102");
+    await vi.waitFor(() => expect(roster).toHaveBeenCalledWith("cs102", expect.any(String)));
+    stop();
+    expect(heard).toEqual([]);
   });
 
-  it("lists nobody for a blank course, without asking the database", async () => {
-    const db = fakePostgrest();
-    const presence = supabasePresence(tab(fakeBroker(), { db }), () => now, { report: () => {} });
+  it("lists nobody for a blank course, without reading the roster", async () => {
+    const roster = rosterOver([stored("ann", 1)]);
+    const presence = supabasePresence(tab(fakeBroker()), () => now, { report: () => {}, roster });
     expect(await presence.recent("  ", now.toISOString())).toEqual([]);
-    expect(db.queries).toEqual([]);
+    expect(roster).not.toHaveBeenCalled();
   });
 
   it("stores the learner's snapshot through the composed store, and only for a named course and learner", async () => {
