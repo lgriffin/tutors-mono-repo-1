@@ -42,6 +42,7 @@ The Playwright specs live in `tests/e2e/`. Run them from the root with `pnpm tes
 - `@tutors/identity`, `@tutors/identity-better-auth` provide verified identity contracts and the Better Auth adapter
 - `@tutors/svelte-state/connect`, `@tutors/svelte-state/community`, `@tutors/svelte-state/rbac`, `@tutors/svelte-state` handle sign-in, presence, roles and shared state
 - `@tutors/store-supabase`, `@tutors/realtime-supabase`, `@tutors/profile-localstorage`, `@tutors/bus-inprocess` are the driven adapters behind those ports: the learner record, presence, the browser-only profile and in-process events
+- `@tutors/data-api` is the driven adapter the browser composes for the learner's writes: the typed contract of the reader's own `/api` routes and the ports over it; the routes call the application through `src/lib/server/compose.ts` and write with `@tutors/store-supabase` (the reader hosts the data API for now; see [guides/SERVER-WRITES.md](../../guides/SERVER-WRITES.md))
 - `@tutors/themes`, `@tutors/i18n` provide themes and interface text
 - `@tutors/tutors-create`, `@tutors/tutors-time-lib` support course creation and the time views
 - `@tutors/logger`, `@tutors/metrics`, `@tutors/clock` provide logging, `/metrics`, `/version` and the server clock seam

@@ -13,7 +13,8 @@ import type {
   IdentityClient,
   LearningEventSink,
   PresencePort,
-  ProfilePort
+  ProfilePort,
+  WhiteboardStore
 } from "@tutors/application/ports";
 import {
   InMemoryAccessStore,
@@ -21,6 +22,7 @@ import {
   InMemoryLearningEventSink,
   InMemoryPresence,
   InMemoryProfile,
+  InMemoryWhiteboardStore,
   PassThroughRenderer,
   RecordingPublisher
 } from "@tutors/application/testing";
@@ -38,11 +40,8 @@ export type Adapters = {
   accessStore: AccessStore;
   publisher: EventPublisher;
   identityClient: IdentityClient | null;
-  /**
-   * The whiteboard's own persistence client, until it has a port of its own. Typed as unknown
-   * here so this package names no vendor; the whiteboard component casts it.
-   */
-  whiteboardClient: unknown;
+  /** Where whiteboard scenes are kept: the reader's data API once signed in, memory otherwise. */
+  whiteboard: WhiteboardStore;
 };
 
 const systemClock: Clock = { now: () => new Date(), nowMs: () => Date.now() };
@@ -61,7 +60,7 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     accessStore: new InMemoryAccessStore(systemClock),
     publisher: new RecordingPublisher(),
     identityClient: null,
-    whiteboardClient: undefined,
+    whiteboard: new InMemoryWhiteboardStore(),
     ...overrides
   };
 }

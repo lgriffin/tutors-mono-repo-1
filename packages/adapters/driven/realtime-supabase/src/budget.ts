@@ -29,19 +29,3 @@ export async function watchLiveTopic(client: SupabaseClient, topic: string, watc
   const tier = (data as { tier?: string } | null)?.tier;
   return tier === "normal" || tier === "slow" || tier === "paused" ? tier : null;
 }
-
-/**
- * Asks the database which Realtime topics a course's learning event may be published to, and charges
- * them to the day's Live budget. Called by the reader's server only.
- * @returns the tier and topics, or null when the claim failed (the caller publishes nothing)
- */
-export async function claimLivePublish(client: SupabaseClient, courseId: string): Promise<{ tier: LiveBudgetTier; topics: string[] } | null> {
-  const { data, error } = await client.rpc("realtime_claim_live_publish", { p_course_id: courseId });
-  if (error) {
-    log.warn("realtime_claim_live_publish failed:", error);
-    return null;
-  }
-  const claim = data as { tier?: LiveBudgetTier; topics?: unknown } | null;
-  if (!claim?.tier || !Array.isArray(claim.topics)) return null;
-  return { tier: claim.tier, topics: claim.topics.filter((topic): topic is string => typeof topic === "string") };
-}

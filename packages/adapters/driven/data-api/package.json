@@ -1,0 +1,15 @@
+{
+  "name": "@tutors/data-api",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "The reader's data API as a driven adapter: the typed contract of the /api routes, the one client browsers call them with, and the application ports (learning events, profile, locks, whiteboard, presence snapshots) over it",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tutors/application": "workspace:*",
+    "@tutors/domain": "workspace:*",
+    "@tutors/logger": "workspace:*"
+  }
+}

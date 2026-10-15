@@ -302,6 +302,12 @@ importers:
       '@tutors/course-http':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/course-http
+      '@tutors/data-api':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driven/data-api
+      '@tutors/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@tutors/profile-localstorage':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/profile-localstorage
@@ -547,6 +553,21 @@ importers:
       '@tutors/application':
         specifier: workspace:*
         version: link:../../../application
+      '@tutors/domain':
+        specifier: workspace:*
+        version: link:../../../domain
+      '@tutors/logger':
+        specifier: workspace:*
+        version: link:../../../platform/logger
+
+  packages/adapters/driven/data-api:
+    dependencies:
+      '@tutors/application':
+        specifier: workspace:*
+        version: link:../../../application
+      '@tutors/domain':
+        specifier: workspace:*
+        version: link:../../../domain
       '@tutors/logger':
         specifier: workspace:*
         version: link:../../../platform/logger

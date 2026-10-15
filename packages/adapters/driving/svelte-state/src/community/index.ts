@@ -7,6 +7,7 @@
 export { liveService } from "./services/live.svelte.ts";
 export { presenceService } from "./services/presence.svelte.ts";
 export { analyticsService } from "./services/analytics.svelte.ts";
+export { whiteboardService } from "./services/whiteboard.svelte.ts";
 
 // Type exports
 export type { LoUser, LoEvent, TutorsConnectLatestRow } from "./types.svelte.ts";

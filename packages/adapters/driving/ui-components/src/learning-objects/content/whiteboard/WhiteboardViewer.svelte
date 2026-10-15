@@ -3,20 +3,11 @@
   import * as env from "$app/env/public";
   import type { Whiteboard } from "@tutors/tutors-model-lib";
   import { tutorsId } from "@tutors/svelte-state";
-  import { adapters } from "@tutors/svelte-state/adapters";
+  import { whiteboardService } from "@tutors/svelte-state/community";
+  import { whiteboardRoomId } from "@tutors/domain/course";
   import log from "@tutors/logger";
   import Icon from "@tutors/ui-primitives/components/Icon.svelte";
   import { themeService } from "@tutors/themes";
-
-  // Whiteboard scenes are read and saved straight through the composed Supabase client: a known
-  // violation (tests/architecture/known-violations.txt) until a whiteboard port exists.
-  type SceneStore = {
-    from(table: string): {
-      select(columns: string): { eq(column: string, value: string): { single(): Promise<{ data: any }> } };
-      upsert(row: Record<string, unknown>, options?: Record<string, unknown>): Promise<{ error: unknown }>;
-    };
-  };
-  const supabase = adapters().whiteboardClient as SceneStore | undefined;
 
   interface Props {
     lo: Whiteboard;
@@ -28,11 +19,14 @@
   let error = $state("");
   let isFullscreen = $state(false);
   let isEditing = $state(false);
-  let isShared = $state(false);
+  // Whose board is being edited: the learner's own copy (saved under their session, with no Realtime
+  // room) or the course's shared board (one Realtime room per learning object). The state is the
+  // whiteboard service's, with the saving that goes with it.
+  const isShared = $derived(whiteboardService.shared.value);
+  const saveStatus = $derived(whiteboardService.saveStatus.value);
   // Raw, not a deep $state proxy: the scene is posted to the iframe, and a proxy cannot be structured-cloned
   // (postMessage throws DataCloneError and the whiteboard never leaves "Loading"). It is only ever replaced whole.
   let cachedScene: any = $state.raw(null);
-  let saveStatus = $state("");
   const anonymousId = `anon-${Math.random().toString(36).slice(2, 8)}`;
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -40,51 +34,23 @@
     return tutorsId.value?.login || anonymousId;
   }
 
+  function courseId(): string {
+    return lo.parentCourse?.courseId || "unknown";
+  }
+
+  /** The shared board's Realtime room, or the personal room's name (which opens no channel). */
   function getWhiteboardRoomId(): string {
-    const courseId = lo.parentCourse?.courseId || "unknown";
-    const route = lo.route.replace(/[^a-zA-Z0-9-]/g, "-");
-    if (isShared) {
-      return `wb-${courseId}-${route}`;
-    }
-    return `wb-${courseId}-${route}-${getUserId()}`;
+    return whiteboardRoomId(courseId(), lo.route, isShared ? null : getUserId());
   }
 
-  async function loadSceneFromDb(roomId: string): Promise<any | null> {
-    if (!supabase) return null;
-    try {
-      const { data } = await supabase
-        .from("whiteboard_scenes")
-        .select("elements, app_state, files")
-        .eq("room_id", roomId)
-        .single();
-      if (data) {
-        return { elements: data.elements, appState: data.app_state, files: data.files };
-      }
-    } catch {
-      // fall through to static file
-    }
-    return null;
-  }
-
-  function saveSceneToDb(roomId: string, elements: any[]) {
-    if (!supabase) { saveStatus = "Edits are not saved in this session."; return; }
+  function saveSceneToDb(elements: any[]) {
     if (saveTimer) clearTimeout(saveTimer);
-    saveStatus = "Saving…";
-    saveTimer = setTimeout(async () => {
-      try {
-        const { error: saveError } = await supabase.from("whiteboard_scenes").upsert({
-          room_id: roomId,
-          elements,
-          app_state: { viewBackgroundColor: "#ffffff" },
-          files: {},
-          updated_at: new Date().toISOString(),
-        });
-        if (saveError) throw saveError;
-        saveStatus = "Drawing changes saved";
-      } catch {
-        saveStatus = "Changes could not be saved. Keep this whiteboard open and export your work.";
-      }
-    }, 2000);
+    if (!whiteboardService.canSave()) {
+      void whiteboardService.saveScene(courseId(), lo.route, elements);
+      return;
+    }
+    whiteboardService.saveStatus.value = "Saving…";
+    saveTimer = setTimeout(() => void whiteboardService.saveScene(courseId(), lo.route, elements), 2000);
   }
 
   // Excalidraw follows the reader's appearance: sent with the scene and the editor setup, and again on change.
@@ -135,11 +101,12 @@
       postViewerScene();
     } else if (type === "editor-ready" && isEditing) {
       const roomId = getWhiteboardRoomId();
-      const savedScene = await loadSceneFromDb(roomId);
+      const savedScene = await whiteboardService.loadScene(courseId(), lo.route);
+      // Only the shared board collaborates over Realtime; a personal room gets no client at all.
       iframe?.contentWindow?.postMessage({
         type: "init-editor",
-        supabaseUrl: env.PUBLIC_SUPABASE_URL,
-        supabaseAnonKey: env.PUBLIC_SUPABASE_ANON_KEY,
+        supabaseUrl: isShared ? env.PUBLIC_SUPABASE_URL : undefined,
+        supabaseAnonKey: isShared ? env.PUBLIC_SUPABASE_ANON_KEY : undefined,
         roomId,
         user: {
           name: tutorsId.value?.name || "Anonymous",
@@ -151,7 +118,7 @@
       }, window.location.origin);
       loading = false;
     } else if (type === "scene-changed" && isEditing) {
-      saveSceneToDb(getWhiteboardRoomId(), event.data.elements);
+      saveSceneToDb(event.data.elements);
     }
   }
 
@@ -159,13 +126,13 @@
     if (editing === isEditing) return;
     isEditing = editing;
     viewerReady = false;
-    saveStatus = "";
+    whiteboardService.saveStatus.value = "";
     loading = true;
   }
 
   function setShared(shared: boolean) {
     if (shared === isShared) return;
-    isShared = shared;
+    whiteboardService.setShared(shared);
     if (isEditing) loading = true;
   }
 
@@ -208,7 +175,7 @@
       {/if}
       <button class="ui-button fullscreen" aria-pressed={isFullscreen} onclick={toggleFullscreen}><Icon icon={isFullscreen ? "lucide:minimize-2" : "lucide:maximize-2"} height="16" />{isFullscreen ? "Exit fullscreen" : "Fullscreen"}</button>
     </div>
-    {#if isEditing}<p class="whiteboard-status ui-muted" role="status">{saveStatus || (!supabase ? "Edits are not saved in this session." : "Use the whiteboard export menu to keep a copy of your work.")}</p>{/if}
+    {#if isEditing}<p class="whiteboard-status ui-muted" role="status">{saveStatus || whiteboardService.idleStatus()}</p>{/if}
     <div class="whiteboard-canvas" class:editing={isEditing}>
       {#if loading}<p class="whiteboard-loading ui-muted" role="status">Loading whiteboard…</p>{/if}
       {#if cachedScene}

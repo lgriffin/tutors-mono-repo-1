@@ -1,4 +1,4 @@
-import type { CalendarEntry, LearningRecord, TutorsConnectUser } from "@tutors/domain/learning";
+import type { CalendarEntry, LearningRecord, TutorsConnectUser, TutorsTimeRows } from "@tutors/domain/learning";
 
 /** Reads what was recorded about a course's learners, for Tutors Time and the educator views. */
 export interface LearningRecords {
@@ -8,4 +8,6 @@ export interface LearningRecords {
   learningRecords(courseId: string, learnerId?: string): Promise<LearningRecord[]>;
   /** The learners with any record in the course. */
   learners(courseId: string): Promise<TutorsConnectUser[]>;
+  /** Everything Tutors Time shows about a course in one answer, as an educator sees it. */
+  timeRows(courseId: string, start?: string | null, end?: string | null): Promise<TutorsTimeRows>;
 }

@@ -41,13 +41,14 @@ const course = { courseId: "web-dev", courseUrl: "web-dev.netlify.app", title: "
 const lo = { title: "Lab 1", route: "/lab/web-dev/lab-1", img: "lab-1.png", type: "lab" } as unknown as Lo;
 const student = { login: "alice", name: "Alice", image: "alice.png", share: "true" } as never;
 
-/** A Supabase client that records upserts and hands out the two channels; the watcher report answers "normal". */
+/** A Supabase client that hands out the two channels; the watcher report answers "normal". */
 const client = {
   channel: mockChannel,
   removeChannel: vi.fn().mockResolvedValue("ok"),
-  rpc: vi.fn().mockResolvedValue({ data: { tier: "normal" }, error: null }),
-  from: () => ({ upsert: mockUpsert })
+  rpc: vi.fn().mockResolvedValue({ data: { tier: "normal" }, error: null })
 } as never;
+/** What the reader composes as the snapshot store: the data API's POST /api/presence (never a table write from the browser). */
+const store = (event: unknown) => mockUpsert(event) as Promise<void>;
 
 async function sendAndSettle() {
   presenceService.sendLoEvent(course, lo, student);
@@ -61,7 +62,7 @@ describe("presence over Supabase: a learning event goes to the reader's server, 
     // An anonymous id is minted from localStorage even for a student who shares their name.
     vi.stubGlobal("window", { localStorage: { tutorsTimeId: "anon-1" } });
     vi.stubGlobal("fetch", mockFetch);
-    configureAdapters({ ...anonymousAdapters(), anonymous: false, presence: supabasePresence(client) });
+    configureAdapters({ ...anonymousAdapters(), anonymous: false, presence: supabasePresence(client, undefined, { store }) });
     presenceService.stopPresenceListener();
     // A Live course channel open in this tab: the event must not be sent on it either.
     await presenceService.startPresenceListener("web-dev");
@@ -83,7 +84,7 @@ describe("presence over Supabase: a learning event goes to the reader's server, 
     expect(url).toBe(LIVE_ACTIVITY_ROUTE);
     expect(init).toMatchObject({ method: "POST", keepalive: true, headers: { "content-type": "application/json" } });
     expect(JSON.parse(String(init.body))).toMatchObject({ courseId: "web-dev", title: "Lab 1", user: { id: "alice" } });
-    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ courseId: "web-dev", title: "Lab 1" }) }), expect.anything());
+    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({ courseId: "web-dev", title: "Lab 1" }));
     expect(allChannel.httpSend).not.toHaveBeenCalled();
     expect(courseChannel.httpSend).not.toHaveBeenCalled();
     expect(courseChannel.send).not.toHaveBeenCalled();
@@ -96,7 +97,7 @@ describe("presence over Supabase: a learning event goes to the reader's server, 
     await sendAndSettle();
 
     expect(log.warn).toHaveBeenCalledWith("Reporting live activity failed:", expect.any(TypeError));
-    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ courseId: "web-dev", title: "Lab 1" }) }), expect.anything());
+    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({ courseId: "web-dev", title: "Lab 1" }));
   });
 
   it("logs a fetch that throws synchronously and still upserts", async () => {
@@ -107,6 +108,6 @@ describe("presence over Supabase: a learning event goes to the reader's server, 
     await sendAndSettle();
 
     expect(log.warn).toHaveBeenCalledWith("Reporting live activity failed:", expect.any(TypeError));
-    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ courseId: "web-dev", title: "Lab 1" }) }), expect.anything());
+    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({ courseId: "web-dev", title: "Lab 1" }));
   });
 });

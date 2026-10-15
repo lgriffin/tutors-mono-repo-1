@@ -45,5 +45,7 @@ export {
 export { BaseCalendarModel, BaseLabModel } from "@tutors/domain/learning";
 
 export { getSupabase, initSupabase } from "./services/supabase.ts";
+export { readerTimeSource, supabaseTimeSource, setTutorsTimeSource, getTutorsTimeSource, TutorsTimeSourceError, withoutTrailingSlashes } from "./services/source.ts";
+export type { TutorsTimeSource, TutorsTimeRows } from "./services/source.ts";
 export { CourseTime } from "./services/course-time.ts";
 export { TutorsTime } from "./services/tutors-time.ts";

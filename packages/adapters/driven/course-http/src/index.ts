@@ -42,3 +42,5 @@ export function httpCourseSource(fetchFn: FetchLike = (url) => globalThis.fetch(
     }
   };
 }
+
+export { httpCourseFacts, courseJsonUrl, redirectTarget, type HttpCourseFactsOptions } from "./course-facts.ts";

@@ -167,6 +167,17 @@ module.exports = {
       to: { path: "(\\.server\\.[jt]s$|/server/|\\$env/(static|dynamic)/private|\\$app/env/private|(^|/)(?:better-auth/(?:dist/)?(?:auth/|api/|cookies/|integrations/|index\\.)))", reachable: true }
     },
     {
+      name: "no-database-client-in-browser-code",
+      comment:
+        "An app's browser code reaches data through the ports (the reader's data API behind them, guides/SERVER-WRITES.md) and the store adapter's public reads, never through the database client itself, so the database can change without touching browser code. Server-only files (lib/server/, hooks.server.ts, +server.ts, +page.server.ts, +layout.server.ts) and type-only imports are exempt.",
+      severity: "error",
+      from: {
+        path: "^apps/[^/]+/src/",
+        pathNot: "^apps/[^/]+/src/(lib/server/|hooks\\.server\\.ts$)|^apps/[^/]+/src/routes/.*\\+(server|page\\.server|layout\\.server)\\.ts$|\\.server\\.ts$"
+      },
+      to: { path: "(^|/)@supabase/", dependencyTypesNot: ["type-only"] }
+    },
+    {
       name: "no-app-to-app",
       comment: "Apps are deployed separately; share code through a package instead of importing another app.",
       severity: "error",

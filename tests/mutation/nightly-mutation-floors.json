@@ -16,9 +16,9 @@
     "packages/jsr/gen/src/utils/file-utils.ts": 40,
     "packages/jsr/gen/src/utils/llms.ts": 52,
     "packages/adapters/driven/render-markdown/src/markdown-plugins.ts": 55,
-    "packages/jsr/time/src/services/course-time.ts": 26,
+    "packages/jsr/time/src/services/course-time.ts": 73,
     "packages/jsr/time/src/services/supabase.ts": 0,
-    "packages/jsr/time/src/services/tutors-time.ts": 0,
+    "packages/jsr/time/src/services/tutors-time.ts": 15,
     "packages/adapters/driving/svelte-state/src/community/services/live.svelte.ts": 49,
     "packages/adapters/driving/svelte-state/src/community/services/presence.svelte.ts": 94,
     "packages/adapters/driven/store-supabase/src/error-transport.ts": 0,
@@ -94,6 +94,8 @@
     "packages/platform/metrics/src/metrics.ts": 40,
     "packages/platform/metrics/src/middleware.ts": 76,
     "packages/adapters/driven/clock/src/clock.ts": 86,
-    "packages/platform/logger/src/index.ts": 100
+    "packages/platform/logger/src/index.ts": 100,
+    "packages/jsr/time/src/services/source.ts": 82,
+    "packages/adapters/driven/data-api/src/client.ts": 69
   }
 }

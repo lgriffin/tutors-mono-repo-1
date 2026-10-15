@@ -10,3 +10,4 @@ export * from "./utils/course-utils.ts";
 export * from "./services/lo-tree.ts";
 export * from "./services/search.ts";
 export * from "./utils/lo-utils.ts";
+export * from "./whiteboard-room.ts";
