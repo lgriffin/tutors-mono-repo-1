@@ -11,5 +11,5 @@ export {
   readerApiPresenceRoster,
   readerApiLiveWatch
 } from "./adapters.ts";
-export { dataApiErrorTransport, MAX_ERROR_BATCH } from "./errors.ts";
+export { dataApiErrorTransport, MAX_ERROR_BATCH, MAX_REPORT_BYTES } from "./errors.ts";
 export type * from "./contract.ts";

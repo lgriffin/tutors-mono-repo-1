@@ -11,13 +11,35 @@ const FLUSH_INTERVAL_MS = 5000;
 /** The most entries one report carries; the route refuses more. */
 export const MAX_ERROR_BATCH = 20;
 const MAX_MESSAGE = 1000;
+/** The route refuses a report over 16 KB; a report is packed to stay under this, with room for the envelope. */
+export const MAX_REPORT_BYTES = 15 * 1024;
+/** A context larger than this (a stack, a response body) is replaced by a note that it was dropped. */
+const MAX_CONTEXT_BYTES = 2 * 1024;
+/** Entries held between flushes at most. */
+const MAX_BUFFERED = 5 * MAX_ERROR_BATCH;
+
+const bytes = (text: string) => new TextEncoder().encode(text).length;
+
+/** The context as given, or a note when it is too large to report or cannot be serialised. */
+function boundedContext(rest: Record<string, unknown>): Record<string, unknown> {
+  if (Object.keys(rest).length === 0) return {};
+  try {
+    const size = bytes(JSON.stringify(rest));
+    return size <= MAX_CONTEXT_BYTES ? rest : { contextDropped: `${size} bytes` };
+  } catch {
+    return { contextDropped: "not serialisable" };
+  }
+}
 
 function entryOf(entry: LogEntry): ErrorReportEntry {
   const { timestamp: _timestamp, level, message, app: _app, studentId: _studentId, ...rest } = entry;
   return {
     level: level === "warn" ? "warn" : "error",
-    message: String(message).slice(0, MAX_MESSAGE),
-    context: Object.keys(rest).length > 0 ? rest : {},
+    // One line: the route refuses control characters, and a multi-line message would cost the whole batch.
+    message: String(message)
+      .replace(/\p{Cc}+/gu, " ")
+      .slice(0, MAX_MESSAGE),
+    context: boundedContext(rest),
     url: typeof window !== "undefined" ? window.location.href : null,
     courseId: typeof entry.courseId === "string" ? entry.courseId : null
   };
@@ -47,15 +69,24 @@ export function dataApiErrorTransport(appName: string, api: DataApi = dataApi): 
       timer = null;
     }
     if (buffer.length === 0) return null;
-    const entries = buffer.slice(0, MAX_ERROR_BATCH);
-    buffer = [];
+    // As many entries as fit in one report the route accepts; the rest wait for the next flush.
+    const entries: ErrorReportEntry[] = [];
+    let size = bytes(JSON.stringify({ app: appName, entries: [] }));
+    for (const entry of buffer) {
+      const entrySize = bytes(JSON.stringify(entry)) + 1;
+      if (entries.length === MAX_ERROR_BATCH || (entries.length > 0 && size + entrySize > MAX_REPORT_BYTES)) break;
+      entries.push(entry);
+      size += entrySize;
+    }
+    buffer = buffer.slice(entries.length);
+    if (buffer.length > 0) timer = setTimeout(flush, FLUSH_INTERVAL_MS);
     return { app: appName, entries };
   };
 
-  const flush = () => {
+  function flush() {
     const report = take();
     if (report) void api.reportErrors(report).catch(() => undefined);
-  };
+  }
 
   const flushOnUnload = () => {
     const report = take();
@@ -78,6 +109,8 @@ export function dataApiErrorTransport(appName: string, api: DataApi = dataApi): 
     if (entry.level !== "warn" && entry.level !== "error") return;
     // A failed report is itself logged (client.ts); reporting that would post forever.
     if (entry.path === "/api/errors") return;
+    // A tab stuck in an error loop keeps the earliest entries rather than growing without bound.
+    if (buffer.length >= MAX_BUFFERED) return;
     buffer.push(entryOf(entry));
     if (buffer.length >= MAX_ERROR_BATCH) flush();
     else timer ??= setTimeout(flush, FLUSH_INTERVAL_MS);

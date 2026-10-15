@@ -2,7 +2,9 @@ import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
 
 // The seams: Supabase (by the path product code resolves, and by name for a hoisted install), the environments and SvelteKit.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
+vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
+  createClient: (await import("../../support/supabase-recorder.ts")).createClient
+}));
 vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
 vi.mock("$app/env/public", async () => {
   const { publicEnv } = await import("../../support/supabase-recorder.ts");
@@ -39,7 +41,8 @@ function personalRoom(course: Course, lo: Lo, login: string): string {
 }
 
 /** The catalogue page's data, loaded as the catalogue app loads it: from the reader at PUBLIC_READER_URL. */
-const openCatalogue = () => loadCataloguePage({ fetch: globalThis.fetch } as Parameters<typeof loadCataloguePage>[0]) as Promise<{ courseRecords: unknown[]; studentCount: number }>;
+const openCatalogue = () =>
+  loadCataloguePage({ fetch: globalThis.fetch } as Parameters<typeof loadCataloguePage>[0]) as Promise<{ courseRecords: unknown[]; studentCount: number }>;
 
 const SERVICE_KEY = privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY;
 const CONTRACT_STEP = "supabase/contracts/revoke_anon_student_data.sql";
@@ -86,7 +89,14 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
       ]);
       recorder.seed("calendar", [{ id: "2026-09-21", studentid: login, courseid: courseId, timeactive: 10, pageloads: 3 }]);
       recorder.seed("tutors-connect-users", [
-        { github_id: login, full_name: capitalised(login), avatar_url: `https://avatars.example/${login}.png`, email: `${login}@example.com`, sentiment: "fine", online_status: "online" }
+        {
+          github_id: login,
+          full_name: capitalised(login),
+          avatar_url: `https://avatars.example/${login}.png`,
+          email: `${login}@example.com`,
+          sentiment: "fine",
+          online_status: "online"
+        }
       ]);
     }
   }
@@ -100,7 +110,9 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
 
   const saveDrawing = async (who: string | null, courseId: string) => {
     expectCourse(courseId);
-    await answer(await readerRequest("PUT", "/api/whiteboard", { courseId, route: firstLab().route, shared: false, elements: [{ id: `${who ?? "anonymous"}-rect`, type: "rectangle" }] }));
+    await answer(
+      await readerRequest("PUT", "/api/whiteboard", { courseId, route: firstLab().route, shared: false, elements: [{ id: `${who ?? "anonymous"}-rect`, type: "rectangle" }] })
+    );
   };
 
   const askToLock = async (_ctx: unknown, courseId: string) => {
@@ -195,13 +207,22 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
           await postPageLoad(ctx, courseId, named);
           expect(response.status).toBe(204);
         });
-        And("the browser sets the sentiment {string} and the online status {string} naming the student {string}", async (_ctx, sentiment: string, onlineStatus: string, named: string) => {
-          await answer(await readerRequest("PATCH", "/api/me", { sentiment, onlineStatus, githubId: named }));
-          expect(response.status).toBe(204);
-        });
+        And(
+          "the browser sets the sentiment {string} and the online status {string} naming the student {string}",
+          async (_ctx, sentiment: string, onlineStatus: string, named: string) => {
+            await answer(await readerRequest("PATCH", "/api/me", { sentiment, onlineStatus, githubId: named }));
+            expect(response.status).toBe(204);
+          }
+        );
         And("the browser shares presence on the first lab of {string} naming the student {string}", async (_ctx, courseId: string, named: string) => {
           expectCourse(courseId);
-          const payload = { courseId, loRoute: firstLab().route, title: firstLab().title, type: "lab", user: { id: named, fullName: capitalised(named), avatar: `https://avatars.example/${named}.png`, sentiment: "neutral" } };
+          const payload = {
+            courseId,
+            loRoute: firstLab().route,
+            title: firstLab().title,
+            type: "lab",
+            user: { id: named, fullName: capitalised(named), avatar: `https://avatars.example/${named}.png`, sentiment: "neutral" }
+          };
           await answer(await readerRequest("POST", "/api/presence", { courseId, payload }));
           expect(response.status).toBe(204);
         });
@@ -350,33 +371,36 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     }
   );
 
-  Rule("When a viewer who is not an educator of a course asks for its time data again, the reader shall give the other students pseudonyms that differ from the ones it gave before.", ({ RuleScenario }) => {
-    RuleScenario("Pseudonyms do not link one answer to the next", ({ Given, When, Then, And }) => {
-      const answers: TimeData[] = [];
-      const others = (data: TimeData) => new Set([...idsIn(data)].filter((id) => id !== tutorsId.value?.login));
-      Given("{string}, {string} and {string} have learning records and calendar rows in {string}", seedThree);
-      And("{string} is signed in to the reader", signedIn);
-      When("the browser asks the reader for the time data of {string} twice", async (_ctx, courseId: string) => {
-        for (let i = 0; i < 2; i++) {
-          await askTimeData(_ctx, courseId);
-          expect(response.status).toBe(200);
-          answers.push(timeData());
-        }
+  Rule(
+    "When a viewer who is not an educator of a course asks for its time data again, the reader shall give the other students pseudonyms that differ from the ones it gave before.",
+    ({ RuleScenario }) => {
+      RuleScenario("Pseudonyms do not link one answer to the next", ({ Given, When, Then, And }) => {
+        const answers: TimeData[] = [];
+        const others = (data: TimeData) => new Set([...idsIn(data)].filter((id) => id !== tutorsId.value?.login));
+        Given("{string}, {string} and {string} have learning records and calendar rows in {string}", seedThree);
+        And("{string} is signed in to the reader", signedIn);
+        When("the browser asks the reader for the time data of {string} twice", async (_ctx, courseId: string) => {
+          for (let i = 0; i < 2; i++) {
+            await askTimeData(_ctx, courseId);
+            expect(response.status).toBe(200);
+            answers.push(timeData());
+          }
+        });
+        Then("each answer gives every other student one pseudonym across its calendar and learning records", () => {
+          for (const data of answers) {
+            const inCalendar = new Set(data.calendar.map((r) => r.studentid).filter((id) => id !== tutorsId.value?.login));
+            const inRecords = new Set(data.learningRecords.map((r) => r.student_id).filter((id) => id !== tutorsId.value?.login));
+            expect([...inCalendar].sort()).toEqual([...inRecords].sort());
+            expect(inCalendar.size).toBe(2);
+          }
+        });
+        And("no pseudonym in the second answer appears in the first", () => {
+          const first = others(answers[0]);
+          for (const pseudonym of others(answers[1])) expect(first.has(pseudonym)).toBe(false);
+        });
       });
-      Then("each answer gives every other student one pseudonym across its calendar and learning records", () => {
-        for (const data of answers) {
-          const inCalendar = new Set(data.calendar.map((r) => r.studentid).filter((id) => id !== tutorsId.value?.login));
-          const inRecords = new Set(data.learningRecords.map((r) => r.student_id).filter((id) => id !== tutorsId.value?.login));
-          expect([...inCalendar].sort()).toEqual([...inRecords].sort());
-          expect(inCalendar.size).toBe(2);
-        }
-      });
-      And("no pseudonym in the second answer appears in the first", () => {
-        const first = others(answers[0]);
-        for (const pseudonym of others(answers[1])) expect(first.has(pseudonym)).toBe(false);
-      });
-    });
-  });
+    }
+  );
 
   Rule(
     "When a viewer opens a course in the time dashboard, the time dashboard shall load the course's time data from the reader's API with the viewer's reader session instead of from the database.",
@@ -390,7 +414,9 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
           timeCourse = data.course;
         });
         Then("the time dashboard asked the reader for {string} with the viewer's reader session", (_ctx, path: string) => {
-          expect(apiRequests.filter((r) => r.url === path)).toMatchObject([{ method: "GET", credentials: "include", origin: "https://time.test", sessionLogin: "eve", status: 200 }]);
+          expect(apiRequests.filter((r) => r.url === path)).toMatchObject([
+            { method: "GET", credentials: "include", origin: "https://time.test", sessionLogin: "eve", status: 200 }
+          ]);
         });
         And("the time dashboard's calendar lists {string} and {string}", (_ctx, a: string, b: string) => {
           expect(timeCourse?.calendarModel.week.rows.map((r) => r.full_name).sort()).toEqual([a, b]);
@@ -414,12 +440,15 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
         And("{string} has saved a drawing on the whiteboard of the first lab of {string}", savesDrawing);
         When("{string} is signed in to the reader", signedIn);
         And("{string} saves a drawing on the whiteboard of the first lab of {string}", savesDrawing);
-        Then("the whiteboard of the first lab holds the drawing of {string} for {string} and the drawing of {string} for {string}", (_ctx, a: string, aLogin: string, b: string, bLogin: string) => {
-          const scenes = recorder.rows("whiteboard_scenes");
-          expect(scenes.find((s) => s.room_id === personalRoom(course, firstLab(), aLogin))?.elements).toEqual([{ id: `${a}-rect`, type: "rectangle" }]);
-          expect(scenes.find((s) => s.room_id === personalRoom(course, firstLab(), bLogin))?.elements).toEqual([{ id: `${b}-rect`, type: "rectangle" }]);
-          expect(scenes).toHaveLength(2);
-        });
+        Then(
+          "the whiteboard of the first lab holds the drawing of {string} for {string} and the drawing of {string} for {string}",
+          (_ctx, a: string, aLogin: string, b: string, bLogin: string) => {
+            const scenes = recorder.rows("whiteboard_scenes");
+            expect(scenes.find((s) => s.room_id === personalRoom(course, firstLab(), aLogin))?.elements).toEqual([{ id: `${a}-rect`, type: "rectangle" }]);
+            expect(scenes.find((s) => s.room_id === personalRoom(course, firstLab(), bLogin))?.elements).toEqual([{ id: `${b}-rect`, type: "rectangle" }]);
+            expect(scenes).toHaveLength(2);
+          }
+        );
         And("the reader gives {string} back only the drawing of {string}", async (_ctx, _viewer: string, owner: string) => {
           const query = new URLSearchParams({ courseId: course.courseId, route: firstLab().route, shared: "false" });
           await answer(await readerRequest("GET", `/api/whiteboard?${query}`));
@@ -471,7 +500,10 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     RuleScenario("The student count comes from a count, not from the profiles", ({ Given, When, Then, And }) => {
       let shown = 0;
       Given("{number} students have course-visit profiles", (_ctx, count: number) => {
-        recorder.seed("tutors-connect-profiles", Array.from({ length: count }, (_, i) => ({ tutorId: `student${i}`, profile: [] })));
+        recorder.seed(
+          "tutors-connect-profiles",
+          Array.from({ length: count }, (_, i) => ({ tutorId: `student${i}`, profile: [] }))
+        );
       });
       When("a visitor opens the catalogue", async () => {
         shown = (await openCatalogue()).studentCount;
@@ -533,6 +565,8 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
           expect(sql).toMatch(/FROM pg_proc p JOIN pg_namespace n ON n\.oid = p\.pronamespace\s+WHERE n\.nspname = 'public' AND p\.prokind = 'f'/);
           expect(sql).toContain("REVOKE EXECUTE ON FUNCTION %s FROM %I");
           expect(sql).toContain("REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC");
+          // Functions created later too: PUBLIC's EXECUTE is a global default, revoked globally.
+          expect(sql).toMatch(/ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;/);
         });
         And("it names nothing in the realtime schema", () => {
           expect(sql).not.toMatch(/\brealtime\s*\./i);

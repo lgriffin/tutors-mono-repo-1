@@ -8,7 +8,8 @@ import * as check from "#lib/server/api/validate.ts";
 /**
  * The error log's one way in (Rule 0472): every app's browser posts its warnings and errors here and
  * the server writes them with its service key. Anyone may report, as the anon key it replaces allowed,
- * so the body is bounded (16 KB, 20 entries) and each address may post 30 reports a minute. The
+ * so the body is bounded (16 KB, 20 entries) and each address may post 30 reports a minute to each
+ * reader process (a coarse guard against floods, not a quota: replicas do not share the count). The
  * student is the session's, never the body's; other origins only from PRIVATE_API_ALLOWED_ORIGINS.
  */
 
@@ -68,7 +69,8 @@ export const POST: RequestHandler = async ({ request, url, locals, getClientAddr
   for (const raw of body.entries as unknown[]) {
     const entry = contextOf(raw);
     const level = entry.level === "warn" || entry.level === "error" ? entry.level : null;
-    const message = check.text(entry.message, 1000);
+    // A multi-line message (a stack, a wrapped error) is kept on one line rather than refused.
+    const message = check.text(typeof entry.message === "string" ? entry.message.replace(/\p{Cc}+/gu, " ") : entry.message, 1000);
     if (!level || !message) return answer(400, { message: "each entry has a level (warn or error) and a message" }, cors);
     rows.push({
       app,

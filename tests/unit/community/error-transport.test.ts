@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createDataApi, dataApiErrorTransport } from "../../../packages/adapters/driven/data-api/src/index.ts";
+import { createDataApi, dataApiErrorTransport, MAX_REPORT_BYTES } from "../../../packages/adapters/driven/data-api/src/index.ts";
 
 // Warnings and errors go to the reader's POST /api/errors, never to a table (Rule 0472).
 describe("error transport", () => {
@@ -42,6 +42,36 @@ describe("error transport", () => {
     // The student is the session's, so the browser does not send one.
     expect(report.entries[0]).toMatchObject({ courseId: "web-dev-101", url: "https://tutors.dev/note/course/x" });
     expect(JSON.stringify(report)).not.toContain("bob");
+  });
+
+  it("keeps a multi-line message on one line, so the route does not refuse the batch", async () => {
+    vi.useFakeTimers();
+    const { send, fetchFn } = transport();
+    send(entry("error", "first line\n  at stack (file.ts:1)\r\n"));
+    await vi.advanceTimersByTimeAsync(5000);
+    const report = JSON.parse(String(fetchFn.mock.calls[0][1]?.body));
+    expect(report.entries[0].message).toBe("first line   at stack (file.ts:1) ");
+  });
+
+  it("packs a burst of large errors into reports under the route's 16 KB limit, losing none", async () => {
+    vi.useFakeTimers();
+    const { send, fetchFn } = transport();
+    const big = (i: number) => ({ ...(entry("error", `${i} ${"x".repeat(990)}`) as object), detail: "y".repeat(1500) }) as never;
+    for (let i = 0; i < 20; i++) send(big(i));
+    await vi.advanceTimersByTimeAsync(30_000);
+    const reports = fetchFn.mock.calls.map(([, init]) => String(init?.body));
+    expect(reports.length).toBeGreaterThan(1);
+    for (const body of reports) expect(new TextEncoder().encode(body).length).toBeLessThanOrEqual(MAX_REPORT_BYTES);
+    expect(reports.flatMap((body) => JSON.parse(body).entries)).toHaveLength(20);
+  });
+
+  it("replaces a context too large to report with a note", async () => {
+    vi.useFakeTimers();
+    const { send, fetchFn } = transport();
+    send({ ...(entry("error") as object), body: "z".repeat(5000) } as never);
+    await vi.advanceTimersByTimeAsync(5000);
+    const report = JSON.parse(String(fetchFn.mock.calls[0][1]?.body));
+    expect(report.entries[0].context).toEqual({ contextDropped: expect.stringMatching(/bytes$/) });
   });
 
   it("does not report its own failed reports, which would post forever", async () => {

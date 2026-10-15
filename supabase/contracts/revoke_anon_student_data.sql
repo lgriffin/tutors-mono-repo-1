@@ -94,7 +94,11 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- Tables and functions created later get no browser grant by default either.
+  -- Tables and functions created later get no browser grant by default either. PostgreSQL grants
+  -- EXECUTE on every new function to PUBLIC through a global default that a schema-scoped rule cannot
+  -- take away, so that default is revoked globally (for functions the role running this step creates;
+  -- Supabase migrations run as that role). The per-role rules below cover Supabase's own defaults.
+  ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
   FOREACH browser_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = browser_role) THEN CONTINUE; END IF;
     EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM %I', browser_role);
