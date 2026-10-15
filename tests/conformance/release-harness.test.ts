@@ -117,7 +117,8 @@ describe("release-harness: the release-candidate dispatch, from git alone", () =
   });
 
   it("builds the payload release-dispatch.yml builds", () => {
-    const { dispatch, notes } = buildReleaseDispatch(cycle.repo.dir);
+    // An empty environment, so the claims URL names the canonical repository wherever the suite runs (a fork's CI sets GITHUB_REPOSITORY).
+    const { dispatch, notes } = buildReleaseDispatch(cycle.repo.dir, { env: {} });
     expect(dispatch).toEqual({
       event_type: "release-candidate",
       client_payload: {

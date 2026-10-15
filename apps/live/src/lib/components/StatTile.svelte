@@ -15,10 +15,10 @@
     {#if live}
       <span class="bg-success-500 inline-block size-2 shrink-0 animate-pulse rounded-full" aria-hidden="true"></span>
     {/if}
-    <span class="text-surface-600-400 truncate text-xs font-medium tracking-wide uppercase">{label}</span>
+    <span class="text-[var(--ui-muted)] truncate text-xs font-medium tracking-wide uppercase">{label}</span>
   </div>
   <span class="text-2xl leading-tight font-semibold tabular-nums">{value}</span>
   {#if hint}
-    <span class="text-surface-600-400 truncate text-xs">{hint}</span>
+    <span class="text-[var(--ui-muted)] truncate text-xs">{hint}</span>
   {/if}
 </div>

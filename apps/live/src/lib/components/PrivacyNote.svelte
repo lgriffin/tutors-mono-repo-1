@@ -6,7 +6,7 @@
    */
 </script>
 
-<footer class="text-surface-600-400 border-surface-200-800 mt-2 border-t pt-4 text-xs leading-relaxed">
+<footer class="text-[var(--ui-muted)] border-surface-200-800 mt-2 border-t pt-4 text-xs leading-relaxed">
   <p>
     <strong>Anonymous by design.</strong> These numbers come from a random session token that is regenerated every day and is never derived
     from who you are. No cookies are set beyond that token, no IP addresses are stored, and timestamps are coarsened to the minute.

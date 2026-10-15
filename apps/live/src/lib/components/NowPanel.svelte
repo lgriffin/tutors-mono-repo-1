@@ -17,9 +17,9 @@
 <section class="card preset-filled-surface-100-900 flex min-w-0 flex-col gap-3 p-4">
   <h2 class="text-base font-semibold">Active now</h2>
   {#if !snapshot}
-    <p class="text-surface-600-400 py-4 text-center text-sm">Connecting to the live stream...</p>
+    <p class="text-[var(--ui-muted)] py-4 text-center text-sm">Connecting to the live stream...</p>
   {:else if snapshot.courses.length === 0}
-    <p class="text-surface-600-400 py-4 text-center text-sm">Nobody is reading right now.</p>
+    <p class="text-[var(--ui-muted)] py-4 text-center text-sm">Nobody is reading right now.</p>
   {:else}
     <ul class="flex flex-col gap-2">
       {#each courses as course (course.course)}
@@ -29,7 +29,7 @@
             <span class="badge preset-filled-success-500 shrink-0">{count(course.active)}</span>
           </div>
           {#if course.los.length > 0}
-            <p class="text-surface-600-400 truncate text-xs" title={course.los.map((lo) => lo.lo).join(", ")}>
+            <p class="text-[var(--ui-muted)] truncate text-xs" title={course.los.map((lo) => lo.lo).join(", ")}>
               {course.los
                 .slice(0, 3)
                 .map((lo) => `${loLabel(lo.lo)} (${lo.count})`)
@@ -40,7 +40,7 @@
       {/each}
     </ul>
     {#if remaining > 0}
-      <p class="text-surface-600-400 text-xs">and {remaining} more course{remaining === 1 ? "" : "s"}</p>
+      <p class="text-[var(--ui-muted)] text-xs">and {remaining} more course{remaining === 1 ? "" : "s"}</p>
     {/if}
   {/if}
 

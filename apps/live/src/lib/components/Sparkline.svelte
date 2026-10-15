@@ -31,14 +31,14 @@
 </script>
 
 {#if points === 0}
-  <p class="text-surface-600-400 text-sm">Nothing recorded yet.</p>
+  <p class="text-[var(--ui-muted)] text-sm">Nothing recorded yet.</p>
 {:else}
   <div class="flex min-w-0 flex-col gap-1">
     <svg viewBox="0 0 {width} {height}" {height} class="w-full" role="img" aria-label="Sessions and views per day">
       <path d={path(series.map((point) => point.views))} fill="none" class="stroke-tertiary-500" stroke-width="1.5" stroke-opacity="0.7" />
       <path d={path(series.map((point) => point.sessions))} fill="none" class="stroke-primary-500" stroke-width="2" />
     </svg>
-    <div class="text-surface-600-400 flex flex-wrap justify-between gap-2 text-xs">
+    <div class="text-[var(--ui-muted)] flex flex-wrap justify-between gap-2 text-xs">
       <span><span class="text-primary-500 font-semibold">{count(totals.sessions)}</span> sessions</span>
       <span>{shortDay(series[0].day)} - {shortDay(series[points - 1].day)}</span>
       <span><span class="text-tertiary-500 font-semibold">{count(totals.views)}</span> views</span>

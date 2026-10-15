@@ -143,9 +143,12 @@ jobs:
   # Pushes to main, rc/** and v* tags, and dispatches on a v* tag: scan, publish multi-arch, sign, attest.
   publish:
     name: Publish ${{ matrix.app }}
+    # Only the canonical repository holds the registry credentials; a fork builds and scans in the pull-request job instead.
     if: >-
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''))
+      github.repository_owner == 'tutors-sdk' && (
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''))
+      )
     runs-on: ubuntu-latest
     # The arm64 half is built under QEMU emulation, which is slow.
     timeout-minutes: 180
