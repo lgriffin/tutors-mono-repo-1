@@ -32,9 +32,9 @@ export function sameStep(a: StepRef, b: StepRef): boolean {
   return a.courseId === b.courseId && a.labRoute === b.labRoute && a.stepId === b.stepId;
 }
 
-/** One string per step, for maps and grouping. */
+/** One string per step, for maps and grouping; distinct steps always give distinct strings, whatever their parts hold. */
 export function stepKey(ref: StepRef): string {
-  return `${ref.courseId}|${ref.labRoute}|${ref.stepId}`;
+  return JSON.stringify([ref.courseId, ref.labRoute, ref.stepId]);
 }
 
 /** `s` without the slashes at its start (when `leading`) and its end; a loop, so no input makes it slow. */

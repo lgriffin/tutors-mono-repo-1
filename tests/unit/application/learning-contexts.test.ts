@@ -8,6 +8,7 @@ import { anchorOf, audienceOf, isBroadcast } from "@tutors/domain/feedback";
 import { cohortProfile, median, percentile, responseTimes, studentProgress } from "@tutors/domain/insights";
 import { isStepRef, noteKey, notesToMarkdown, sameStep, stepKey, trimSlashes, type StepRef } from "@tutors/domain/learning";
 import {
+  acknowledgeHelp,
   broadcast,
   helpQueue,
   requestHelp,
@@ -40,7 +41,8 @@ describe("learning", () => {
     expect(isStepRef(null)).toBe(false);
     expect(sameStep(ref, { ...ref })).toBe(true);
     expect(sameStep(ref, { ...ref, stepId: "03" })).toBe(false);
-    expect(stepKey(ref)).toBe("cs101|/lab/cs101/lab-01|02");
+    expect(stepKey(ref)).toBe('["cs101","/lab/cs101/lab-01","02"]');
+    expect(stepKey({ courseId: "a|b", labRoute: "c", stepId: "d" })).not.toBe(stepKey({ courseId: "a", labRoute: "b|c", stepId: "d" }));
     expect(noteKey(ref)).toBe("@notes/cs101/lab/cs101/lab-01/02");
     expect([trimSlashes("//a/b//"), trimSlashes("/a/", false), trimSlashes("///"), trimSlashes("/".repeat(100000) + "x")]).toEqual(["a/b", "/a", "", "x"]);
   });
@@ -80,6 +82,25 @@ describe("learning", () => {
     expect(warned).toBe(1);
   });
 
+  it("still reads stored notes after a refused write", async () => {
+    const inner = new InMemoryNotesStore();
+    const store = withMemoryFallback(inner, () => {});
+    await inner.put({ ref, body: "stored", kind: "note", updatedAt: "t" });
+    const put = inner.put.bind(inner);
+    inner.put = () => Promise.reject(new Error("quota"));
+    await store.put({ ref: { ...ref, stepId: "03" }, body: "memory", kind: "note", updatedAt: "t" });
+    inner.put = put;
+    expect(store.inMemory).toBe(true);
+    expect((await store.get(ref))?.body).toBe("stored");
+    expect((await store.forCourse("cs101")).map((n) => n.body)).toEqual(["stored", "memory"]);
+  });
+
+  it("says a reflection was not shared when the notes cannot be read", async () => {
+    const notes = new InMemoryNotesStore();
+    notes.failing = true;
+    expect(await shareReflection({ store: new InMemoryFeedbackStore(), notes, clock: new FixedClock() })(ref, "alice")).toEqual({ ok: false, reason: "unavailable" });
+  });
+
   it("refuses to share a step with no note as a reflection", async () => {
     const result = await shareReflection({ store: new InMemoryFeedbackStore(), notes: new InMemoryNotesStore(), clock: new FixedClock() })(ref, "alice");
     expect(result).toEqual({ ok: false, reason: "no-note" });
@@ -114,7 +135,7 @@ describe("assistance", () => {
   it("withdraws a request on read 4 hours after it was raised", async () => {
     const clock = new FixedClock(Date.parse("2026-01-05T09:00:00.000Z"));
     const store = new InMemoryAssistanceStore();
-    const deps = { store, feed: new InMemoryAssistanceFeed(), clock };
+    const deps = { store, feed: new InMemoryAssistanceFeed(), clock, educatorsOf: async () => ["ellen"] };
     await requestHelp(deps)(ref, "stuck", { login: "alice", name: null });
     expect(shouldExpire(store.rows[0], clock.nowMs())).toBe(false);
     clock.advance(4 * 60 * 60 * 1000);
@@ -125,7 +146,7 @@ describe("assistance", () => {
 
   it("says a request was not sent when the store is unreachable, and refuses a bad kind", async () => {
     const store = new InMemoryAssistanceStore();
-    const deps = { store, feed: new InMemoryAssistanceFeed(false), clock: new FixedClock() };
+    const deps = { store, feed: new InMemoryAssistanceFeed(false), clock: new FixedClock(), educatorsOf: async () => ["ellen"] };
     expect(await requestHelp(deps)(ref, "chat" as never, { login: "alice", name: null })).toEqual({ ok: false, reason: "invalid" });
     store.unavailable = true;
     expect(await requestHelp(deps)(ref, "stuck", { login: "alice", name: null })).toEqual({ ok: false, reason: "unavailable" });
@@ -134,10 +155,41 @@ describe("assistance", () => {
     expect(await resolveHelp(deps)("missing", lecturer)).toEqual({ ok: false, reason: "not-found" });
   });
 
+  it("decides who is the educator from the course's list, not from the caller", async () => {
+    const store = new InMemoryAssistanceStore();
+    const deps = { store, feed: new InMemoryAssistanceFeed(), clock: new FixedClock(), educatorsOf: async () => ["ellen"] };
+    const asked = await requestHelp(deps)(ref, "stuck", { login: "alice", name: null });
+    if (!asked.ok) throw new Error(asked.reason);
+    expect(await acknowledgeHelp(deps)(asked.request.id, { login: "mallory", educator: true } as never)).toEqual({ ok: false, reason: "not-permitted" });
+    expect((await acknowledgeHelp(deps)(asked.request.id, { login: "ellen" })).ok).toBe(true);
+    expect(await acknowledgeHelp({ ...deps, educatorsOf: () => Promise.reject(new Error("down")) })(asked.request.id, { login: "ellen" })).toEqual({ ok: false, reason: "unavailable" });
+  });
+
+  it("refuses a request whose step reference is incomplete", async () => {
+    const deps = { store: new InMemoryAssistanceStore(), feed: new InMemoryAssistanceFeed(), clock: new FixedClock() };
+    expect(await requestHelp(deps)({ ...ref, stepId: " " }, "stuck", { login: "alice", name: null })).toEqual({ ok: false, reason: "invalid" });
+  });
+
+  it("tells watchers of an expiry, and keeps a request live when its expiry was not stored", async () => {
+    const clock = new FixedClock(Date.parse("2026-01-05T09:00:00.000Z"));
+    const store = new InMemoryAssistanceStore();
+    const feed = new InMemoryAssistanceFeed();
+    const deps = { store, feed, clock, educatorsOf: async () => ["ellen"] };
+    await requestHelp(deps)(ref, "stuck", { login: "alice", name: null });
+    clock.advance(4 * 60 * 60 * 1000);
+    const replace = store.replace.bind(store);
+    store.replace = async () => false;
+    expect((await helpQueue(deps)("cs101")).map((e) => e.request.learnerId)).toEqual(["alice"]);
+    store.replace = replace;
+    feed.published.length = 0;
+    expect(await helpQueue(deps)("cs101")).toEqual([]);
+    expect(feed.published).toMatchObject([{ type: "help-request", request: { state: "withdrawn" } }]);
+  });
+
   it("publishes help-answered when a lecturer answers a hint", async () => {
     const publisher = new RecordingPublisher();
     const store = new InMemoryAssistanceStore();
-    const deps = { store, feed: new InMemoryAssistanceFeed(), clock: new FixedClock(), publish: (e: never) => publisher.publish(e) };
+    const deps = { store, feed: new InMemoryAssistanceFeed(), clock: new FixedClock(), educatorsOf: async () => ["ellen"], publish: (e: never) => publisher.publish(e) };
     const asked = await requestHelp(deps)(ref, "hint", { login: "alice", name: null });
     if (!asked.ok) throw new Error(asked.reason);
     expect((await answerHint(deps)(asked.request.id, lecturer, "Use a map")).ok).toBe(true);
@@ -198,5 +250,9 @@ describe("insights", () => {
     });
     expect((await helpResponseTimes({ insights: read })("cs101", period)).lecturer.resolve.count).toBe(1);
     expect(studentProgress("bob", [acked], [], []).requestsRaised).toBe(0);
+    const toAll = { id: "a1", anchor: { kind: "step" as const, ref }, audience: { kind: "everyone" as const }, body: "b", authorId: "ellen", createdAt: "t", revokedAt: null };
+    const elsewhere = { ...toAll, id: "a2", anchor: { kind: "step" as const, ref: { ...ref, stepId: "09" } } };
+    expect(studentProgress(acked.learnerId, [acked], [toAll, elsewhere], []).annotationsReceived).toBe(1);
+    expect(studentProgress("bob", [acked], [toAll], []).annotationsReceived).toBe(0);
   });
 });

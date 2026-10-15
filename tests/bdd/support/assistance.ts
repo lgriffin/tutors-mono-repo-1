@@ -3,9 +3,9 @@
  * reader's server will write through, the feed the lecturers' tabs will watch, a clock the
  * scenario sets, and a recording publisher.
  */
-import type { HelpActor, HelpKind } from "@tutors/domain/assistance";
+import type { HelpKind } from "@tutors/domain/assistance";
 import type { StepRef } from "@tutors/domain/learning";
-import { acknowledgeHelp, answerHint, helpQueue, requestHelp, resolveHelp, withdrawHelp, type AssistanceDeps } from "../../../packages/application/src/index.ts";
+import { acknowledgeHelp, answerHint, helpQueue, requestHelp, resolveHelp, withdrawHelp, type AssistanceDeps, type HelpCaller } from "../../../packages/application/src/index.ts";
 import { FixedClock, InMemoryAssistanceFeed, InMemoryAssistanceStore, RecordingPublisher } from "../../../packages/application/src/testing/index.ts";
 
 export function assistanceWorld() {
@@ -13,9 +13,9 @@ export function assistanceWorld() {
   const store = new InMemoryAssistanceStore();
   const feed = new InMemoryAssistanceFeed();
   const publisher = new RecordingPublisher();
-  const deps: AssistanceDeps = { store, feed, clock, publish: (e) => publisher.publish(e) };
   const educators = new Set<string>();
-  const actor = (login: string): HelpActor => ({ login, educator: educators.has(login) });
+  const deps: AssistanceDeps = { store, feed, clock, educatorsOf: async () => [...educators], publish: (e) => publisher.publish(e) };
+  const actor = (login: string): HelpCaller => ({ login });
   return {
     clock,
     store,

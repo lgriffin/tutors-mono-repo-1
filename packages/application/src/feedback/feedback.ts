@@ -80,9 +80,9 @@ export type ShareReflectionResult = { ok: true; reflection: Reflection } | { ok:
  */
 export function shareReflection({ store, notes, clock }: { store: FeedbackStore; notes: NotesStore; clock: Clock }) {
   return async (ref: StepRef, learnerId: string): Promise<ShareReflectionResult> => {
-    const note = await notes.get(ref);
-    if (!note || !note.body.trim()) return { ok: false, reason: "no-note" };
     try {
+      const note = await notes.get(ref);
+      if (!note || !note.body.trim()) return { ok: false, reason: "no-note" };
       return { ok: true, reflection: await store.reflect(reflectionFromNote(note, learnerId, clock.now().toISOString())) };
     } catch {
       return { ok: false, reason: "unavailable" };

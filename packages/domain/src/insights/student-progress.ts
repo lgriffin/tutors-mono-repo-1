@@ -5,6 +5,7 @@
 import type { HelpRequest } from "../assistance/help-request.ts";
 import type { Annotation } from "../feedback/annotation.ts";
 import type { Reflection } from "../feedback/reflection.ts";
+import { stepKey } from "../learning/step-ref.ts";
 
 export type StudentProgress = {
   learnerId: string;
@@ -17,12 +18,16 @@ export type StudentProgress = {
 /** Annotations reach a student when addressed to them, or to everyone on a step they asked about or reflected on. */
 export function studentProgress(learnerId: string, requests: readonly HelpRequest[], annotations: readonly Annotation[], reflections: readonly Reflection[]): StudentProgress {
   const own = requests.filter((r) => r.learnerId === learnerId);
+  const mine = reflections.filter((r) => r.learnerId === learnerId);
+  const touched = new Set([...own.map((r) => stepKey(r.ref)), ...mine.map((r) => stepKey(r.ref))]);
+  const reaches = (a: Annotation) =>
+    a.audience.kind === "student" ? a.audience.learnerId === learnerId : touched.has(stepKey(a.anchor.ref));
   return {
     learnerId,
     requestsRaised: own.length,
     hintsRead: own.filter((r) => r.closed?.reason === "hint").length,
-    annotationsReceived: annotations.filter((a) => a.revokedAt === null && a.audience.kind === "student" && a.audience.learnerId === learnerId).length,
-    reflectionsShared: reflections.filter((r) => r.learnerId === learnerId).length
+    annotationsReceived: annotations.filter((a) => a.revokedAt === null && reaches(a)).length,
+    reflectionsShared: mine.length
   };
 }
 

@@ -3,7 +3,7 @@
  * the notes panel as the learner moves between steps, and exported as one markdown document.
  * Nothing here talks to a server (Rule 0380).
  */
-import { isNoteKind, notesPanelAt, notesToMarkdown, type Note, type NoteKind, type NotesPanelState, type NotesPanelView, type StepRef } from "@tutors/domain/learning";
+import { isNoteKind, notesPanelAt, notesToMarkdown, type Note, type NoteKind, type NotesPanelState, type NotesPanelView, stepKey, type StepRef } from "@tutors/domain/learning";
 import type { Clock } from "../ports/clock.ts";
 import type { NotesStore } from "../ports/notes-store.ts";
 
@@ -47,12 +47,12 @@ export function exportNotes({ notes }: Pick<NotesDeps, "notes">) {
   return async (course: ExportCourse): Promise<string> => notesToMarkdown(course.title, await notes.forCourse(course.courseId), course.readerUrl);
 }
 
-const stepId = (ref: StepRef) => `${ref.courseId}|${ref.labRoute}|${ref.stepId}`;
 
 /**
  * NotesStore that keeps working when the store under it cannot: the first refused write moves the
  * session's notes into memory and calls `warn` once, so the learner is told once that notes will
- * not persist and can still read and export them (Rule 0383).
+ * not persist and can still read and export them (Rule 0383). Notes the store already held stay
+ * readable under the ones kept in memory.
  */
 export function withMemoryFallback(store: NotesStore, warn: () => void): NotesStore & { readonly inMemory: boolean } {
   const memory = new Map<string, Note>();
@@ -65,7 +65,6 @@ export function withMemoryFallback(store: NotesStore, warn: () => void): NotesSt
     }
   };
   const fromStore = async <T>(read: () => Promise<T>, empty: T): Promise<T> => {
-    if (inMemory) return empty;
     try {
       return await read();
     } catch {
@@ -78,13 +77,13 @@ export function withMemoryFallback(store: NotesStore, warn: () => void): NotesSt
       return inMemory;
     },
     async get(ref) {
-      const key = stepId(ref);
+      const key = stepKey(ref);
       if (memory.has(key)) return memory.get(key)!;
       if (removed.has(key)) return null;
       return fromStore(() => store.get(ref), null);
     },
     async put(note) {
-      const key = stepId(note.ref);
+      const key = stepKey(note.ref);
       removed.delete(key);
       if (!inMemory) {
         try {
@@ -97,14 +96,14 @@ export function withMemoryFallback(store: NotesStore, warn: () => void): NotesSt
       memory.set(key, note);
     },
     async remove(ref) {
-      const key = stepId(ref);
+      const key = stepKey(ref);
       memory.delete(key);
       removed.add(key);
       if (!inMemory) await store.remove(ref).catch(fallBack);
     },
     async forCourse(courseId) {
       const stored = await fromStore(() => store.forCourse(courseId), [] as Note[]);
-      const byKey = new Map(stored.map((n) => [stepId(n.ref), n]));
+      const byKey = new Map(stored.map((n) => [stepKey(n.ref), n]));
       for (const key of removed) byKey.delete(key);
       for (const [key, note] of memory) if (note.ref.courseId === courseId) byKey.set(key, note);
       return [...byKey.values()];

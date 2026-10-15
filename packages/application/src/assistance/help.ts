@@ -21,7 +21,8 @@ import {
   type HelpRequest,
   type TransitionRefusal
 } from "@tutors/domain/assistance";
-import type { StepRef } from "@tutors/domain/learning";
+import { isEducatorOf } from "@tutors/domain/access";
+import { isStepRef, type StepRef } from "@tutors/domain/learning";
 import type { AssistanceFeed } from "../ports/assistance-feed.ts";
 import type { AssistanceStore } from "../ports/assistance-store.ts";
 import type { Clock } from "../ports/clock.ts";
@@ -31,6 +32,8 @@ export type AssistanceDeps = {
   store: AssistanceStore;
   feed: AssistanceFeed;
   clock: Clock;
+  /** The course's educator logins; whether a caller acts as the educator is decided here, never by the caller. */
+  educatorsOf: (courseId: string) => Promise<string[]>;
   publish?: EventPublisher["publish"];
 };
 
@@ -39,8 +42,12 @@ export type HelpResult = { ok: true; request: HelpRequest } | { ok: false; reaso
 
 const iso = (clock: Clock) => clock.now().toISOString();
 
-/** Withdraws, as the system, the live requests that have waited 4 hours; resolves the ones still live. */
-async function expireStale(store: AssistanceStore, clock: Clock, requests: HelpRequest[]): Promise<HelpRequest[]> {
+/**
+ * Withdraws, as the system, the live requests that have waited 4 hours and tells the course's
+ * watchers; resolves the ones still live. A request whose withdrawal was not stored stays live,
+ * so what the queue shows is what the store holds.
+ */
+async function expireStale({ store, feed, clock }: Pick<AssistanceDeps, "store" | "feed" | "clock">, requests: HelpRequest[]): Promise<HelpRequest[]> {
   const now = clock.nowMs();
   const live: HelpRequest[] = [];
   for (const request of requests) {
@@ -49,7 +56,10 @@ async function expireStale(store: AssistanceStore, clock: Clock, requests: HelpR
       continue;
     }
     const moved = transition(request, "expire", "system", iso(clock));
-    if (moved.ok) await store.replace(moved.request, request.state).catch(() => false);
+    if (!moved.ok) continue;
+    const kept = await store.replace(moved.request, request.state).catch(() => false);
+    if (kept) await feed.publish({ type: "help-request", courseId: request.ref.courseId, request: moved.request }).catch(() => false);
+    else live.push(request);
   }
   return live;
 }
@@ -58,12 +68,12 @@ async function expireStale(store: AssistanceStore, clock: Clock, requests: HelpR
  * A signed-in student asks for help on a step (Rule 0385). While one of their requests in the
  * course is live, asking again changes its kind and step and keeps its time (Rule 0386).
  */
-export function requestHelp({ store, feed, clock, publish }: AssistanceDeps) {
+export function requestHelp({ store, feed, clock, publish }: Pick<AssistanceDeps, "store" | "feed" | "clock" | "publish">) {
   return async (ref: StepRef, kind: HelpKind, learner: { login: string; name: string | null }): Promise<HelpResult> => {
-    if (!learner.login || !isHelpKind(kind)) return { ok: false, reason: "invalid" };
+    if (!learner.login || !isHelpKind(kind) || !isStepRef(ref)) return { ok: false, reason: "invalid" };
     let request: HelpRequest;
     try {
-      const live = await expireStale(store, clock, await store.live(ref.courseId));
+      const live = await expireStale({ store, feed, clock }, await store.live(ref.courseId));
       const mine = live.find((r) => r.learnerId === learner.login);
       if (mine) {
         request = askAgain(mine, ref, kind);
@@ -80,19 +90,25 @@ export function requestHelp({ store, feed, clock, publish }: AssistanceDeps) {
   };
 }
 
-function act(action: HelpAction, { store, feed, clock, publish }: AssistanceDeps) {
-  return async (id: string, actor: HelpActor, hintText?: string): Promise<HelpResult> => {
+/** Who is acting: their signed-in login. Whether they are the course's educator is looked up, not taken from them. */
+export type HelpCaller = { login: string };
+
+function act(action: HelpAction, { store, feed, clock, educatorsOf, publish }: AssistanceDeps) {
+  return async (id: string, caller: HelpCaller, hintText?: string): Promise<HelpResult> => {
     let current: HelpRequest | null;
+    let educators: string[];
     try {
       current = await store.get(id);
+      if (!current) return { ok: false, reason: "not-found" };
+      educators = await educatorsOf(current.ref.courseId);
     } catch {
       return { ok: false, reason: "unavailable" };
     }
-    if (!current) return { ok: false, reason: "not-found" };
     if (shouldExpire(current, clock.nowMs())) {
-      await expireStale(store, clock, [current]);
+      await expireStale({ store, feed, clock }, [current]);
       return { ok: false, reason: "not-in-state-table" };
     }
+    const actor: HelpActor = { login: caller.login, educator: isEducatorOf(caller.login, { educators }) };
     const moved = transition(current, action, actor, iso(clock), hintText);
     if (!moved.ok) return moved;
     const kept = await store.replace(moved.request, current.state).catch(() => null);
@@ -107,25 +123,25 @@ function act(action: HelpAction, { store, feed, clock, publish }: AssistanceDeps
 /** A lecturer says they are on the way. */
 export const acknowledgeHelp = (deps: AssistanceDeps) => {
   const run = act("acknowledge", deps);
-  return (id: string, actor: HelpActor) => run(id, actor);
+  return (id: string, caller: HelpCaller) => run(id, caller);
 };
 
 /** A lecturer answers a Need-a-hint request with a typed hint, which resolves it as helped by a hint (decision D4). */
 export const answerHint = (deps: AssistanceDeps) => {
   const run = act("answer-hint", deps);
-  return (id: string, actor: HelpActor, hintText: string) => run(id, actor, hintText);
+  return (id: string, caller: HelpCaller, hintText: string) => run(id, caller, hintText);
 };
 
 /** The lecturer, or the student who asked ("Solved"), ends the request. */
 export const resolveHelp = (deps: AssistanceDeps) => {
   const run = act("resolve", deps);
-  return (id: string, actor: HelpActor) => run(id, actor);
+  return (id: string, caller: HelpCaller) => run(id, caller);
 };
 
 /** The student who asked takes the request back. */
 export const withdrawHelp = (deps: AssistanceDeps) => {
   const run = act("withdraw", deps);
-  return (id: string, actor: HelpActor) => run(id, actor);
+  return (id: string, caller: HelpCaller) => run(id, caller);
 };
 
 /** One row of the lecturer's queue: the request, how long it has waited at this instant, and its escalation. */
@@ -135,9 +151,9 @@ export type QueueEntry = { request: HelpRequest; waitingMs: number; escalation: 
  * The course's live requests in queue order, each with its waiting time and escalation from the
  * clock (Rules 0387, 0388); requests that have waited 4 hours are withdrawn on the way.
  */
-export function helpQueue({ store, clock }: Pick<AssistanceDeps, "store" | "clock">) {
+export function helpQueue({ store, feed, clock }: Pick<AssistanceDeps, "store" | "feed" | "clock">) {
   return async (courseId: string): Promise<QueueEntry[]> => {
-    const live = (await expireStale(store, clock, await store.live(courseId))).filter(isLive).sort(queueOrder);
+    const live = (await expireStale({ store, feed, clock }, await store.live(courseId))).filter(isLive).sort(queueOrder);
     const now = clock.nowMs();
     return live.map((request) => ({ request, waitingMs: waitingMs(request, now), escalation: shouldEscalate(request, now) }));
   };
