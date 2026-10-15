@@ -32,14 +32,25 @@ function readCalendar(sql: SqlClient, courseId: string, start?: string | null, e
   return sql.query(`${CALENDAR} WHERE courseid = $1 AND ($2::date IS NULL OR id >= $2::date) AND ($3::date IS NULL OR id <= $3::date) ORDER BY id`, [courseId, start || null, end || null]);
 }
 
+/** A failed read is logged and answered empty, as the Supabase adapter's reads are. */
+async function orEmpty<T>(what: string, read: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await read();
+  } catch (error) {
+    log.error("Reading learning records failed:", { what, error });
+    return [];
+  }
+}
+
+/** The course's Moodle assignments; a failed read is logged and answered empty, so the rest of the Time rows still show (as the Supabase adapter does). */
 async function readAssignments(sql: SqlClient, courseId: string): Promise<TutorsTimeAssignment[]> {
-  const { rows } = await run("assignments read", () =>
-    sql.query(
+  const rows = await orEmpty("assignments", async () =>
+    (await sql.query(
       `SELECT a.id, a.name, a.url, a.due_date, a.opened_date, count(s.id) AS submissions
        FROM assignments a LEFT JOIN assignments_submissions s ON s."assignmentId" = a.id
        WHERE a.courseid = $1 GROUP BY a.id ORDER BY a.id`,
       [courseId]
-    )
+    )).rows
   );
   return rows.map((r) => ({
     id: num(r.id) as number,
@@ -77,16 +88,6 @@ async function readTimeRows(sql: SqlClient, courseId: string, startDate?: string
     users: users as TutorsTimeRows["users"],
     assignments
   };
-}
-
-/** A failed read is logged and answered empty, as the Supabase adapter's reads are. */
-async function orEmpty<T>(what: string, read: () => Promise<T[]>): Promise<T[]> {
-  try {
-    return await read();
-  } catch (error) {
-    log.error("Reading learning records failed:", { what, error });
-    return [];
-  }
 }
 
 export function postgresLearningRecords(sql: SqlClient): LearningRecords {

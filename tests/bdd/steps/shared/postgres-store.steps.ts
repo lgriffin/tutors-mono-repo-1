@@ -19,7 +19,8 @@ vi.mock("pg", () => {
   class Pool {
     constructor(config: { connectionString: string }) {
       store.pools.push(config.connectionString);
-      return store.sql as object;
+      const sql = store.sql as { query: (...args: unknown[]) => unknown; end: () => unknown };
+      return { query: (...args: unknown[]) => sql.query(...args), end: () => sql.end(), on: () => this };
     }
   }
   return { Pool, default: { Pool } };

@@ -19,7 +19,9 @@ import type { PlaygroundSnapshots } from "@tutors/application/ports";
 import {
   checkPostgres,
   insertAppErrors,
+  migrate,
   postgresAccessStore,
+  postgresAssignmentRows,
   postgresCatalogue,
   postgresLearningEventSink,
   postgresLearningRecords,
@@ -284,5 +286,76 @@ describe("failure paths of the ports", () => {
     const later = new Date(Date.now() + 86_400_000).toISOString();
     await store.add({ courseId: "cs101", learnerId: "ann", learnerName: null, filename: null as unknown as string, content: "boom", title: null, loRoute: null, loTitle: null, expiresAt: later });
     expect((await store.active("cs101", new Date().toISOString())).map((r) => [r.avatarUrl, r.filename])).toEqual([["https://avatars/ann.png", "snippet.txt"]]);
+  });
+});
+
+describe("Tutors Time's Moodle assignments", () => {
+  beforeEach(() => db.reset());
+
+  const assignment = (id: number, name: string, at: string) => ({ courseid: "cs101", id, name, url: null, due_date: "2026-10-01T12:00:00Z", opened_date: null, last_synced_at: at });
+  const submission = (id: number, assignmentId: number, status: string) => ({
+    id,
+    assignmentId,
+    external_userid: 40 + id,
+    attempt_no: 0,
+    status,
+    timecreated: null,
+    timemodified: "2026-10-02T09:00:00Z",
+    timestarted: null,
+    grading_status: "notgraded",
+    last_synced_at: "2026-10-15T10:00:00Z"
+  });
+
+  it("writes what the sync fetched where timeRows reads it, replacing rows by id", async () => {
+    const rows = postgresAssignmentRows(db.sql);
+    expect(await rows.lastSyncedAt("cs101")).toBeNull();
+    await rows.upsertAssignments([]);
+    await rows.upsertSubmissions([]);
+    await rows.upsertAssignments([assignment(7, "Lab 1", "2026-10-15T09:00:00Z"), assignment(8, "Lab 2", "2026-10-15T09:00:00Z")]);
+    await rows.upsertAssignments([assignment(7, "Lab 1 (revised)", "2026-10-15T10:00:00Z")]);
+    await rows.upsertSubmissions([submission(1, 7, "new"), submission(2, 7, "new")]);
+    await rows.upsertSubmissions([submission(2, 7, "submitted")]);
+
+    expect(await rows.lastSyncedAt("cs101")).toBe("2026-10-15T10:00:00.000Z");
+    const { rows: statuses } = await db.sql.query(`SELECT id, status FROM assignments_submissions ORDER BY id`);
+    expect(statuses).toEqual([{ id: expect.anything(), status: "new" }, { id: expect.anything(), status: "submitted" }]);
+    expect((await postgresLearningRecords(db.sql).timeRows("cs101")).assignments).toEqual([
+      { id: 7, name: "Lab 1 (revised)", url: null, due_date: "2026-10-01T12:00:00.000Z", opened_date: null, submissionCount: 2 },
+      { id: 8, name: "Lab 2", url: null, due_date: "2026-10-01T12:00:00.000Z", opened_date: null, submissionCount: 0 }
+    ]);
+  });
+
+  it("fails a write the database refuses with a StoreError naming it", async () => {
+    const down = postgresAssignmentRows(refusing);
+    await expect(down.lastSyncedAt("cs101")).rejects.toThrow("assignments read");
+    await expect(down.upsertAssignments([assignment(7, "Lab 1", "2026-10-15T09:00:00Z")])).rejects.toThrow("assignments upsert: connection refused");
+    await expect(down.upsertSubmissions([submission(1, 7, "new")])).rejects.toBeInstanceOf(StoreError);
+  });
+
+  it("still answers the Time rows, without assignments, when only the assignments read fails", async () => {
+    await db.sql.query(`INSERT INTO calendar (id, studentid, courseid, timeactive, pageloads) VALUES ('2026-10-01', 'ann', 'cs101', 2, 1)`);
+    const noAssignments: SqlClient = {
+      query: (text, params) => (text.includes("FROM assignments a") ? Promise.reject(new Error("relation does not exist")) : db.sql.query(text, params)),
+      end: async () => {}
+    };
+    const rows = await postgresLearningRecords(noAssignments).timeRows("cs101");
+    expect(rows.calendar.map((r) => r.studentid)).toEqual(["ann"]);
+    expect(rows.assignments).toEqual([]);
+    expect(log.error).toHaveBeenCalledWith("Reading learning records failed:", { what: "assignments", error: expect.any(Error) });
+  });
+});
+
+describe("migrations run side by side", () => {
+  const probe = { name: "99990000000000_probe.sql", sql: "CREATE TABLE probe_runs (id INT); INSERT INTO probe_runs VALUES (1)" };
+  afterAll(async () => {
+    await db.sql.query("DROP TABLE IF EXISTS probe_runs");
+    await db.sql.query("DELETE FROM schema_migrations WHERE name = $1", [probe.name]);
+  });
+
+  it("applies a migration once when two runners find it pending, the other counting it as skipped", async () => {
+    const runs = await Promise.all([migrate(db.sql, [probe]), migrate(db.sql, [probe])]);
+    expect(runs.flatMap((r) => r.applied)).toEqual([probe.name]);
+    expect(runs.flatMap((r) => r.skipped)).toEqual([probe.name]);
+    expect((await db.sql.query("SELECT count(*)::int AS n FROM probe_runs")).rows).toEqual([{ n: 1 }]);
   });
 });

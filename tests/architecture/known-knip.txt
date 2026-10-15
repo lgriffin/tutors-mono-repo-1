@@ -66,8 +66,6 @@ types: apps/time/src/lib/server/api/moodle.ts: MoodleAssignSubmissionsByAssignme
 types: apps/time/src/lib/server/api/moodle.ts: MoodleContentFile
 types: apps/time/src/lib/server/api/moodle.ts: MoodleModuleContent
 types: apps/time/src/lib/server/api/moodle.ts: MoodleWarning
-types: apps/time/src/lib/server/db/submissionsRepository.ts: AssignmentRow
-types: apps/time/src/lib/server/db/submissionsRepository.ts: SubmissionRow
 types: apps/time/src/lib/server/services/AssignmentsService.ts: MoodleAssignSubmission
 types: tests/contract/support/schemas.ts: CalendarEntry
 types: tests/contract/support/schemas.ts: ConnectCourse

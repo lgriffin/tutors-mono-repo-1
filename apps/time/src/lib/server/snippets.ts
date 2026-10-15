@@ -25,8 +25,8 @@ function serviceClient(): SupabaseClient | undefined {
 
 let pool: { url: string; sql: SqlClient } | undefined;
 
-/** The Postgres pool when DATA_STORE=postgres and PRIVATE_DATABASE_URL is set: one per URL for the server's lifetime. */
-function postgres(): SqlClient | undefined {
+/** The Postgres pool when DATA_STORE=postgres and PRIVATE_DATABASE_URL is set: one per URL for the server's lifetime (the Moodle sync writes through it too). */
+export function postgres(): SqlClient | undefined {
   if (env.DATA_STORE?.trim().toLowerCase() !== "postgres") return undefined;
   const url = env.PRIVATE_DATABASE_URL?.trim();
   if (!url) return undefined;
@@ -34,7 +34,7 @@ function postgres(): SqlClient | undefined {
   return pool.sql;
 }
 
-const usesPostgres = () => env.DATA_STORE?.trim().toLowerCase() === "postgres";
+export const usesPostgres = () => env.DATA_STORE?.trim().toLowerCase() === "postgres";
 
 /** The store the dashboard reads from, or null when the deployment has no store. */
 export function serviceSnippetStore(): SnippetStore | null {

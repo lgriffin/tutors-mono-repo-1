@@ -13,7 +13,10 @@ export interface SqlClient {
   end(): Promise<void>;
 }
 
-type PoolConstructor = new (config: { connectionString: string; max?: number }) => SqlClient;
+import log from "@tutors/logger";
+
+type Pool = SqlClient & { on(event: "error", listener: (error: Error) => void): unknown };
+type PoolConstructor = new (config: { connectionString: string; max?: number }) => Pool;
 
 async function loadPool(): Promise<PoolConstructor> {
   const specifier = "pg";
@@ -31,7 +34,14 @@ async function loadPool(): Promise<PoolConstructor> {
  */
 export function postgresClient(connectionString: string): SqlClient {
   let pool: Promise<SqlClient> | undefined;
-  const connect = () => (pool ??= loadPool().then((Pool) => new Pool({ connectionString })));
+  const connect = () =>
+    (pool ??= loadPool().then((Pool) => {
+      const created = new Pool({ connectionString });
+      // An idle client that loses its connection (a database restart, a dropped network) makes the
+      // pool emit "error"; unheard, that would crash the server. The pool replaces the client.
+      created.on("error", (error) => log.error("Postgres pool error:", error));
+      return created;
+    }));
   return {
     async query(text, params) {
       return (await connect()).query(text, params);
