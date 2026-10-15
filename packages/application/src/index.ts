@@ -10,3 +10,6 @@ export * from "./presence/index.ts";
 export * from "./access/index.ts";
 export * from "./snippets/index.ts";
 export * from "./live/index.ts";
+export * from "./assistance/index.ts";
+export * from "./feedback/index.ts";
+export * from "./insights/index.ts";

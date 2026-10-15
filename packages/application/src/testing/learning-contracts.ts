@@ -1,0 +1,251 @@
+/**
+ * Contract suites for the assistance, feedback, notes and insights ports: what every adapter of
+ * them must do, run against the in-memory adapters now and the real ones when they arrive.
+ */
+import { openRequest, type HelpRequest } from "@tutors/domain/assistance";
+import type { Annotation, Reflection } from "@tutors/domain/feedback";
+import type { Note, StepRef } from "@tutors/domain/learning";
+import type { AssistanceChange, AssistanceFeed } from "../ports/assistance-feed.ts";
+import type { AssistanceStore } from "../ports/assistance-store.ts";
+import type { FeedbackStore } from "../ports/feedback-store.ts";
+import type { InsightsRead } from "../ports/insights-read.ts";
+import type { NotesStore } from "../ports/notes-store.ts";
+import { assert, assertEqual, type ContractCase } from "./contracts.ts";
+
+type Make<T> = () => T | Promise<T>;
+
+const step = (courseId: string, stepId = "02", labRoute = "/lab/cs101/lab-01"): StepRef => ({ courseId, labRoute, stepId });
+const ask = (courseId: string, learner: string, at = "2026-01-05T09:00:00.000Z") => openRequest(step(courseId), { login: learner, name: learner.toUpperCase() }, "stuck", at);
+
+export function assistanceStoreContract(make: Make<AssistanceStore>): ContractCase[] {
+  return [
+    {
+      name: "an opened request reads back by id with the fields it was given",
+      run: async () => {
+        const store = await make();
+        const opened = await store.open(ask("cs101", "alice"));
+        assert(typeof opened.id === "string" && opened.id.length > 0, "id");
+        const read = await store.get(opened.id);
+        assertEqual(
+          read && [read.ref, read.learnerId, read.kind, read.state, read.requestedAt],
+          [step("cs101"), "alice", "stuck", "open", "2026-01-05T09:00:00.000Z"],
+          "read back"
+        );
+        assertEqual(await store.get("no-such-request"), null, "missing");
+      }
+    },
+    {
+      name: "live lists a course's open and acknowledged requests only",
+      run: async () => {
+        const store = await make();
+        const a = await store.open(ask("cs101", "alice"));
+        const b = await store.open(ask("cs101", "bob"));
+        await store.open(ask("cs102", "carol"));
+        assert(await store.replace({ ...b, state: "resolved", closed: { by: "lecturer", at: "2026-01-05T09:05:00.000Z", reason: "resolved" } }, "open"), "resolved");
+        assertEqual(
+          (await store.live("cs101")).map((r) => r.id),
+          [a.id],
+          "live in cs101"
+        );
+      }
+    },
+    {
+      name: "replace writes only while the stored state is still the expected one",
+      run: async () => {
+        const store = await make();
+        const r = await store.open(ask("cs101", "alice"));
+        const acknowledged: HelpRequest = { ...r, state: "acknowledged", acknowledged: { by: "lecturer", at: "2026-01-05T09:01:00.000Z" } };
+        assert(await store.replace(acknowledged, "open"), "first acknowledge");
+        assertEqual(await store.replace(acknowledged, "open"), false, "second acknowledge");
+        assertEqual(await store.replace({ ...r, id: "no-such-request" }, "open"), false, "missing");
+        assertEqual((await store.get(r.id))?.acknowledged, { by: "lecturer", at: "2026-01-05T09:01:00.000Z" }, "kept");
+      }
+    },
+    {
+      name: "what is read back is a copy",
+      run: async () => {
+        const store = await make();
+        const r = await store.open(ask("cs101", "alice"));
+        const read = (await store.get(r.id))!;
+        read.kind = "lecturer";
+        assertEqual((await store.get(r.id))?.kind, "stuck", "stored kind");
+      }
+    }
+  ];
+}
+
+const change = (courseId: string, id: string): AssistanceChange => ({ type: "help-request", courseId, request: { ...ask(courseId, "alice"), id } });
+
+/** A watcher that notes, under `tag`, the id of each change it hears. */
+const hearer = (heard: string[], tag: string) => (c: AssistanceChange) => heard.push(`${tag}:${c.type === "help-request" ? c.request.id : c.annotation.id}`);
+
+export function assistanceFeedContract(make: Make<AssistanceFeed>): ContractCase[] {
+  return [
+    {
+      name: "a published change reaches a watcher of its course only",
+      run: async () => {
+        const feed = await make();
+        const heard: string[] = [];
+        feed.watch("cs101", hearer(heard, "cs101"));
+        feed.watch("cs102", hearer(heard, "cs102"));
+        assert(await feed.publish(change("cs101", "h1")), "published");
+        assertEqual(heard, ["cs101:h1"], "heard");
+      }
+    },
+    {
+      name: "a watcher that unsubscribed hears nothing more",
+      run: async () => {
+        const feed = await make();
+        const heard: string[] = [];
+        const stop = feed.watch("cs101", hearer(heard, "stopped"));
+        feed.watch("cs101", hearer(heard, "watching"));
+        stop();
+        await feed.publish(change("cs101", "h1"));
+        assertEqual(heard, ["watching:h1"], "heard");
+      }
+    },
+    {
+      name: "a change without a course is refused",
+      run: async () => {
+        const feed = await make();
+        assertEqual(await feed.publish(change("", "h1")), false, "refused");
+      }
+    }
+  ];
+}
+
+const annotation = (courseId: string, stepId: string, body = "Await the fetch."): Omit<Annotation, "id" | "revokedAt"> => ({
+  anchor: { kind: "step", ref: step(courseId, stepId) },
+  audience: { kind: "everyone" },
+  body,
+  authorId: "lecturer",
+  createdAt: "2026-01-05T09:00:00.000Z"
+});
+const reflection = (learnerId: string): Omit<Reflection, "id"> => ({ ref: step("cs101"), learnerId, body: "Found it", kind: "discovery", sharedAt: "2026-01-05T09:00:00.000Z" });
+
+export function feedbackStoreContract(make: Make<FeedbackStore>): ContractCase[] {
+  return [
+    {
+      name: "an annotation reads back under its step, unrevoked, with an id",
+      run: async () => {
+        const store = await make();
+        const kept = await store.annotate(annotation("cs101", "02"));
+        assert(kept.id.length > 0, "id");
+        assertEqual(kept.revokedAt, null, "revokedAt");
+        assertEqual(
+          (await store.forStep(step("cs101", "02"))).map((a) => [a.id, a.body, a.authorId]),
+          [[kept.id, "Await the fetch.", "lecturer"]],
+          "at the step"
+        );
+        assertEqual(await store.forStep(step("cs101", "03")), [], "another step");
+      }
+    },
+    {
+      name: "an annotation without an author or a body is rejected",
+      run: async () => {
+        const store = await make();
+        let rejected = 0;
+        for (const bad of [{ ...annotation("cs101", "02"), authorId: "" }, annotation("cs101", "02", "")]) await store.annotate(bad).catch(() => rejected++);
+        assertEqual(rejected, 2, "rejected");
+        assertEqual(await store.forStep(step("cs101", "02")), [], "nothing kept");
+      }
+    },
+    {
+      name: "reflections are kept per course and learner",
+      run: async () => {
+        const store = await make();
+        const kept = await store.reflect(reflection("alice"));
+        await store.reflect(reflection("bob"));
+        assertEqual(
+          (await store.reflections("cs101", "alice")).map((r) => r.id),
+          [kept.id],
+          "alice's"
+        );
+        assertEqual(await store.reflections("cs102", "alice"), [], "another course");
+      }
+    }
+  ];
+}
+
+const note = (stepId: string, body = "Remember the await", courseId = "cs101"): Note => ({
+  ref: step(courseId, stepId),
+  body,
+  kind: "note",
+  updatedAt: "2026-01-05T09:00:00.000Z"
+});
+
+export function notesStoreContract(make: Make<NotesStore>): ContractCase[] {
+  return [
+    {
+      name: "a step with no note reads null",
+      run: async () => {
+        const notes = await make();
+        assertEqual(await notes.get(step("cs101")), null, "note");
+        assertEqual(await notes.forCourse("cs101"), [], "course");
+      }
+    },
+    {
+      name: "a note is kept per step and the last write wins",
+      run: async () => {
+        const notes = await make();
+        await notes.put(note("02", "first"));
+        await notes.put(note("02", "second"));
+        await notes.put(note("03", "other"));
+        assertEqual((await notes.get(step("cs101", "02")))?.body, "second", "step 02");
+        assertEqual((await notes.get(step("cs101", "03")))?.body, "other", "step 03");
+      }
+    },
+    {
+      name: "a course's notes are its own and a removed note is gone",
+      run: async () => {
+        const notes = await make();
+        await notes.put(note("02"));
+        await notes.put(note("03"));
+        await notes.put(note("02", "elsewhere", "cs102"));
+        await notes.remove(step("cs101", "03"));
+        assertEqual(
+          (await notes.forCourse("cs101")).map((n) => n.ref.stepId),
+          ["02"],
+          "cs101"
+        );
+        assertEqual(await notes.get(step("cs101", "03")), null, "removed");
+      }
+    }
+  ];
+}
+
+export function insightsReadContract(
+  make: (rows: { requests: HelpRequest[]; annotations: Annotation[]; reflections: Reflection[] }) => InsightsRead | Promise<InsightsRead>
+): ContractCase[] {
+  const inside = { ...ask("cs101", "alice", "2026-01-05T09:00:00.000Z"), id: "h1" };
+  const before = { ...ask("cs101", "bob", "2026-01-04T23:59:59.000Z"), id: "h2" };
+  const otherCourse = { ...ask("cs102", "carol", "2026-01-05T10:00:00.000Z"), id: "h3" };
+  const period = { from: "2026-01-05T00:00:00.000Z", to: "2026-01-06T00:00:00.000Z" };
+  return [
+    {
+      name: "reads only the course's rows inside the period",
+      run: async () => {
+        const read = await make({
+          requests: [inside, before, otherCourse],
+          annotations: [{ ...annotation("cs101", "02"), id: "a1", revokedAt: null }],
+          reflections: [{ ...reflection("alice"), id: "r1" }]
+        });
+        assertEqual(
+          (await read.helpRequests("cs101", period)).map((r) => r.id),
+          ["h1"],
+          "requests"
+        );
+        assertEqual(
+          (await read.annotations("cs101", period)).map((a) => a.id),
+          ["a1"],
+          "annotations"
+        );
+        assertEqual(
+          (await read.reflections("cs101", period)).map((r) => r.id),
+          ["r1"],
+          "reflections"
+        );
+      }
+    }
+  ];
+}

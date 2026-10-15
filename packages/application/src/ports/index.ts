@@ -27,3 +27,8 @@ export * from "./live-warehouse.ts";
 export * from "./live-event-reporter.ts";
 export * from "./course-facts.ts";
 export * from "./whiteboard-store.ts";
+export * from "./assistance-store.ts";
+export * from "./assistance-feed.ts";
+export * from "./feedback-store.ts";
+export * from "./notes-store.ts";
+export * from "./insights-read.ts";

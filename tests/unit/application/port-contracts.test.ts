@@ -29,6 +29,16 @@ import {
   scormRecordsContract,
   workspaceStoreContract,
   snippetStoreContract,
+  assistanceFeedContract,
+  assistanceStoreContract,
+  feedbackStoreContract,
+  InMemoryAssistanceFeed,
+  InMemoryAssistanceStore,
+  InMemoryFeedbackStore,
+  InMemoryInsightsRead,
+  InMemoryNotesStore,
+  insightsReadContract,
+  notesStoreContract,
   type ContractCase
 } from "@tutors/application/testing";
 import { localStorageProfile, type KeyValueStorage } from "@tutors/profile-localstorage";
@@ -74,3 +84,8 @@ contract("PlaygroundLive: in memory", playgroundLiveContract(() => new InMemoryP
 contract("CodeRuntime: scripted", codeRuntimeContract(() => new ScriptedCodeRuntime({ runtime: "python" }).script({ stdout: "1\n" })));
 contract("SnippetStore: in memory", snippetStoreContract(() => new InMemorySnippetStore()));
 contract("CourseNotices: in memory", courseNoticesContract(() => new InMemoryCourseNotices()));
+contract("AssistanceStore: in memory", assistanceStoreContract(() => new InMemoryAssistanceStore()));
+contract("AssistanceFeed: in memory", assistanceFeedContract(() => new InMemoryAssistanceFeed()));
+contract("FeedbackStore: in memory", feedbackStoreContract(() => new InMemoryFeedbackStore()));
+contract("NotesStore: in memory", notesStoreContract(() => new InMemoryNotesStore()));
+contract("InsightsRead: in memory", insightsReadContract(({ requests, annotations, reflections }) => new InMemoryInsightsRead(requests, annotations, reflections)));

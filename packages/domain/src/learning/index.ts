@@ -1,7 +1,9 @@
 /**
  * Learning activity: what a learner did in a course, when, and for how long. Calendar and lab
  * models aggregate stored records into the views Tutors Time shows; the local-day rules decide
- * which day an instant belongs to; the event builders shape what the reader records.
+ * which day an instant belongs to; the event builders shape what the reader records. The step
+ * reference, attempts, evidence and private notes are the vocabulary the assistance, feedback and
+ * insights contexts share.
  */
 export * from "./types/index.ts";
 export * from "./utils/index.ts";
@@ -14,3 +16,7 @@ export * from "./rows.ts";
 export * from "./local-day.ts";
 export * from "./learning-event.ts";
 export * from "./time-rows.ts";
+export * from "./step-ref.ts";
+export * from "./attempt.ts";
+export * from "./evidence.ts";
+export * from "./notes.ts";

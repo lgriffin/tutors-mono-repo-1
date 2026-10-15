@@ -10,6 +10,9 @@
     "./presence": "./src/presence/index.ts",
     "./access": "./src/access/index.ts",
     "./quiz": "./src/quiz/index.ts",
-    "./live": "./src/live/index.ts"
+    "./live": "./src/live/index.ts",
+    "./assistance": "./src/assistance/index.ts",
+    "./feedback": "./src/feedback/index.ts",
+    "./insights": "./src/insights/index.ts"
   }
 }

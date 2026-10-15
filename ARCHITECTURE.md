@@ -157,12 +157,12 @@ flowchart TB
 
   subgraph application["Application  ·  packages/application  ·  @tutors/application"]
     ports["ports/  (interfaces)"]
-    useCases["course · learning · presence · access · live  (use cases)"]
+    useCases["course · learning · presence · access · live<br/>assistance · feedback · insights  (use cases)"]
     testing["testing/  in-memory adapters + contract suites"]
   end
 
   subgraph domain["Domain  ·  packages/domain  ·  @tutors/domain"]
-    domainModules["course · learning · presence · access · quiz · live"]
+    domainModules["course · learning · presence · access · quiz · live<br/>assistance · feedback · insights"]
   end
 
   apps --> adapters
@@ -180,8 +180,8 @@ flowchart TB
 
 | Ring | Directory | Package | May import | Owns |
 |---|---|---|---|---|
-| Domain | `packages/domain` | `@tutors/domain` (`/course`, `/course/playground`, `/learning`, `/presence`, `/access`, `/quiz`, `/live`) | Nothing outside itself | The course tree and its vocabulary (including the playground and SCORM learning objects and the playground workspace rules), learning events and records, presence rules and the roster, admission, roles and locks, quiz parsing and scoring, and Tutors Live's event contract, session token, presence window and the arithmetic behind its stats, heat maps, activity tables and observation cards |
-| Application | `packages/application` | `@tutors/application` (`/ports`, `/testing`) | The domain | The twenty-nine ports, the use cases, the in-memory adapters and the contract suite each adapter of a port must pass |
+| Domain | `packages/domain` | `@tutors/domain` (`/course`, `/course/playground`, `/learning`, `/presence`, `/access`, `/quiz`, `/live`, `/assistance`, `/feedback`, `/insights`) | Nothing outside itself | The course tree and its vocabulary (including the playground and SCORM learning objects and the playground workspace rules), learning events and records, the lab step reference, attempts, evidence and private notes, help requests and their state table, lecturer annotations and shared reflections, the insights aggregations, presence rules and the roster, admission, roles and locks, quiz parsing and scoring, and Tutors Live's event contract, session token, presence window and the arithmetic behind its stats, heat maps, activity tables and observation cards |
+| Application | `packages/application` | `@tutors/application` (`/ports`, `/testing`) | The domain | The thirty-four ports, the use cases, the in-memory adapters and the contract suite each adapter of a port must pass |
 | Driven adapters | `packages/adapters/driven/*` | `@tutors/<name>` | Ports, domain, one technology, `@tutors/logger` | One technology each, behind a port |
 | Driving adapters | `packages/adapters/driving/*` | `@tutors/<name>` | Ports, domain, `svelte-state`, `@tutors/logger` | The Svelte state (the only home of runes), the UI, themes, i18n, a11y, tours, consent |
 | Apps | `apps/*` | `tutors-reader`, `tutors-catalogue`, `tutors-live`, `tutors-time` | Everything; never another app or service | Composition, routes, server hooks, environment |
@@ -344,6 +344,27 @@ classDiagram
     +identify(uid?) / start(course, lo) stop
     +flush() / flushBeacon()
   }
+  class AssistanceStore {
+    +open(request) Promise~HelpRequest~
+    +get(id) / live(courseId)
+    +replace(next, from) Promise~boolean~
+  }
+  class AssistanceFeed {
+    +publish(change) Promise~boolean~
+    +watch(courseId, listener) Unsubscribe
+  }
+  class FeedbackStore {
+    +annotate(annotation) / forStep(ref)
+    +reflect(reflection) / reflections(courseId, learnerId)
+  }
+  class NotesStore {
+    +get(ref) / put(note) / remove(ref)
+    +forCourse(courseId) Promise~Note[]~
+  }
+  class InsightsRead {
+    +helpRequests(courseId, period)
+    +annotations(courseId, period) / reflections(courseId, period)
+  }
 ```
 
 | Port | What the application needs | Driven adapters | In-memory adapter | Contract suite |
@@ -377,10 +398,17 @@ classDiagram
 | `ActivityRead` | The rollups the read model computes stats, heat maps, activity and observations from | `live-postgres` | `inMemoryWarehouse` | — |
 | `ActivityWrite` | What the ingest use case appends | `live-postgres` | `inMemoryWarehouse` | — |
 | `LiveEventReporter` | Tell Tutors Live what this reader session is doing, with a rotating token and no login | `live-events-http` | `RecordingLiveEventReporter` | — |
+| `AssistanceStore` | Open help requests, read one or a course's live ones, and move one with a compare-and-set on its state so it reaches each state once | none yet (the storage adapter follows the database decision; in memory until then) | `InMemoryAssistanceStore` | `assistanceStoreContract` |
+| `AssistanceFeed` | Tell the lecturers watching a course that a help request or an annotation changed | none yet (the server-sent feed follows the database decision) | `InMemoryAssistanceFeed` | `assistanceFeedContract` |
+| `FeedbackStore` | Keep lecturers' annotations and the reflections students share; read a step's annotations and a learner's reflections | none yet (in memory until the storage adapter) | `InMemoryFeedbackStore` | `feedbackStoreContract` |
+| `NotesStore` | A learner's private note per lab step, and a course's notes for export; never sent to a server | none yet (`notes-localstorage` is planned) | `InMemoryNotesStore` | `notesStoreContract` |
+| `InsightsRead` | Read a course's stored help requests, annotations and reflections over a bounded period, with no write method | none yet (in memory until the storage adapter) | `InMemoryInsightsRead` | `insightsReadContract` |
 
 The application also owns **authorisation** (`packages/application/src/access/authorization.ts`): `createAuthorization({ courseFacts, clock, admins })` answers `can(actor, action, resource)` from the course's published facts (cached, with a stale fallback and an `AuthorizationUnavailableError` when the course host cannot be reached) and the domain's roles; the reader's server routes ask it before every write. `loadTimeRows` (`learning/time-rows.ts`) is the use case behind `GET /api/time/:courseId`: an educator gets the rows, a student gets them pseudonymised (`pseudonymise` in the domain).
 
-Application events (`AppEvent`) are `learning` (a learner's page load or tick), `presence` (a sharing learner moved) and `course-visit` (a learner opened a course; the catalogue counts it). They are how one part of the product reacts to another without importing it.
+Application events (`AppEvent`) are `learning` (a learner's page load or tick), `presence` (a sharing learner moved), `course-visit` (a learner opened a course; the catalogue counts it), `evidence-recorded` (a learner left evidence at a step: the step and the kind, never the content), `help-requested` (a student asked, or asked again), `help-answered` (a lecturer answered with a hint or resolved a request) and `feedback-posted` (an educator posted an annotation or a broadcast). They are how one part of the product reacts to another without importing it.
+
+The learning, assistance, feedback and insights contexts (Rules 0375 to 0389, 0400 to 0402, 0410 and 0411) follow the same shape: the rules in `@tutors/domain/learning` (the `StepRef` every record carries, `attemptsFromRecords`, evidence, `noteKey` and `notesToMarkdown`), `@tutors/domain/assistance` (the help-request state table, `waitingMs`, `shouldEscalate`, `shouldExpire`, `queueOrder`), `@tutors/domain/feedback` (anchors, audiences, reflections) and `@tutors/domain/insights` (step diagnostics, student progress, response times), and the use cases in `@tutors/application` (`saveNote`, `openStepNotes`, `exportNotes`, `withMemoryFallback`, `recordEvidence`; `requestHelp`, `acknowledgeHelp`, `answerHint`, `resolveHelp`, `withdrawHelp`, `helpQueue`; `annotate`, `broadcast`, `shareReflection`; `stepDiagnostics`, `studentProgress`, `helpResponseTimes`). The four contexts import none of each other's use cases; they share the Learning context's types and react through application events. Their ports have only in-memory adapters so far: no table, channel or route backs them yet, and the storage and feed adapters follow the database decision.
 
 Tutors Live's events (`LiveEvent`, `@tutors/domain/live`) are a separate contract: anonymous, carried over the `LiveBus` rather than the in-process publisher, and counted whether or not anyone is signed in. The use cases over them are `acceptLiveEvents` (validate a posted batch and publish it), `createIngestor` (bus to presence store and warehouse, closing idle sessions) and the read model (`statsFor`, `heatmapFor`, `activityFor`, `observationsFor`, `coursesFor`), all in `@tutors/application`. The design is in [`docs/LIVE-PIPELINE.md`](docs/LIVE-PIPELINE.md).
 
@@ -650,6 +678,10 @@ Ownership here means: which package is allowed to know a thing, and therefore wh
 | What a learning event is and how a day is cut | `@tutors/domain/learning` (`pageLoadEvent`, `tickEvent`, `localYyyyMmDd`) | Compute a day or an event shape |
 | Who counts as present and for how long | `@tutors/domain/presence` (`ROSTER_REFRESH_MS`, `keepOnRoster`, `presentLearners`) | Decide roster membership |
 | Who may enter a course and what is locked | `@tutors/domain/access` and `courseAdmission` | Check a whitelist or a lock inline |
+| What a lab step reference, an attempt, a piece of evidence and a private note are | `@tutors/domain/learning` (`StepRef`, `attemptsFromRecords`, `evidenceAtStep`, `noteKey`, `notesToMarkdown`) | Identify a step another way; keep attempts in a record of their own |
+| The states a help request moves through, its waiting time, escalation, expiry and queue order | `@tutors/domain/assistance` (`transition`, `waitingMs`, `shouldEscalate`, `shouldExpire`, `queueOrder`) | Store a waiting time; move a request outside the state table |
+| What an annotation is anchored to and who it is for | `@tutors/domain/feedback` (`anchorOf`, `audienceOf`, `reflectionFromNote`) | Anchor an annotation to more than one thing |
+| How step diagnostics, student progress and response times are computed | `@tutors/domain/insights` | Compute an insights number in a route, a component or an adapter; write from insights |
 | What a live event is, what a session and a visitor mean, the presence window, and how rollup rows become stats, heat maps and observations | `@tutors/domain/live` (`parseLiveEvents`, `currentSid`, `snapshotOf`, `headlineStats`, `serviceHourHeatmap`, `observe`, `activityReport`) | Compute a live number in a route, a Svelte component or an adapter |
 | What the application needs from the world | `@tutors/application/ports` | Add a method a technology happens to offer; a port grows only when a use case needs it |
 | The order of operations in a feature | `@tutors/application` use cases | Sequence port calls in a Svelte service or a route |
@@ -783,6 +815,7 @@ The product's behaviour is specified the same way. The features that govern each
 | Presence and live views | `student/live-presence`, `live/presence-tracking`, `live/live-activity`, `shared/realtime-usage`, `shared/realtime-gateway`, `shared/live-activity-budget`, `instructor/student-engagement` |
 | Sign-in, sessions and admission | `shared/authentication`, `shared/sign-in-session`, `instructor/whitelist-management`, `ui/content-locks` |
 | Snippet sharing and lecturer broadcasts | `instructor/snippet-sharing` |
+| Learning evidence, private notes, help requests, feedback and insights | `student/learning-evidence`, `student/help-requests`, `instructor/help-queue`, `instructor/contextual-feedback`, `instructor/learning-insights` |
 | The data API and the database policies | `shared/server-data-access` |
 | Catalogue and discovery | `student/course-discovery`, `ui/catalogue` |
 | Reading, search, labs, quizzes, resources | `ui/reading`, `ui/search`, `student/search-content`, `student/lab-interaction`, `ui/learning-activities`, `ui/resource-cards`, `ui/course-tools` |
