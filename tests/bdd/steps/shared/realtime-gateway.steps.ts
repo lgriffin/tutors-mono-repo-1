@@ -1,17 +1,21 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
 
-vi.mock("../../../../packages/svelte/community/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
+vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
   createClient: (await import("../../support/supabase-recorder.ts")).createClient
 }));
 vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
 vi.mock("$app/env/public", async () => (await import("../../support/supabase-recorder.ts")).publicEnv);
 
 import { createRealtimeGateway, topics, type RealtimeGateway, type Subscription, type Topic } from "../../../../packages/jsr/realtime/src/index.ts";
-import { supabaseRealtimeAdapter } from "../../../../packages/svelte/realtime-supabase/src/index.ts";
+import { supabaseRealtimeAdapter } from "../../../../packages/adapters/driven/realtime-supabase/src/gateway.ts";
 import { clientOptions, recorder, type RecordingChannel } from "../../support/supabase-recorder.ts";
 import { mountWhiteboardEditor } from "../../support/whiteboard-editor.ts";
-import "../../../../packages/svelte/community/src/utils/supabase-client.ts";
+import { composeReader } from "../../../../apps/reader/src/lib/compose.ts";
+import { publicEnv } from "../../support/supabase-recorder.ts";
+
+// The reader's composition root creates the Supabase client with the gateway's socket options; the recorder keeps them.
+composeReader(publicEnv, { identityClient: { signIn: async () => {}, signOut: async () => {} } });
 
 const feature = await loadFeature("tests/bdd/features/shared/realtime-gateway.feature");
 

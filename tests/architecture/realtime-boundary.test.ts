@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
  * The whiteboard editor is a static page that cannot import workspace packages; it carries the same
  * budget inline until phase 4 (#477) hands it a token through the parent.
  */
-const ALLOWED = ["packages/svelte/realtime-supabase/src/index.ts", "apps/reader/static/excalidraw-editor.html"];
+const ALLOWED = ["packages/adapters/driven/realtime-supabase/src/gateway.ts", "apps/reader/static/excalidraw-editor.html"];
 
 describe("realtime boundary", () => {
   it("drives Realtime channels only from the realtime adapter", () => {
