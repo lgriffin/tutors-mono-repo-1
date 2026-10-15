@@ -80,36 +80,32 @@
   <CodeEditor value={code} language={editorLanguage} label={`${language} exercise code`} onChange={(value) => (code = value)} onRun={runCode} />
 </div>
 
-<div class="border-surface-200 dark:border-surface-700 flex items-center gap-2 border-t px-3 py-1.5">
+<div class="ui-actions exercise-actions" aria-busy={isRunning}>
   {#if runnable}
-    <button
-      class="run-button bg-success-100 dark:bg-success-900 text-success-700 dark:text-success-300 hover:bg-success-200 dark:hover:bg-success-800 flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-      onclick={runCode}
-      disabled={isRunning}
-    >
+    <button class="ui-button ui-button-primary" onclick={runCode} disabled={isRunning}>
       {#if isRunning}
-        <span class="animate-spin text-sm">&#9696;</span>
+        <span class="animate-spin text-sm" aria-hidden="true">&#9696;</span>
         {notebookKernel?.detail || t("playground.running")}
       {:else}
-        <span class="text-sm">&#9654;</span>
+        <span aria-hidden="true">&#9654;</span>
         {t("playground.run")}
       {/if}
     </button>
 
     {#if hasRun}
-      <button class="bg-surface-100 dark:bg-surface-800 text-surface-500 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-700 flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors" onclick={resetCode}>
+      <button class="ui-button" disabled={isRunning} onclick={resetCode}>
         {t("playground.reset")}
       </button>
-      <span class="text-surface-400 font-mono text-xs">[{executionCount ?? " "}]</span>
+      <span class="font-mono text-xs text-[var(--ui-muted)]">[{executionCount ?? " "}]</span>
     {/if}
   {:else}
-    <span class="text-surface-400 text-xs">{t("notebook.notRunnable")}</span>
+    <span class="text-xs text-[var(--ui-muted)]">{t("notebook.notRunnable")}</span>
   {/if}
 </div>
 
 {#if hasRun && output}
-  <div class="notebook-outputs border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900 border-t p-3" role="status" aria-label={`${runtimeName} output`}>
-    <pre class="font-mono text-sm whitespace-pre-wrap {failed ? 'text-error-600 dark:text-error-400' : ''}">{output}</pre>
+  <div class="notebook-outputs exercise-output" role="status" aria-label={`${runtimeName} output`}>
+    <pre class="font-mono text-sm whitespace-pre-wrap {failed ? 'text-[var(--ui-danger)]' : ''}">{output}</pre>
   </div>
 {/if}
 

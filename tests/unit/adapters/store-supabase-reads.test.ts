@@ -112,11 +112,12 @@ describe("content locks", () => {
     expect(await upsertLock("cs101", "/lab/1", true, "")).toBe(false);
   });
 
-  it("removes a lock by course and route, and reports a failed delete", async () => {
-    const { client, ops } = scriptedClient({ tutors_content_locks: [{ error: null }, { error: { message: "down" } }] });
+  it("removes a lock by course and route, and reports a delete that matched nothing or failed", async () => {
+    const { client, ops } = scriptedClient({ tutors_content_locks: [{ data: [{ lo_route: "/lab/1" }], error: null }, { data: [], error: null }, { error: { message: "down" } }] });
     configureSupabase(client as never);
     expect(await removeLock("cs101", "/lab/1")).toBe(true);
-    expect(ops("tutors_content_locks")).toEqual(["delete", "eq", "eq"]);
+    expect(ops("tutors_content_locks")).toEqual(["delete", "eq", "eq", "select"]);
+    expect(await removeLock("cs101", "/lab/1")).toBe(false);
     expect(await removeLock("cs101", "/lab/1")).toBe(false);
     expect(await removeLock("cs101", "")).toBe(false);
   });
