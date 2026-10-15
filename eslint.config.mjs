@@ -105,6 +105,10 @@ export default tseslint.config(
       "services/**",
       ".claude/**",
       ".generator-diff/**",
+      // Pyodide, the TypeScript compiler and KaTeX, copied in by scripts/sync-runtimes.ts.
+      "apps/reader/static/runtimes/pyodide/**",
+      "apps/reader/static/runtimes/typescript/**",
+      "apps/reader/static/runtimes/katex/**",
     ],
   },
 );

@@ -66,12 +66,15 @@ function localizePath(lo: Lo) {
   lo.route = lo.route?.replace("https://", "http://");
   lo.video = lo.video?.replace("https://", "http://");
   lo.img = lo.img?.replace("https://", "http://");
-  const withFiles = lo as Lo & { pdf?: string; excalidraw?: string };
+  const withFiles = lo as Lo & { pdf?: string; excalidraw?: string; scorm?: string };
   if (withFiles.pdf) {
     withFiles.pdf = withFiles.pdf.replace("https://", "http://");
   }
   if (withFiles.excalidraw) {
     withFiles.excalidraw = withFiles.excalidraw.replace("https://", "http://");
+  }
+  if (withFiles.scorm) {
+    withFiles.scorm = withFiles.scorm.replace("https://", "http://");
   }
 }
 

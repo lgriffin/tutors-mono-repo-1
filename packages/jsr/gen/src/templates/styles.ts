@@ -25,7 +25,9 @@ export const icons = {
   'info': "fluent:info-28-regular",
   'podcast': "fluent:mic-20-filled",
   'notebook': 'fluent:notebook-24-regular',
-  'quiz': 'fluent:quiz-new-24-filled'
+  'quiz': 'fluent:quiz-new-24-filled',
+  'scorm': 'fluent:box-24-filled',
+  'playground': 'fluent:code-24-filled'
 } as const;
 
 export const colours = {
@@ -47,6 +49,8 @@ export const colours = {
   'podcast': '#ba5150',
   'notebook': '#557927',
   'quiz': '#6366f1',
+  'scorm': '#7c5cbf',
+  'playground': '#2f6f8f',
 } as const;
 
 export const backgroundColours = {
@@ -69,6 +73,8 @@ export const backgroundColours = {
   'panelnote': '#d27711',
   'notebook': '#557927',
   'quiz': '#6366f1',
+  'scorm': '#7c5cbf',
+  'playground': '#2f6f8f',
 } as const;
 
 export type IconType = keyof typeof icons;
@@ -109,6 +115,8 @@ export const loColours = {
   "podcast": { border: "#008c8f", background: "#d6e9e9" },
   "notebook": { border: "#557927", background: "#d9eee0" },
   "quiz": { border: "#6366f1", background: "#e0e7ff" },
+  "scorm": { border: "#7c5cbf", background: "#e6dff5" },
+  "playground": { border: "#2f6f8f", background: "#dbe9f1" },
 }
 
 export function loBorderColour(type: IconType): string {

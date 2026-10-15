@@ -13,6 +13,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.5",
     "@opentelemetry/api": "1.9.1",
     "@prometheus-io/client": "^0.16.1",
     "@tutors/application": "workspace:*",
@@ -21,7 +22,10 @@
     "@tutors/profile-localstorage": "workspace:*",
     "@tutors/realtime-supabase": "workspace:*",
     "@tutors/render-markdown": "workspace:*",
+    "@tutors/runtime-wasm": "workspace:*",
+    "@tutors/scorm-runtime": "workspace:*",
     "@tutors/store-supabase": "workspace:*",
+    "@tutors/workspace-indexeddb": "workspace:*",
     "dompurify": "^3.4.14",
     "isomorphic-dompurify": "^4.5.0"
   },

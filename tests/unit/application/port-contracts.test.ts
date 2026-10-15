@@ -6,15 +6,25 @@
 import { describe, it } from "vitest";
 import {
   accessStoreContract,
+  codeRuntimeContract,
   eventPublisherContract,
   InMemoryAccessStore,
   InMemoryLearningEventSink,
+  InMemoryPlaygroundLive,
+  InMemoryPlaygroundSnapshots,
   InMemoryPresence,
   InMemoryProfile,
+  InMemoryScormRecords,
+  InMemoryWorkspaceStore,
   learningEventSinkContract,
+  playgroundLiveContract,
+  playgroundSnapshotsContract,
   presenceContract,
   profileContract,
   RecordingPublisher,
+  ScriptedCodeRuntime,
+  scormRecordsContract,
+  workspaceStoreContract,
   type ContractCase
 } from "@tutors/application/testing";
 import { localStorageProfile, type KeyValueStorage } from "@tutors/profile-localstorage";
@@ -53,3 +63,8 @@ contract("PresencePort: in memory", presenceContract(() => new InMemoryPresence(
 contract("EventPublisher: in memory", eventPublisherContract(() => new RecordingPublisher()));
 contract("EventPublisher: in process", eventPublisherContract(() => inProcessPublisher()));
 contract("LearningEventSink: in memory", learningEventSinkContract(() => new InMemoryLearningEventSink()));
+contract("WorkspaceStore: in memory", workspaceStoreContract(() => new InMemoryWorkspaceStore()));
+contract("ScormRecords: in memory", scormRecordsContract(() => new InMemoryScormRecords()));
+contract("PlaygroundSnapshots: in memory", playgroundSnapshotsContract(() => new InMemoryPlaygroundSnapshots({ enabled: true, reviews: ["cs101"] })));
+contract("PlaygroundLive: in memory", playgroundLiveContract(() => new InMemoryPlaygroundLive()));
+contract("CodeRuntime: scripted", codeRuntimeContract(() => new ScriptedCodeRuntime({ runtime: "python" }).script({ stdout: "1\n" })));

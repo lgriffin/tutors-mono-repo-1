@@ -1,10 +1,17 @@
 export type Role = "student" | "educator";
 
-export type Permission = "broadcast" | "quiz:manage" | "analytics:view" | "content:lock";
+export type Permission =
+  | "broadcast"
+  | "quiz:manage"
+  | "analytics:view"
+  | "content:lock"
+  // Reading the playground work students have handed in. Enforced in the database by the
+  // policies on `playground_snapshots`; this is the same rule stated where the UI can ask.
+  | "playground:view";
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   student: [],
-  educator: ["broadcast", "quiz:manage", "analytics:view", "content:lock"]
+  educator: ["broadcast", "quiz:manage", "analytics:view", "content:lock", "playground:view"]
 };
 
 export function roleHasPermission(role: Role, permission: Permission): boolean {

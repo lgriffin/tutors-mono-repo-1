@@ -176,13 +176,13 @@ flowchart TB
 
 | Ring | Directory | Package | May import | Owns |
 |---|---|---|---|---|
-| Domain | `packages/domain` | `@tutors/domain` (`/course`, `/learning`, `/presence`, `/access`, `/quiz`) | Nothing outside itself | The course tree and its vocabulary, learning events and records, presence rules and the roster, admission, roles and locks, quiz parsing and scoring |
-| Application | `packages/application` | `@tutors/application` (`/ports`, `/testing`) | The domain | The twelve ports, the use cases, the in-memory adapters and the contract suite each adapter of a port must pass |
+| Domain | `packages/domain` | `@tutors/domain` (`/course`, `/course/playground`, `/learning`, `/presence`, `/access`, `/quiz`) | Nothing outside itself | The course tree and its vocabulary (including the playground and SCORM learning objects and the playground workspace rules), learning events and records, presence rules and the roster, admission, roles and locks, quiz parsing and scoring |
+| Application | `packages/application` | `@tutors/application` (`/ports`, `/testing`) | The domain | The eighteen ports, the use cases, the in-memory adapters and the contract suite each adapter of a port must pass |
 | Driven adapters | `packages/adapters/driven/*` | `@tutors/<name>` | Ports, domain, one technology, `@tutors/logger` | One technology each, behind a port |
 | Driving adapters | `packages/adapters/driving/*` | `@tutors/<name>` | Ports, domain, `svelte-state`, `@tutors/logger` | The Svelte state (the only home of runes), the UI, themes, i18n, a11y, tours, consent |
 | Apps | `apps/*` | `tutors-reader`, `tutors-catalogue`, `tutors-live`, `tutors-time` | Everything; never another app | Composition, routes, server hooks, environment |
 | Platform | `packages/platform/*` | `@tutors/logger`, `@tutors/metrics`, `@tutors/app-config` | Nothing in the rings | Logging, metrics, build configuration; used by every ring that runs on a server |
-| JSR | `packages/jsr/*` | `@tutors/tutors-model-lib`, `@tutors/tutors-time-lib`, `@tutors/tutors-types`, `@tutors/identity`, `@tutors/tutors-gen-lib`, `@tutors/tutors`, `@tutors/tutors-lite`, `@tutors/tutors-create` | The facades import the rings; the authoring toolchain is self-contained | Published packages: facades over the domain for one major, and the authoring toolchain |
+| JSR | `packages/jsr/*` | `@tutors/tutors-model-lib`, `@tutors/tutors-time-lib`, `@tutors/tutors-types`, `@tutors/identity`, `@tutors/tutors-gen-lib`, `@tutors/tutors`, `@tutors/tutors-lite`, `@tutors/tutors-create`, `@tutors/tutors-scorm` | The facades import the rings; the authoring toolchain is self-contained | Published packages: facades over the domain for one major, and the authoring toolchain |
 
 ---
 
@@ -330,6 +330,12 @@ classDiagram
 | `EventPublisher` | Tell the rest of the application something happened | `bus-inprocess` | `RecordingPublisher` | `eventPublisherContract` |
 | `Clock` | The instant, so time can be frozen | `clock` | `FixedClock` | — |
 | `AssignmentSource` | Assignments and submissions from the VLE | `moodle` | `InMemoryAssignmentSource` | — |
+| `CodeRuntimePort` | Open a run-time for student code (`CodeRuntime`): a Python, JavaScript or TypeScript engine that never runs on the reader's own origin | `runtime-wasm` | `ScriptedCodeRuntimePort` | — |
+| `CodeRuntime` | One opened run-time: start, execute a workspace, stream its output, stop, restart, dispose | `runtime-wasm` (the `Kernel`) | `ScriptedCodeRuntime` | `codeRuntimeContract` |
+| `WorkspaceStore` | Keep a student's playground edits between visits, with no account | `workspace-indexeddb` | `InMemoryWorkspaceStore` | `workspaceStoreContract` |
+| `ScormRecords` | Each learner's SCORM run-time state, so an imported package resumes anywhere | `store-supabase` | `InMemoryScormRecords` | `scormRecordsContract` |
+| `PlaygroundSnapshots` | A student's workspace handed to the lecturer, and whether this deployment can attribute it | `store-supabase` | `InMemoryPlaygroundSnapshots` | `playgroundSnapshotsContract` |
+| `PlaygroundLive` | A student sharing a playground as it is typed, and a lecturer watching | `realtime-supabase` | `InMemoryPlaygroundLive` | `playgroundLiveContract` |
 
 Application events (`AppEvent`) are `learning` (a learner's page load or tick), `presence` (a sharing learner moved) and `course-visit` (a learner opened a course; the catalogue counts it). They are how one part of the product reacts to another without importing it.
 
@@ -341,8 +347,8 @@ Application events (`AppEvent`) are `learning` (a learner's page load or tick), 
 
 | Package | Technology (the only package that imports it) | Ports | Also exports |
 |---|---|---|---|
-| `@tutors/store-supabase` | `@supabase/supabase-js` (shared with realtime-supabase) | `LearningEventSink`, `LearningRecords`, `ProfilePort`, `AccessStore` | The client seam (`createSupabaseClient`, `configureSupabase`), the catalogue (`catalogueService`, `updateCourseList`), the error transport, the health check |
-| `@tutors/realtime-supabase` | `@supabase/supabase-js` Realtime (the only package that drives a channel: `gateway.ts`) | `PresencePort`; the `@tutors/realtime` broker adapter and `realtimeClientOptions`; `receiveLiveActivity`, the reader server's side of Tutors Live | `ALL_COURSES_CHANNEL`, `LIVE_ACTIVITY_ROUTE`, the budget calls (`watchLiveTopic`, `claimLivePublish`) |
+| `@tutors/store-supabase` | `@supabase/supabase-js` (shared with realtime-supabase) | `LearningEventSink`, `LearningRecords`, `ProfilePort`, `AccessStore`, `ScormRecords`, `PlaygroundSnapshots` (as the signed-in student, with the token `/api/runtime-token` mints) | The client seam (`createSupabaseClient`, `configureSupabase`), the catalogue (`catalogueService`, `updateCourseList`), the error transport, the health check |
+| `@tutors/realtime-supabase` | `@supabase/supabase-js` Realtime (the only package that drives a channel: `gateway.ts`) | `PresencePort`, `PlaygroundLive` (through the gateway; browser-published, `TODO(budget)`); the `@tutors/realtime` broker adapter and `realtimeClientOptions`; `receiveLiveActivity`, the reader server's side of Tutors Live | `ALL_COURSES_CHANNEL`, `LIVE_ACTIVITY_ROUTE`, the budget calls (`watchLiveTopic`, `claimLivePublish`) |
 | `@tutors/course-http` | `fetch` | `CourseSource` | `CourseNotFoundError`, `CourseUnreachableError` (defined in the port) |
 | `@tutors/render-markdown` | `markdown-it` and plugins, `shiki`, `katex` | `ContentRenderer` | The conversions the model facade re-exports (`convertLoToHtml`, ...) |
 | `@tutors/profile-localstorage` | `localStorage` | `ProfilePort` | — |
@@ -350,14 +356,17 @@ Application events (`AppEvent`) are `learning` (a learner's page load or tick), 
 | `@tutors/identity-better-auth` | `better-auth` | `SessionPort` (`/server`), `IdentityClient` (`/client`) | `createIdentityHandle` |
 | `@tutors/moodle` | Moodle web services over `fetch` | `AssignmentSource` | — |
 | `@tutors/clock` | `HARNESS_NOW` | `Clock` | The `/version` endpoint |
+| `@tutors/runtime-wasm` | A sandboxed iframe (`sandbox="allow-scripts"`, an opaque origin) hosting a Web Worker that loads Pyodide, the TypeScript compiler or plain JavaScript from `/runtimes/` | `CodeRuntimePort`, `CodeRuntime` | `Kernel`, `DEFAULT_TIMEOUT_MS` |
+| `@tutors/workspace-indexeddb` | IndexedDB | `WorkspaceStore` | — |
 
 ### Driving adapters (`packages/adapters/driving/`)
 
 | Package | Role | Reaches the outside world through |
 |---|---|---|
-| `@tutors/svelte-state` | The reader's state (`currentCourse`, `currentLo`, `tutorsId`, ...) and services (`courseService`, `analyticsService`, `presenceService`, `liveService`, `tutorsConnectService`, `rbacService`, `markdownService`). The only package in which `$state`, `$derived` and `$effect` appear in `.ts` modules. | `adapters()`, the port set the app installed with `configureAdapters` |
+| `@tutors/svelte-state` | The reader's state (`currentCourse`, `currentLo`, `tutorsId`, ...) and services (`courseService`, `analyticsService`, `presenceService`, `liveService`, `tutorsConnectService`, `rbacService`, `markdownService`, `playgroundLiveService`, the notebook kernel context). The only package in which `$state`, `$derived` and `$effect` appear in `.ts` modules. | `adapters()`, the port set the app installed with `configureAdapters` |
 | `@tutors/ui-primitives` → `@tutors/ui-navigators` → `@tutors/ui-components` | The UI, in a strict one-directional layering | `svelte-state` |
 | `@tutors/themes`, `@tutors/i18n`, `@tutors/a11y`, `@tutors/tour`, `@tutors/privacy` | Cross-cutting | `svelte-state`; none imports a UI package |
+| `@tutors/scorm-runtime` | The SCORM 1.2 and 2004 run-time API (`API` / `API_1484_11`) an imported package finds on the reader's window, the CMI model, and the `/scorm-content/` pass-through rules that bring a package onto the reader's origin | The `ScormRecords` port, handed in by the `Scorm` component as the session's remote store |
 
 A driving adapter never imports a driven adapter (`svelte-state-imports-no-adapter`). It asks `adapters()` for the port and the app has already decided what is behind it.
 
@@ -618,6 +627,9 @@ Every Supabase table and channel has exactly one adapter that reads or writes it
 | `realtime_settings`, `realtime_budget`, `realtime_watchers` | `realtime-supabase` (through the `realtime_watch`, `realtime_claim_live_publish` and `live_budget_tier` functions only; no policy lets a browser read them) | `PresencePort` | Live tabs (watchers), the reader's server (the day's spend) | The functions |
 | Realtime channel `<courseId>` | `realtime-supabase` | `PresencePort` | The reader's server (HTTP send, never joined) | Live course page |
 | Realtime channel `tutors-all-course-access` | `realtime-supabase` | `PresencePort` | The reader's server (HTTP send) | Live landing page |
+| `scorm_records` | `store-supabase` (scorm-records) | `ScormRecords` | Reader (a SCO's Commit, one row per learner per package) | Reader (resume) |
+| `playground_snapshots` | `store-supabase` (playground-snapshots); row-level security on the claims of the token `/api/runtime-token` signs (`PRIVATE_SUPABASE_JWT_SECRET`), no anonymous policy | `PlaygroundSnapshots` | Reader, by the signed-in student (their own row) | Reader, by the student (own) or an educator the course's `enrollment.yaml` names |
+| Realtime channel `playground:<courseId>:<loId>` | `realtime-supabase` (playground-live, through the gateway) | `PlaygroundLive` | A sharing student's browser (`state`), a watching lecturer's browser (`watching`); not yet under the day's budget (`TODO(budget)`) | The other side of the same share |
 
 Migrations are expand-only and live under `supabase/migrations/`; `pnpm check:migrations` holds the rule. A migration ships before or after the code that uses it, never in the same deploy as a contraction.
 
@@ -689,6 +701,8 @@ The product's behaviour is specified the same way. The features that govern each
 | Sign-in, sessions and admission | `shared/authentication`, `shared/sign-in-session`, `instructor/whitelist-management`, `ui/content-locks` |
 | Catalogue and discovery | `student/course-discovery`, `ui/catalogue` |
 | Reading, search, labs, quizzes, resources | `ui/reading`, `ui/search`, `student/search-content`, `student/lab-interaction`, `ui/learning-activities`, `ui/resource-cards`, `ui/course-tools` |
+| Code in the browser: playgrounds and notebooks | `student/playground-coding`, `instructor/playground-authoring` |
+| SCORM: importing packages and exporting a course | `course/scorm-import`, `instructor/scorm-export` |
 | Shell, themes, accessibility, i18n, tours | `ui/shell-and-navigation`, `ui/preferences-and-themes`, `shared/theming`, `ui/accessibility`, `developer/theme-customisation`, `developer/i18n-localisation`, `developer/guided-tour` |
 | Resilience and errors | `shared/offline-resilience`, `shared/error-handling` |
 | Shared types and the rings | `developer/shared-types`, `developer/hexagonal-architecture` |
@@ -732,7 +746,8 @@ The test tiers A to O and what runs where are in [`guides/testing/TESTING-OVERVI
 | `@tutors/tutors-types` (`packages/jsr/types`) | Facade over the domain's shared types and vocabulary |
 | `@tutors/identity` (`packages/jsr/identity`) | `Actor`, `SessionPort`, `IdentityClient` for consumers outside the repository |
 | `@tutors/realtime` (`packages/jsr/realtime`) | The Realtime gateway: topics, the broker adapter contract, the per-tab budget, jittered rejoin and counts (`realtime-contracts-self-contained`); framework-free, imported by the realtime adapter only |
-| `@tutors/tutors-gen-lib`, `@tutors/tutors`, `@tutors/tutors-lite`, `@tutors/tutors-create` | The authoring toolchain: course builder, emitters, Marp rendering, templates, the CLIs and the scaffolder. Unchanged by the retrofit, exempt from the vendor rule, and extracted independently |
+| `@tutors/tutors-gen-lib`, `@tutors/tutors`, `@tutors/tutors-lite`, `@tutors/tutors-create` | The authoring toolchain: course builder, emitters (including the SCORM export: manifest, LMS run-time wrapper, zip), Marp rendering, templates, the CLIs and the scaffolder. Unchanged by the retrofit, exempt from the vendor rule, and extracted independently |
+| `@tutors/tutors-scorm` (`packages/jsr/tutors-scorm`) | The CLI that exports a course as a SCORM 1.2 or 2004 package (`generateScormCourse` of the gen lib) |
 
 The facades exist so that published courses and tools built on them keep working through one major version. New code in the repository imports the rings.
 
@@ -742,7 +757,8 @@ The facades exist so that published courses and tools built on them keep working
 
 - **Images**: one per app, built from the Node 22 runtime image (no package manager in the runtime layer, Rule 0220), pushed to quay.io/tutors-sdk with a cosign signature and an SBOM.
 - **Kubernetes**: `deploy/k8s/base`, `components`, `variants` and one overlay per app under `deploy/k8s/overlays/`; `deploy/k8s/next` reuses production images for the next hosts. `pnpm check:k8s` and the platform-conformance tests hold the restricted-SCC, arbitrary-UID and read-only-root policies.
-- **Environment**: `PUBLIC_ANON_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY` are read by the composition roots; `PRIVATE_AUTH_SECRET`, `PRIVATE_AUTH_GITHUB_ID`, `PRIVATE_AUTH_GITHUB_SECRET` by the reader's identity handle; `MOODLE_WS_URL` and its token by the time app's server; `HARNESS_NOW` freezes the clock for the release harness.
+- **Environment**: `PUBLIC_ANON_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY` are read by the composition roots; `PRIVATE_AUTH_SECRET`, `PRIVATE_AUTH_GITHUB_ID`, `PRIVATE_AUTH_GITHUB_SECRET` by the reader's identity handle; `PRIVATE_SUPABASE_JWT_SECRET` by the reader's `/api/runtime-token` route, which mints the one-hour HS256 token the `PlaygroundSnapshots` adapter acts with (unset, handing in is simply not offered); `MOODLE_WS_URL` and its token by the time app's server; `HARNESS_NOW` freezes the clock for the release harness; `TUTORS_PYODIDE_PACKAGE_INDEX` points `pnpm runtimes:sync` at a Pyodide mirror.
+- **Code run-times**: `pnpm runtimes:sync` (run before `dev` and `build`) copies Pyodide, the TypeScript compiler and KaTeX into `apps/reader/static/runtimes/`. Those files are served with `Access-Control-Allow-Origin: *`, `Cross-Origin-Resource-Policy: cross-origin` and a CSP of their own that allows `eval` and WebAssembly, because the frame that loads them has an opaque origin (`sandbox="allow-scripts"`, no cookies, no storage, no way back into the reader). The reader's own CSP gains only `'wasm-unsafe-eval'` and `worker-src 'self' blob:`. `netlify.toml` carries these headers for production and the reader's Vite config for dev and preview. An imported SCORM package is framed with `allow-same-origin` from `/scorm-content/<host>/<path>`, which passes through only files inside a `package` folder on a public host, because a SCO finds its LMS by walking `window.parent`.
 - **Observability**: every server line is one JSON object with a request id (`@tutors/logger`), `/metrics` is Prometheus (`@tutors/metrics`), `/version` and `/healthz` are served by every app; the error transport writes to `app_errors`.
 - **Release**: `release/claims.yaml`, `deployed.json`, `openvex.json`, `slo.yaml` and `SOP.md` are what the [release harness](https://github.com/tutors-sdk/tutors-release-harness) reads when it compares production with a release candidate. Main is the release candidate; students only see a release.
 

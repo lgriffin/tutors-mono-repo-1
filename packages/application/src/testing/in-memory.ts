@@ -18,6 +18,12 @@ import type { AccessStore } from "../ports/access-store.ts";
 import type { AppEvent, EventPublisher } from "../ports/event-publisher.ts";
 import type { Clock } from "../ports/clock.ts";
 import type { AssignmentSource, MoodleAssignSubmissionsResponse, MoodleCourseSection } from "../ports/assignment-source.ts";
+import type { CodeRuntime, CodeRuntimeOptions, CodeRuntimePort, ExecuteRequest, ExecutionResult, RuntimeEvent, RuntimeId } from "../ports/code-runtime.ts";
+import type { WorkspaceStore } from "../ports/workspace-store.ts";
+import type { ScormRecord, ScormRecords } from "../ports/scorm-records.ts";
+import { SNAPSHOT_OUTPUT_LIMIT, type PlaygroundSnapshot, type PlaygroundSnapshots } from "../ports/playground-snapshots.ts";
+import type { PlaygroundLive, PlaygroundLiveState, PlaygroundShare } from "../ports/playground-live.ts";
+import type { Workspace } from "@tutors/domain/course/playground";
 import type { Actor } from "@tutors/domain/access";
 
 /** A clock stopped at one instant; `advance` moves it. */
@@ -228,5 +234,214 @@ export class InMemoryAssignmentSource implements AssignmentSource {
   }
   async assignmentSubmissions(assignmentIds: number[]): Promise<MoodleAssignSubmissionsResponse> {
     return { assignments: this.submissions.assignments.filter((a) => assignmentIds.includes(a.assignmentid)) };
+  }
+}
+
+/** Keeps workspaces in a map: what a shared link opens with (nothing is kept beyond the page), and what tests use. */
+export class InMemoryWorkspaceStore implements WorkspaceStore {
+  private readonly store = new Map<string, Workspace>();
+  private key(courseId: string, loId: string): string {
+    return `${courseId}::${loId}`;
+  }
+  async load(courseId: string, loId: string): Promise<Workspace | null> {
+    return this.store.get(this.key(courseId, loId)) ?? null;
+  }
+  async save(workspace: Workspace): Promise<void> {
+    this.store.set(this.key(workspace.courseId, workspace.loId), workspace);
+  }
+  async remove(courseId: string, loId: string): Promise<void> {
+    this.store.delete(this.key(courseId, loId));
+  }
+}
+
+/** Keeps each learner's SCORM state per course and learning object. */
+export class InMemoryScormRecords implements ScormRecords {
+  readonly records = new Map<string, ScormRecord>();
+  private key(courseId: string, learnerId: string, loId: string): string {
+    return `${courseId}::${learnerId}::${loId}`;
+  }
+  async load(courseId: string, learnerId: string, loId: string): Promise<Record<string, string>> {
+    if (!courseId || !learnerId || !loId) return {};
+    return { ...(this.records.get(this.key(courseId, learnerId, loId))?.cmi ?? {}) };
+  }
+  async save(record: ScormRecord): Promise<void> {
+    if (!record.courseId || !record.learnerId || !record.loId) return;
+    this.records.set(this.key(record.courseId, record.learnerId, record.loId), { ...record, cmi: { ...record.cmi } });
+  }
+}
+
+export type InMemoryPlaygroundSnapshotsOptions = {
+  /** Whether handing in is offered at all; the anonymous reader says no. */
+  enabled?: boolean;
+  /** The courses the signed-in user reviews, by course id. */
+  reviews?: string[];
+};
+
+/** Keeps snapshots in memory, newest first, with the reviewer decided by its options rather than by the page. */
+export class InMemoryPlaygroundSnapshots implements PlaygroundSnapshots {
+  readonly rows: PlaygroundSnapshot[] = [];
+  private readonly enabled: boolean;
+  private readonly reviewer: Set<string>;
+  constructor(options: InMemoryPlaygroundSnapshotsOptions = {}, private readonly now: () => Date = () => new Date()) {
+    this.enabled = options.enabled ?? true;
+    this.reviewer = new Set(options.reviews ?? []);
+  }
+  async available(): Promise<boolean> {
+    return this.enabled;
+  }
+  async reviews(courseId: string): Promise<boolean> {
+    return this.enabled && this.reviewer.has(courseId);
+  }
+  async save(snapshot: Omit<PlaygroundSnapshot, "updatedAt">): Promise<boolean> {
+    if (!this.enabled) return false;
+    if (!snapshot.courseId || !snapshot.loId || !snapshot.studentId) return false;
+    await this.remove(snapshot.courseId, snapshot.loId, snapshot.studentId);
+    this.rows.unshift({ ...snapshot, files: snapshot.files.map((file) => ({ ...file })), lastOutput: snapshot.lastOutput.slice(0, SNAPSHOT_OUTPUT_LIMIT), updatedAt: this.now().toISOString() });
+    return true;
+  }
+  async get(courseId: string, loId: string, studentId: string): Promise<PlaygroundSnapshot | null> {
+    if (!this.enabled) return null;
+    return this.rows.find((row) => row.courseId === courseId && row.loId === loId && row.studentId === studentId) ?? null;
+  }
+  async list(courseId: string, loId: string): Promise<PlaygroundSnapshot[]> {
+    if (!this.enabled) return [];
+    return this.rows.filter((row) => row.courseId === courseId && row.loId === loId);
+  }
+  async remove(courseId: string, loId: string, studentId: string): Promise<void> {
+    const index = this.rows.findIndex((row) => row.courseId === courseId && row.loId === loId && row.studentId === studentId);
+    if (index >= 0) this.rows.splice(index, 1);
+  }
+}
+
+/** A live-attach bus in one process: sharers and watchers of the same exercise hear each other. */
+export class InMemoryPlaygroundLive implements PlaygroundLive {
+  private readonly watchers = new Map<string, Set<(state: PlaygroundLiveState) => void>>();
+  private readonly sharers = new Map<string, Set<() => void>>();
+  /** Every state a sharer sent, oldest first. */
+  readonly sent: PlaygroundLiveState[] = [];
+  private key(courseId: string, loId: string): string {
+    return `${courseId}::${loId}`;
+  }
+  share(courseId: string, loId: string, onWatcher: () => void): PlaygroundShare {
+    const key = this.key(courseId, loId);
+    const listeners = this.sharers.get(key) ?? new Set();
+    listeners.add(onWatcher);
+    this.sharers.set(key, listeners);
+    let active = true;
+    return {
+      send: (state) => {
+        if (!active) return;
+        this.sent.push(state);
+        for (const watcher of this.watchers.get(key) ?? []) watcher(state);
+      },
+      stop: () => {
+        active = false;
+        listeners.delete(onWatcher);
+      }
+    };
+  }
+  watch(courseId: string, loId: string, onState: (state: PlaygroundLiveState) => void): () => void {
+    const key = this.key(courseId, loId);
+    const listeners = this.watchers.get(key) ?? new Set();
+    listeners.add(onState);
+    this.watchers.set(key, listeners);
+    for (const sharer of this.sharers.get(key) ?? []) sharer();
+    return () => listeners.delete(onState);
+  }
+}
+
+/** What a scripted run-time answers an execute request with. */
+export type ScriptedExecution = { ok?: boolean; stdout?: string; stderr?: string; value?: string; error?: string };
+
+/**
+ * A run-time that answers from a script instead of running anything: each execute request takes
+ * the next scripted answer (or an empty success), emitting the same events a sandbox would.
+ */
+export class ScriptedCodeRuntime implements CodeRuntime {
+  readonly runtime: RuntimeId;
+  readonly requests: ExecuteRequest[] = [];
+  readonly answers: ScriptedExecution[] = [];
+  private readonly listeners = new Set<(event: RuntimeEvent) => void>();
+  private started = false;
+  private disposed = false;
+  private restarts = 0;
+  private sequence = 0;
+  constructor(options: CodeRuntimeOptions) {
+    this.runtime = options.runtime;
+    if (options.onEvent) this.listeners.add(options.onEvent);
+  }
+  /** Queue what the next executions answer with. */
+  script(...answers: ScriptedExecution[]): this {
+    this.answers.push(...answers);
+    return this;
+  }
+  get restartCount(): number {
+    return this.restarts;
+  }
+  get isStarted(): boolean {
+    return this.started;
+  }
+  get isDisposed(): boolean {
+    return this.disposed;
+  }
+  private emit(event: RuntimeEvent): void {
+    this.listeners.forEach((listener) => listener(event));
+  }
+  subscribe(onEvent: (event: RuntimeEvent) => void): () => void {
+    this.listeners.add(onEvent);
+    return () => this.listeners.delete(onEvent);
+  }
+  async start(): Promise<void> {
+    if (this.started) return;
+    this.started = true;
+    this.emit({ type: "ready" });
+  }
+  async execute(request: Omit<ExecuteRequest, "id"> & { id?: string }): Promise<ExecutionResult> {
+    if (this.disposed) throw new Error("This run-time has been disposed");
+    await this.start();
+    const id = request.id ?? `exec-${++this.sequence}`;
+    this.requests.push({ ...request, id });
+    const answer = this.answers.shift() ?? {};
+    const chunks: string[] = [];
+    this.emit({ type: "status", id, phase: "running" });
+    if (answer.stdout) {
+      chunks.push(answer.stdout);
+      this.emit({ type: "stream", id, stream: "stdout", text: answer.stdout });
+    }
+    if (answer.stderr) {
+      chunks.push(answer.stderr);
+      this.emit({ type: "stream", id, stream: "stderr", text: answer.stderr });
+    }
+    if (answer.value) this.emit({ type: "result", id, value: answer.value });
+    if (answer.error) {
+      chunks.push(answer.error.endsWith("\n") ? answer.error : `${answer.error}\n`);
+      this.emit({ type: "error", id, message: answer.error });
+    }
+    const ok = answer.ok ?? !answer.error;
+    this.emit({ type: "status", id, phase: "idle" });
+    this.emit({ type: "done", id, ok, durationMs: 0 });
+    return { ok, output: chunks.join(""), stderr: [answer.stderr ?? "", answer.error ?? ""].join(""), value: answer.value ?? "", error: answer.error ?? "", durationMs: 0 };
+  }
+  stop(): void {
+    this.restart();
+  }
+  restart(): void {
+    this.restarts++;
+    this.emit({ type: "status", phase: "idle", detail: "Run-time restarted" });
+  }
+  dispose(): void {
+    this.disposed = true;
+    this.listeners.clear();
+  }
+}
+
+/** Opens scripted run-times and keeps every one it opened, so a test can script and inspect them. */
+export class ScriptedCodeRuntimePort implements CodeRuntimePort {
+  readonly opened: ScriptedCodeRuntime[] = [];
+  constructor(private readonly answers: ScriptedExecution[] = []) {}
+  open(options: CodeRuntimeOptions): ScriptedCodeRuntime {
+    const runtime = new ScriptedCodeRuntime(options).script(...this.answers);
+    this.opened.push(runtime);
+    return runtime;
   }
 }

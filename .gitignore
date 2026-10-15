@@ -70,3 +70,8 @@ deploy/k8s/**/secrets.yaml
 graphify-out/
 # Local-only observability guides (contain production setup steps)
 observability/grafana/PRODUCTION-SETUP.md
+# In-browser run-times, copied out of node_modules by scripts/sync-runtimes.ts
+apps/reader/static/runtimes/pyodide/
+apps/reader/static/runtimes/typescript/
+apps/reader/static/runtimes/katex/
+apps/reader/static/runtimes/config.json

@@ -24,6 +24,8 @@ export const FestiveIcons: IconLib = {
   notebook: { type: "simple-icons:jupyter", color: "error" },
   quiz: { type: "fluent:quiz-new-24-filled", color: "primary" },
   whiteboard: { type: "fluent:whiteboard-24-filled", color: "primary" },
+  scorm: { type: "fluent:box-24-filled", color: "secondary" },
+  playground: { type: "fluent:code-24-filled", color: "primary" },
   archive: { type: "fluent:archive-24-filled", color: "error" },
   web: { type: "noto:star", color: "primary" },
   github: { type: "mdi:github", color: "warning" },

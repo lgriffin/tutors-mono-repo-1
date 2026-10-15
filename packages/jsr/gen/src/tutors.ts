@@ -14,6 +14,8 @@ import type { LearningResource } from "./types/types.ts";
 // The model lib loads KaTeX on demand so the reader's bundle can skip it; the
 // generator renders every course up front, so it always has math on.
 await loadMath();
+export { generateScormCourse } from "./scorm/emitter.ts";
+export type { ScormExportOptions } from "./scorm/emitter.ts";
 
 export function parseCourse(folder: string, silent: boolean = false): [Course, LearningResource] {
   const lr = buildTree(folder);

@@ -445,7 +445,43 @@ Tutors es una aplicación de código abierto; el componente de recopilación de 
   "classTime.calendarEntries": "Entradas del calendario",
   "classTime.notAvailable": "N/D",
   "classTime.online": "En línea",
-  "classTime.offline": "Sin conexión"
+  "classTime.offline": "Sin conexión",
+
+  // Playground
+  "playground.run": "Ejecutar",
+  "playground.running": "Ejecutando…",
+  "playground.stop": "Detener",
+  "playground.runTests": "Ejecutar comprobaciones",
+  "playground.reset": "Restablecer",
+  "playground.resetConfirm": "¿Descartar tus cambios y restaurar los archivos originales?",
+  "playground.share": "Compartir",
+  "playground.shareCopied": "Enlace copiado al portapapeles",
+  "playground.shareReady": "El enlace está en la barra de direcciones",
+  "playground.newFile": "Nuevo archivo",
+  "playground.deleteFile": "Eliminar archivo",
+  "playground.output": "Salida",
+  "playground.clear": "Limpiar",
+  "playground.noOutput": "Ejecuta el código para ver aquí su salida.",
+  "playground.ok": "Finalizado",
+  "playground.failed": "Finalizado con errores",
+  "playground.saving": "Guardando…",
+  "playground.saved": "Guardado en este navegador",
+  "playground.sharedNotice": "Espacio de trabajo compartido: los cambios no se guardan",
+  "playground.handIn": "Entregar al profesor",
+  "playground.handedIn": "Entregado a las",
+  "playground.handInHint": "Tu trabajo permanece en este navegador hasta que lo entregues",
+  "playground.liveShare": "Permitir que mi profesor lo vea en directo",
+  "playground.liveWatching": "Tu profesor te está viendo",
+  "playground.submissions": "Entregas",
+  "playground.refresh": "Actualizar",
+  "playground.watchLive": "Ver en directo",
+  "playground.noSubmissions": "Todavía no se ha entregado nada.",
+  "playground.liveNow": "en directo",
+
+  // Notebook kernel
+  "notebook.runAll": "Ejecutar todas las celdas",
+  "notebook.restartKernel": "Reiniciar el kernel",
+  "notebook.notRunnable": "Este lenguaje de kernel no se ejecuta en el navegador."
 };
 
 export default es;

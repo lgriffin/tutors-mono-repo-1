@@ -84,6 +84,9 @@ importers:
       js-yaml:
         specifier: '>=4.3.1 <5'
         version: 4.3.2
+      katex:
+        specifier: ^0.18.2
+        version: 0.18.4
       knip:
         specifier: 6.41.0
         version: 6.41.0
@@ -93,6 +96,9 @@ importers:
       prettier-plugin-svelte:
         specifier: ^4.1.1
         version: 4.1.1(prettier@3.9.9)(svelte@5.57.2(@typescript-eslint/types@8.71.0))
+      pyodide:
+        specifier: ^314.0.6
+        version: 314.0.7
       tsx:
         specifier: ^4.23.13
         version: 4.23.13
@@ -287,6 +293,9 @@ importers:
 
   apps/reader:
     dependencies:
+      '@codemirror/lang-javascript':
+        specifier: ^6.2.5
+        version: 6.2.5
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -311,9 +320,18 @@ importers:
       '@tutors/render-markdown':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/render-markdown
+      '@tutors/runtime-wasm':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driven/runtime-wasm
+      '@tutors/scorm-runtime':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driving/scorm-runtime
       '@tutors/store-supabase':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/store-supabase
+      '@tutors/workspace-indexeddb':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driven/workspace-indexeddb
       dompurify:
         specifier: '>=3.4.16 <4'
         version: 3.4.16
@@ -638,6 +656,12 @@ importers:
         specifier: ^0.0.6
         version: 0.0.6
 
+  packages/adapters/driven/runtime-wasm:
+    dependencies:
+      '@tutors/application':
+        specifier: workspace:*
+        version: link:../../../application
+
   packages/adapters/driven/store-supabase:
     dependencies:
       '@supabase/supabase-js':
@@ -652,6 +676,15 @@ importers:
       '@tutors/logger':
         specifier: workspace:*
         version: link:../../../platform/logger
+
+  packages/adapters/driven/workspace-indexeddb:
+    dependencies:
+      '@tutors/application':
+        specifier: workspace:*
+        version: link:../../../application
+      '@tutors/domain':
+        specifier: workspace:*
+        version: link:../../../domain
 
   packages/adapters/driving/a11y:
     dependencies:
@@ -680,6 +713,18 @@ importers:
       svelte:
         specifier: ^5.0.0
         version: 5.57.2(@typescript-eslint/types@8.71.0)
+
+  packages/adapters/driving/scorm-runtime:
+    dependencies:
+      '@tutors/application':
+        specifier: workspace:*
+        version: link:../../../application
+      '@tutors/domain':
+        specifier: workspace:*
+        version: link:../../../domain
+      '@tutors/logger':
+        specifier: workspace:*
+        version: link:../../../platform/logger
 
   packages/adapters/driving/svelte-state:
     dependencies:
@@ -750,6 +795,9 @@ importers:
       '@codemirror/commands':
         specifier: ^6.11.0
         version: 6.11.0
+      '@codemirror/lang-javascript':
+        specifier: ^6.2.5
+        version: 6.2.5
       '@codemirror/lang-python':
         specifier: ^6.2.1
         version: 6.2.1
@@ -771,6 +819,9 @@ importers:
       '@tutors/a11y':
         specifier: workspace:*
         version: link:../a11y
+      '@tutors/application':
+        specifier: workspace:*
+        version: link:../../../application
       '@tutors/domain':
         specifier: workspace:*
         version: link:../../../domain
@@ -780,6 +831,9 @@ importers:
       '@tutors/logger':
         specifier: workspace:*
         version: link:../../../platform/logger
+      '@tutors/scorm-runtime':
+        specifier: workspace:*
+        version: link:../scorm-runtime
       '@tutors/svelte-state':
         specifier: workspace:*
         version: link:../svelte-state
@@ -1383,6 +1437,9 @@ packages:
   '@codemirror/commands@6.11.0':
     resolution: {integrity: sha512-/K4Rl5BN0OtTiPWmJCdqODu38XnDMsDxKY5rgrPnCkutPTJf2wVbkoixLfealF5Kwse/s8P8M5jAiURiwSwnFA==}
 
+  '@codemirror/lang-javascript@6.2.5':
+    resolution: {integrity: sha512-zD4e5mS+50htS7F+TYjBPsiIFGanfVqg4HyUz6WNFikgOPf2BgKlx+TQedI1w6n/IqRBVBbBWmGFdLB/7uxO4A==}
+
   '@codemirror/lang-python@6.2.1':
     resolution: {integrity: sha512-IRjC8RUBhn9mGR9ywecNhB51yePWCGgvHfY1lWN/Mrp3cKuHr0isDKia+9HnvhiWNnMpbGhWrkhuWOc09exRyw==}
 
@@ -1887,6 +1944,9 @@ packages:
 
   '@lezer/highlight@1.2.3':
     resolution: {integrity: sha512-qXdH7UqTvGfdVBINrgKhDsVTJTxactNNxLk7+UMwZhU13lMHaOBlJe9Vqp907ya56Y3+ed2tlqzys7jDkTmW0g==}
+
+  '@lezer/javascript@1.5.6':
+    resolution: {integrity: sha512-sEvOqpl4vJQca0NugSQK02vQPbc5KrvoojnYGoqqFgFO0MtcYhwGiHKVEB+LuXYJnfyXo4QPA8ztbrEa4Fw5NA==}
 
   '@lezer/lr@1.4.10':
     resolution: {integrity: sha512-rnCpTIBafOx4mRp43xOxDJbFipJm/c0cia/V5TiGlhmMa+wsSdoGmUN3w5Bqrks/09Q/D4tNAmWaT8p6NRi77A==}
@@ -2793,6 +2853,9 @@ packages:
 
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
+
+  '@types/emscripten@1.41.6':
+    resolution: {integrity: sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==}
 
   '@types/esrecurse@4.3.1':
     resolution: {integrity: sha512-xJBAbDifo5hpffDBuHl0Y8ywswbiAp/Wi7Y/GtAgSlZyIABppyurxVueOPE8LUQOxdlgi6Zqce7uoEpqNTeiUw==}
@@ -4814,6 +4877,10 @@ packages:
   pure-rand@8.4.2:
     resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
 
+  pyodide@314.0.7:
+    resolution: {integrity: sha512-0YvXxEhfEdpLfb/XkM2BFAeMROq0iMUX2bzzH9pOttyMcWkwq+HbE5uyuGD82LN7y2q+SNvi/6V5JEsOlD2R1A==}
+    engines: {node: '>=18.0.0'}
+
   qified@0.10.1:
     resolution: {integrity: sha512-+Owyggi9IxT1ePKGafcI87ubSmxol6smwJ+RAHDQlx9+9cPwFWDiKFFCPuWhr9ignlGpZ9vDQLw67N4dcTVFEA==}
     engines: {node: '>=20'}
@@ -5836,6 +5903,16 @@ snapshots:
       '@codemirror/view': 6.43.9
       '@lezer/common': 1.5.2
 
+  '@codemirror/lang-javascript@6.2.5':
+    dependencies:
+      '@codemirror/autocomplete': 6.20.3
+      '@codemirror/language': 6.13.1
+      '@codemirror/lint': 6.9.7
+      '@codemirror/state': 6.7.1
+      '@codemirror/view': 6.43.9
+      '@lezer/common': 1.5.2
+      '@lezer/javascript': 1.5.6
+
   '@codemirror/lang-python@6.2.1':
     dependencies:
       '@codemirror/autocomplete': 6.20.3
@@ -6262,6 +6339,12 @@ snapshots:
   '@lezer/highlight@1.2.3':
     dependencies:
       '@lezer/common': 1.5.2
+
+  '@lezer/javascript@1.5.6':
+    dependencies:
+      '@lezer/common': 1.5.2
+      '@lezer/highlight': 1.2.3
+      '@lezer/lr': 1.4.10
 
   '@lezer/lr@1.4.10':
     dependencies:
@@ -7053,6 +7136,8 @@ snapshots:
       '@types/d3-zoom': 3.0.8
 
   '@types/deep-eql@4.0.2': {}
+
+  '@types/emscripten@1.41.6': {}
 
   '@types/esrecurse@4.3.1': {}
 
@@ -9259,6 +9344,14 @@ snapshots:
   punycode@2.3.1: {}
 
   pure-rand@8.4.2: {}
+
+  pyodide@314.0.7:
+    dependencies:
+      '@types/emscripten': 1.41.6
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   qified@0.10.1:
     dependencies:

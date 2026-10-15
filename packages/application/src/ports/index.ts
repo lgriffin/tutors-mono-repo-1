@@ -14,3 +14,8 @@ export * from "./access-store.ts";
 export * from "./event-publisher.ts";
 export * from "./clock.ts";
 export * from "./assignment-source.ts";
+export * from "./code-runtime.ts";
+export * from "./workspace-store.ts";
+export * from "./scorm-records.ts";
+export * from "./playground-snapshots.ts";
+export * from "./playground-live.ts";

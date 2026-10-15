@@ -8,3 +8,4 @@ export { setCompanionIconRegistrar, decorateCourseTree, determineCourseUrl, read
 export { LiveLab } from "./services/live-lab.ts";
 export { LiveNotebook } from "./services/live-notebook.ts";
 export type { NotebookService } from "./types.ts";
+export { createNotebookKernel, getNotebookKernel, setNotebookKernel, runtimeForKernelLanguage, type NotebookKernelContext } from "./services/notebook-kernel.svelte.ts";

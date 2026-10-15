@@ -24,6 +24,7 @@ const ventoStub = resolve(root, "tests/support/vento-stub.ts");
 export const workspaceAliases: Record<string, string> = {
   // Rings. Subpaths come before their package so the longer alias matches first.
   "@tutors/domain/course/vocabulary": resolve(root, "packages/domain/src/course/vocabulary.ts"),
+  "@tutors/domain/course/playground": resolve(root, "packages/domain/src/course/playground.ts"),
   "@tutors/domain/course": resolve(root, "packages/domain/src/course/index.ts"),
   "@tutors/domain/learning": resolve(root, "packages/domain/src/learning/index.ts"),
   "@tutors/domain/presence": resolve(root, "packages/domain/src/presence/index.ts"),
@@ -46,6 +47,9 @@ export const workspaceAliases: Record<string, string> = {
   "@tutors/profile-localstorage": resolve(root, "packages/adapters/driven/profile-localstorage/src/index.ts"),
   "@tutors/bus-inprocess": resolve(root, "packages/adapters/driven/bus-inprocess/src/index.ts"),
   "@tutors/moodle": resolve(root, "packages/adapters/driven/moodle/src/index.ts"),
+  "@tutors/runtime-wasm": resolve(root, "packages/adapters/driven/runtime-wasm/src/index.ts"),
+  "@tutors/workspace-indexeddb": resolve(root, "packages/adapters/driven/workspace-indexeddb/src/index.ts"),
+  "@tutors/scorm-runtime": resolve(root, "packages/adapters/driving/scorm-runtime/src/index.ts"),
   "@tutors/svelte-state/adapters": resolve(root, "packages/adapters/driving/svelte-state/src/adapters.ts"),
   "@tutors/identity": resolve(root, "packages/jsr/identity/src/index.ts"),
   "@tutors/identity-better-auth/server": resolve(root, "packages/adapters/driven/identity-better-auth/src/index.server.ts"),
