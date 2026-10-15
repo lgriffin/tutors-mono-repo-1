@@ -1,19 +1,37 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
-import { expect, vi } from "vitest";
-import { MockSupabaseClient } from "../../support/mocks.ts";
-import { configureSupabase } from "../../../../packages/adapters/driven/store-supabase/src/index.ts";
+import { afterAll, beforeAll, expect, vi } from "vitest";
 
-// Supabase is the only stand-in, installed through the store adapter's own configuration seam:
-// the catalogue service and the catalogue page's load function are the real ones.
-const supabase = new MockSupabaseClient();
-configureSupabase(supabase as never);
+// Supabase and the environments are the only stand-ins: the catalogue page's load function, the
+// reader's GET /api/catalogue and the catalogue store it reads through are the real ones.
+vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
+vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
+vi.mock("$app/env/public", async () => (await import("../../support/supabase-recorder.ts")).publicEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
 
 import log from "@tutors/logger";
-import { catalogueService } from "../../../../packages/adapters/driven/store-supabase/src/index.ts";
 import { flattenLos, type Composite, type Course, type Lo } from "../../../../packages/jsr/model/src/tutors.ts";
 import { load as loadCataloguePage } from "../../../../apps/catalogue/src/routes/+page.ts";
 import type { LoShape } from "../../../support/arbitraries/course-tree.ts";
 import { labShape, loadCourse, shape } from "../../support/course.ts";
+import { installReaderFetch, READER_ORIGIN, resetReaderApi } from "../../support/reader-api.ts";
+import { privateEnv, publicEnv, recorder } from "../../support/supabase-recorder.ts";
+
+const SERVICE_KEY = privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY;
+
+beforeAll(() => {
+  recorder.reset();
+  resetReaderApi();
+  installReaderFetch();
+  publicEnv.PUBLIC_READER_URL = READER_ORIGIN;
+});
+afterAll(() => {
+  delete publicEnv.PUBLIC_READER_URL;
+  privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = SERVICE_KEY;
+  vi.unstubAllGlobals();
+});
+
+/** The catalogue page's data, loaded as the catalogue app loads it: from the reader's data API. */
+const openCatalogue = () => loadCataloguePage({ fetch: globalThis.fetch } as Parameters<typeof loadCataloguePage>[0]) as Promise<{ courseRecords: CourseRecord[]; studentCount: number }>;
 
 const feature = await loadFeature("tests/bdd/features/student/course-discovery.feature");
 
@@ -32,7 +50,7 @@ describeFeature(feature, ({ Rule }) => {
 
       Given("the catalogue contains the courses:", (_ctx, table: CatalogueRow[]) => {
         rows = table;
-        (supabase as unknown as MockSupabaseClient).setTableData(
+        recorder.seed(
           "tutors-connect-courses",
           rows.map((row, i) => ({
             course_id: row.id,
@@ -43,8 +61,7 @@ describeFeature(feature, ({ Rule }) => {
         );
       });
       When("a student opens the catalogue", async () => {
-        const data = (await loadCataloguePage({ fetch } as Parameters<typeof loadCataloguePage>[0])) as { courseRecords: CourseRecord[] };
-        displayed = data.courseRecords;
+        displayed = (await openCatalogue()).courseRecords;
       });
       Then("the catalogue shall display the courses {string}", (_ctx, expected: string) => {
         // Established courses only (20 visits or more), most visited first.
@@ -109,32 +126,30 @@ describeFeature(feature, ({ Rule }) => {
     });
   });
 
-  Rule("If Supabase is not configured, then the catalogue shall show an empty catalogue and a student count of 0 without logging an error.", ({ RuleScenario }) => {
-    RuleScenario("Open the catalogue with no Supabase configured", ({ Given, When, Then, And }) => {
-      let displayed: CourseRecord[];
+  Rule("If the reader's server has no database configured, then the catalogue shall show an empty catalogue and a student count of 0 without logging an error.", ({ RuleScenario }) => {
+    RuleScenario("Open the catalogue when the reader has no database", ({ Given, When, Then, And }) => {
+      let data: { courseRecords: CourseRecord[]; studentCount: number };
       let logError: ReturnType<typeof vi.spyOn>;
 
-      Given("Supabase is not configured", () => {
-        configureSupabase(undefined);
+      Given("the reader's server has no service key", () => {
+        privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = "";
         logError = vi.spyOn(log, "error");
       });
       When("a student opens the catalogue", async () => {
-        const data = (await loadCataloguePage({ fetch } as Parameters<typeof loadCataloguePage>[0])) as { courseRecords: CourseRecord[] };
-        displayed = data.courseRecords;
+        data = await openCatalogue();
       });
       Then("the catalogue shall display no courses", () => {
-        expect(displayed).toEqual([]);
+        expect(data.courseRecords).toEqual([]);
       });
-      And("the catalogue shall show a student count of 0", async () => {
-        // The catalogue page asks for the student count once it has rendered.
-        expect(await catalogueService.getStudentCount()).toBe(0);
+      And("the catalogue shall show a student count of 0", () => {
+        expect(data.studentCount).toBe(0);
       });
       And("no error shall be logged", () => {
         try {
           expect(logError).not.toHaveBeenCalled();
         } finally {
           logError.mockRestore();
-          configureSupabase(supabase as never);
+          privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = SERVICE_KEY;
         }
       });
     });

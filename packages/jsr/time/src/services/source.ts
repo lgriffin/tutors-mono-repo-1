@@ -1,11 +1,8 @@
 /**
- * Where Tutors Time's rows come from. The reader source asks the reader's data API
- * (GET /api/time/:courseId, Rules 0069, 0070), so the Time app needs no database key of its own;
- * the Supabase source reads the tables directly with the anon client and remains for the reader's
- * own time page and for deployments without a reader URL.
+ * Where Tutors Time's rows come from: the reader's data API (GET /api/time/:courseId, Rules 0069,
+ * 0070), so neither the Time app nor the reader's time page reads a table (Rule 0471).
  */
 import type { TutorsConnectCourse, TutorsConnectUser, TutorsTimeRows } from "@tutors/domain/learning";
-import { getSupabase } from "./supabase.ts";
 
 export type { TutorsTimeRows };
 
@@ -20,51 +17,6 @@ export class TutorsTimeSourceError extends Error {
     super(message);
     this.name = "TutorsTimeSourceError";
   }
-}
-
-const USER_COLUMNS = "github_id, full_name, avatar_url, online_status, sentiment, date_last_accessed";
-
-async function selectAll(query: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>, what: string) {
-  const rows: Record<string, unknown>[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await query(from, from + 999);
-    if (error) throw new Error(`Failed to fetch ${what}: ${error.message}`);
-    rows.push(...((data ?? []) as Record<string, unknown>[]));
-    if (!data || data.length < 1000) return rows;
-  }
-}
-
-export function supabaseTimeSource(): TutorsTimeSource {
-  return {
-    async courseRows(courseId, startDate, endDate) {
-      const db = getSupabase();
-      const [calendar, learningRecords, course] = await Promise.all([
-        selectAll((from, to) => {
-          let query = db.from("calendar").select("*").eq("courseid", courseId).order("id", { ascending: true });
-          if (startDate) query = query.gte("id", startDate);
-          if (endDate) query = query.lte("id", endDate);
-          return query.range(from, to);
-        }, "calendar data"),
-        selectAll((from, to) => db.from("learning_records").select("*").eq("course_id", courseId).order("date_last_accessed", { ascending: false }).range(from, to), "learning records"),
-        this.courseRecord(courseId)
-      ]);
-      const ids = [...new Set([...calendar.map((r) => r.studentid), ...learningRecords.map((r) => r.student_id)].filter((v): v is string => typeof v === "string" && !!v))];
-      const users: TutorsTimeRows["users"] = [];
-      for (let i = 0; i < ids.length; i += 200) {
-        const { data } = await db.from("tutors-connect-users").select(USER_COLUMNS).in("github_id", ids.slice(i, i + 200));
-        users.push(...((data ?? []) as TutorsTimeRows["users"]));
-      }
-      return { courseId, role: "educator", course, calendar, learningRecords, users, assignments: [] };
-    },
-    async courseRecord(courseId) {
-      const { data, error } = await getSupabase().from("tutors-connect-courses").select("course_id, course_record").eq("course_id", courseId).maybeSingle();
-      return error || !data ? null : (data as TutorsTimeRows["course"]);
-    },
-    async user(studentId) {
-      const { data } = await getSupabase().from("tutors-connect-users").select(USER_COLUMNS).eq("github_id", studentId).maybeSingle();
-      return (data as TutorsTimeRows["users"][number] | null) ?? null;
-    }
-  };
 }
 
 export function withoutTrailingSlashes(url: string): string {
@@ -117,8 +69,9 @@ export function setTutorsTimeSource(source: TutorsTimeSource): void {
   for (const listener of listeners) listener();
 }
 
+/** The source set by the app; until one is set, the reader's data API on the page's own origin. */
 export function getTutorsTimeSource(): TutorsTimeSource {
-  current ??= supabaseTimeSource();
+  current ??= readerTimeSource("");
   return current;
 }
 

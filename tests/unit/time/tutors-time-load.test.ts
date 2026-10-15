@@ -1,23 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // loadCourseTime and loadStudentTime sit on top of CourseTime and the two display lookups.
-// Stub CourseTime with a fixed calendar and lab model, and the Supabase client with the rows
-// the display lookups read, so these tests exercise only the assembly in tutors-time.ts.
+// Stub CourseTime with a fixed calendar and lab model, and the time source with the rows the
+// display lookups read, so these tests exercise only the assembly in tutors-time.ts.
 const rows: Record<string, unknown> = {};
 const loadTime = vi.fn();
-
-vi.mock("../../../packages/jsr/time/src/services/supabase", () => ({
-  getSupabase: () => ({
-    from: (table: string) => {
-      const query = {
-        select: () => query,
-        eq: () => query,
-        maybeSingle: async () => ({ data: rows[table] ?? null, error: null }),
-      };
-      return query;
-    },
-  }),
-}));
 
 vi.mock("../../../packages/jsr/time/src/services/course-time", () => ({
   CourseTime: class {
@@ -45,6 +32,15 @@ vi.mock("../../../packages/jsr/time/src/services/course-time", () => ({
     }
   },
 }));
+
+const { setTutorsTimeSource } = await import("../../../packages/jsr/time/src/services/source");
+setTutorsTimeSource({
+  courseRows: async () => {
+    throw new Error("CourseTime is stubbed");
+  },
+  courseRecord: async () => (rows["tutors-connect-courses"] ?? null) as never,
+  user: async () => (rows["tutors-connect-users"] ?? null) as never
+});
 
 const { TutorsTime } =
   await import("../../../packages/jsr/time/src/services/tutors-time");

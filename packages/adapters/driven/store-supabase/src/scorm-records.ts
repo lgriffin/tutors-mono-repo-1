@@ -5,11 +5,10 @@
  */
 import type { ScormRecord, ScormRecords } from "@tutors/application/ports";
 import log from "@tutors/logger";
-import { supabase } from "./client.ts";
+import type { SupabaseClient } from "./client.ts";
 
 /** A learner's saved SCORM state, so a SCO can resume where it left off; empty for a first attempt. */
-export async function getScormRecord(courseId: string, studentId: string, loId: string): Promise<Record<string, string>> {
-  if (!supabase) return {};
+export async function getScormRecord(supabase: SupabaseClient, courseId: string, studentId: string, loId: string): Promise<Record<string, string>> {
   if (!courseId || !studentId || !loId) return {};
 
   const { data, error } = await supabase.from("scorm_records").select("cmi").eq("course_id", courseId).eq("student_id", studentId).eq("lo_id", loId).maybeSingle();
@@ -22,12 +21,10 @@ export async function getScormRecord(courseId: string, studentId: string, loId: 
 }
 
 /**
- * Stores a learner's SCORM state. Called from the SCO's own Commit and Terminate, which are synchronous
- * and cannot wait for a round trip, so this never throws: a failed save leaves the browser-local copy
- * as the record of the attempt.
+ * Stores a learner's SCORM state, for the login the reader's server verified (PUT /api/scorm). Never
+ * throws: a failed save leaves the browser-local copy as the record of the attempt.
  */
-export async function upsertScormRecord(record: ScormRecord): Promise<void> {
-  if (!supabase) return;
+export async function upsertScormRecord(supabase: SupabaseClient, record: ScormRecord): Promise<void> {
   const { courseId, learnerId, loId, version, cmi, summary } = record;
   if (!courseId || !learnerId || !loId) return;
 
@@ -54,6 +51,7 @@ export async function upsertScormRecord(record: ScormRecord): Promise<void> {
   }
 }
 
-export function supabaseScormRecords(): ScormRecords {
-  return { load: getScormRecord, save: upsertScormRecord };
+/** ScormRecords over the reader server's service client; the browser reaches it through GET and PUT /api/scorm. */
+export function supabaseScormRecords(db: SupabaseClient): ScormRecords {
+  return { load: (courseId, learnerId, loId) => getScormRecord(db, courseId, learnerId, loId), save: (record) => upsertScormRecord(db, record) };
 }

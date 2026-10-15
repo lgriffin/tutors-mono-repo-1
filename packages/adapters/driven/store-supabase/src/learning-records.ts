@@ -2,12 +2,12 @@
 import type { CalendarEntry, LearningRecord, TutorsConnectUser } from "@tutors/domain/learning";
 import type { LearningRecords } from "@tutors/application/ports";
 import log from "@tutors/logger";
-import { supabase, type SupabaseClient } from "./client.ts";
+import { type SupabaseClient } from "./client.ts";
 import { readTimeRows } from "./time-rows.ts";
 
-/** The LearningRecords port over `client` (the composed client by default); every read is empty without one. */
+/** The LearningRecords port over `client` ; every read is empty without one. */
 export function supabaseLearningRecords(client?: SupabaseClient): LearningRecords {
-  const db = () => client ?? supabase;
+  const db = () => client;
   return {
     async calendarEntries(courseId, start, end) {
       const c = db();

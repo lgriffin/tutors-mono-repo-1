@@ -1,12 +1,13 @@
 /**
- * Presence over Supabase Realtime: the application's PresencePort. The browser never broadcasts:
- * it keeps the learner's latest snapshot in `tutors-connect-latest` and reports the event to the
- * reader's server (POST /api/live/activity), which publishes it only to the feeds a Tutors Live tab
- * is watching, within the day's budget (supabase/migrations/20261016_realtime_live_budget.sql).
- * Subscribing goes through the @tutors/realtime gateway, so the per-tab budget, the jittered
- * rejoin and the counts cover every channel; while the budget is paused a subscriber reads the
- * stored activity instead. This is the only package that drives Supabase Realtime channels
- * (gateway.ts).
+ * Presence over Supabase Realtime: the application's PresencePort. The browser never broadcasts
+ * and reads no table: it hands the learner's latest snapshot to the data API (POST /api/presence)
+ * and reports the event to the reader's server (POST /api/live/activity), which publishes it only to
+ * the feeds a Tutors Live tab is watching, within the day's budget
+ * (supabase/migrations/20261016_realtime_live_budget.sql). Subscribing goes through the
+ * @tutors/realtime gateway, so the per-tab budget, the jittered rejoin and the counts cover every
+ * channel; a Live tab reports itself as a watcher and, while the budget is paused, reads the stored
+ * roster, both through the data API (POST /api/live/watch, GET /api/presence/roster). This is the
+ * only package that drives Supabase Realtime channels (gateway.ts).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PresenceEvent, StoredPresence } from "@tutors/domain/presence";
@@ -14,7 +15,7 @@ import type { PresencePort, Unsubscribe } from "@tutors/application/ports";
 import { createRealtimeGateway, topics, type RealtimeGateway, type Topic } from "@tutors/realtime";
 import log from "@tutors/logger";
 import { supabaseRealtimeAdapter } from "./gateway.ts";
-import { liveWatcherId, watchLiveTopic } from "./budget.ts";
+import { liveWatcherId, type LiveBudgetTier } from "./budget.ts";
 
 export { supabaseRealtimeAdapter, realtimeClientOptions } from "./gateway.ts";
 export * from "./budget.ts";
@@ -48,6 +49,18 @@ export type SupabasePresenceOptions = {
   store?: (event: PresenceEvent) => Promise<void>;
   /** The gateway to subscribe through; one per tab by default, built on this client. */
   gateway?: RealtimeGateway;
+  /**
+   * The stored roster: one course's snapshots received since `sinceIso`, or the most recent across
+   * every course when `courseId` is undefined; null when the read failed. The browser's composition
+   * passes the data API's GET /api/presence/roster; without one there is no stored activity to read.
+   */
+  roster?: (courseId: string | undefined, sinceIso: string) => Promise<StoredPresence[] | null>;
+  /**
+   * Reports this tab as a watcher of `topic` and answers the day's budget tier, or null when the report
+   * failed. The browser's composition passes the data API's POST /api/live/watch; without one nothing
+   * is reported, so the reader's server publishes to no feed this tab watches.
+   */
+  watch?: (topic: string, watcher: string) => Promise<LiveBudgetTier | null>;
 };
 
 /** The PresencePort over Supabase, with the gateway it subscribes through (for the counts and tests). */
@@ -97,16 +110,7 @@ export function supabasePresence(client: SupabaseClient, now: () => Date = () =>
   }
 
   async function recentRows(courseId: string | undefined, sinceIso: string): Promise<StoredPresence[] | null> {
-    let query = client.from("tutors-connect-latest").select("course_id, student_id, payload, received_at").gte("received_at", sinceIso).order("received_at", { ascending: false });
-    if (courseId) query = query.eq("course_id", courseId);
-    else query = query.limit(200);
-    const { data, error } = await query;
-    if (error) {
-      if (courseId) log.error("getTutorsConnectRecentLosByCourseId failed:", error);
-      else log.error("getTutorsConnectRecentLos failed:", error);
-      return null;
-    }
-    return (data ?? []) as StoredPresence[];
+    return options.roster ? options.roster(courseId, sinceIso) : null;
   }
 
   /**
@@ -119,7 +123,7 @@ export function supabasePresence(client: SupabaseClient, now: () => Date = () =>
   function watchFeed(topic: Topic, courseId: string | undefined, listener: (event: PresenceEvent) => void): () => void {
     let stopped = false;
     const tick = async () => {
-      const tier = await watchLiveTopic(client, topic, liveWatcherId());
+      const tier = options.watch ? await options.watch(topic, liveWatcherId()) : null;
       if (stopped || (tier !== null && tier !== "paused")) return;
       const rows = await recentRows(courseId, new Date(now().getTime() - LIVE_STORED_WINDOW_MS).toISOString());
       if (stopped || !rows) return;

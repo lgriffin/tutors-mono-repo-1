@@ -1,13 +1,14 @@
 import type { HandleClientError } from "@sveltejs/kit/hooks";
 import log, { addTransport, setAppName } from "@tutors/logger";
 import * as env from "$app/env/public";
-import { createSupabaseErrorTransport } from "@tutors/store-supabase";
+import { dataApiErrorTransport } from "@tutors/data-api";
 import { composeCatalogue } from "./lib/compose.ts";
 
-composeCatalogue(env);
+const api = composeCatalogue(env);
 
 setAppName("tutors-catalogue");
-addTransport(createSupabaseErrorTransport("tutors-catalogue"));
+// Warnings and errors go to the reader's POST /api/errors (Rule 0472); the reader lists this origin in PRIVATE_API_ALLOWED_ORIGINS.
+if (api) addTransport(dataApiErrorTransport("tutors-catalogue", api));
 
 window.addEventListener("unhandledrejection", (event) => {
   log.error("Unhandled promise rejection", {

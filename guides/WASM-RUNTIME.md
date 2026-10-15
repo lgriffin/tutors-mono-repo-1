@@ -167,28 +167,25 @@ of the files it is about. No global COOP/COEP.
 
 ## Educator access to a student's workspace
 
-### Real identity on Supabase writes
+### Real identity on hand-ins
 
-The rest of Tutors reaches Supabase with the **anon key** and `USING (true)` policies:
-identity is client-asserted. Student source code does not enter that model.
+Student source code is handed in only through the reader's server: `PUT /api/playground` stores the
+signed-in student's workspace under the session's login with the service key, whatever the body
+names, and `DELETE /api/playground` withdraws only the session's own (Rule 0475). `GET
+/api/playground` gives a student their own snapshot and an educator of the course every student's;
+the route decides that from the course's own `tutors.json` (`enrollment.educators`) or
+`PRIVATE_TUTORS_ADMINS`, through `can(actor, "playground:view", course)`, so a page cannot assert it
+(Rules 0435 to 0437). Without the service key the route answers 503 and handing in does not appear.
 
-`/api/runtime-token` mints a short-lived HS256 Supabase JWT from the Auth.js GitHub session,
-signed with `PRIVATE_SUPABASE_JWT_SECRET` using SubtleCrypto (no new dependency). The
-endpoint decides the `educator_courses` claim itself, by reading the course's own
-`tutors.json` and checking `enrollment.educators` — a page cannot assert it. Without the
-secret the endpoint answers 501 and every feature below simply does not appear.
-
-`playground_snapshots` (`supabase/migrations/20261018000200_create_playground_snapshots.sql`) is
-the first Tutors table whose rows have an owner, and the first whose row-level security
-means anything: students reach `student_id = auth.jwt() ->> 'sub'`, educators get a
-select-only policy over `educator_courses`, and the anon role appears in no policy at all.
+`playground_snapshots` (`supabase/migrations/20261018000200_create_playground_snapshots.sql`) has
+row-level security and no anon policy; its policies on a token's claims date from when the browser
+held a minted token, and the server-side contract step drops them with every other browser grant.
 
 ### Snapshot view
 
-A `playground:view` permission in `packages/domain/src/access/roles.ts` — documentation of intent;
-the database policies are the enforcement. A student presses "hand in" to upsert their
-workspace and last output; an educator opens the submissions for an exercise and reads any
-of them, read-only.
+The `playground:view` permission in `packages/domain/src/access/roles.ts` is what the route checks. A
+student presses "hand in" to upsert their workspace and last output; an educator opens the
+submissions for an exercise and reads any of them, read-only.
 
 ### Live attach
 

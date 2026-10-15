@@ -1,11 +1,34 @@
 import log from "@tutors/logger";
-import type { AnalyticsEvent, CourseVisitReport, LockChange, LockRemoval, MyStatus, MyStatusChange, PresenceReport, Profile, WhiteboardRoom, WhiteboardSave, WhiteboardScene } from "./contract.ts";
+import type {
+  AnalyticsEvent,
+  Catalogue,
+  CourseVisitReport,
+  ErrorReport,
+  LiveWatch,
+  LiveWatchTier,
+  LockChange,
+  LockRemoval,
+  Locks,
+  MyStatus,
+  MyStatusChange,
+  PlaygroundRemoval,
+  PlaygroundSave,
+  PlaygroundView,
+  PresenceReport,
+  Profile,
+  Roster,
+  ScormSave,
+  ScormState,
+  WhiteboardRoom,
+  WhiteboardSave,
+  WhiteboardScene
+} from "./contract.ts";
 
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
 
 /**
- * One call to the data API, same-origin with the reader's session cookie. Null when the network
- * fails. A failed call is logged and its response returned, so callers such as analytics can stay
+ * One call to the data API: same-origin with the reader's session cookie, or (from the catalogue,
+ * live and time apps) to the reader at `base` without it. Null when the network fails. A failed call is logged and its response returned, so callers such as analytics can stay
  * fire-and-forget. (Anonymous mode calls nothing: the composition root composes the in-memory
  * adapters instead of these.)
  */
@@ -28,28 +51,59 @@ async function send(fetchFn: FetchFn, method: "GET" | "POST" | "PUT" | "PATCH" |
   }
 }
 
-/** The data API, one function per route (contract.ts), over `fetchFn` (the platform's `fetch` by default). */
-export function createDataApi(fetchFn: FetchFn = (input, init) => globalThis.fetch(input, init)) {
+/** `/api/...?name=value` with the values that are set. */
+function withQuery(path: string, query: Record<string, string | null | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(query)) if (value) params.set(name, value);
+  return params.size ? `${path}?${params}` : path;
+}
+
+/**
+ * The data API, one function per route (contract.ts), over `fetchFn` (the platform's `fetch` by
+ * default). `base` is the reader's origin for an app other than the reader (its PUBLIC_READER_URL);
+ * the reader itself calls its own routes, so it leaves `base` empty.
+ */
+export function createDataApi(fetchFn: FetchFn = (input, init) => globalThis.fetch(input, init), base = "") {
+  const origin = base.replace(/\/+$/, "");
+  const call: FetchFn = (path, init) => fetchFn(`${origin}${path}`, init);
   /** The JSON body of a successful GET, or null. */
   async function getJson<T>(path: string): Promise<T | null> {
-    const response = await send(fetchFn, "GET", path);
+    const response = await send(call, "GET", path);
+    if (!response?.ok) return null;
+    return (await response.json()) as T;
+  }
+  /** The JSON body of a successful write, or null. */
+  async function sendJson<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T | null> {
+    const response = await send(call, method, path, body);
     if (!response?.ok) return null;
     return (await response.json()) as T;
   }
   return {
-    recordAnalytics: (event: AnalyticsEvent) => send(fetchFn, "POST", "/api/analytics", event),
+    /** The reader's origin these calls go to; empty for the reader's own pages. */
+    base: origin,
+    recordAnalytics: (event: AnalyticsEvent) => send(call, "POST", "/api/analytics", event),
     getMyStatus: () => getJson<MyStatus>("/api/me"),
-    saveMe: (change: MyStatusChange) => send(fetchFn, "PUT", "/api/me", change),
-    changeMyStatus: (change: MyStatusChange) => send(fetchFn, "PATCH", "/api/me", change),
+    saveMe: (change: MyStatusChange) => send(call, "PUT", "/api/me", change),
+    changeMyStatus: (change: MyStatusChange) => send(call, "PATCH", "/api/me", change),
     getProfile: <Visit = Record<string, unknown>>() => getJson<Profile<Visit>>("/api/profile"),
-    saveProfile: <Visit>(profile: Profile<Visit>) => send(fetchFn, "PUT", "/api/profile", profile),
-    reportCourseVisit: (visit: CourseVisitReport) => send(fetchFn, "POST", "/api/courses/visit", visit),
-    reportPresence: (report: PresenceReport) => send(fetchFn, "POST", "/api/presence", report),
-    setLock: (change: LockChange) => send(fetchFn, "PUT", "/api/locks", change),
-    removeLock: (removal: LockRemoval) => send(fetchFn, "DELETE", "/api/locks", removal),
+    saveProfile: <Visit>(profile: Profile<Visit>) => send(call, "PUT", "/api/profile", profile),
+    reportCourseVisit: (visit: CourseVisitReport) => send(call, "POST", "/api/courses/visit", visit),
+    reportPresence: (report: PresenceReport) => send(call, "POST", "/api/presence", report),
+    setLock: (change: LockChange) => send(call, "PUT", "/api/locks", change),
+    removeLock: (removal: LockRemoval) => send(call, "DELETE", "/api/locks", removal),
     getWhiteboard: (room: WhiteboardRoom) =>
       getJson<{ scene: WhiteboardScene | null }>(`/api/whiteboard?${new URLSearchParams({ courseId: room.courseId, route: room.route, shared: String(room.shared) })}`),
-    saveWhiteboard: (save: WhiteboardSave) => send(fetchFn, "PUT", "/api/whiteboard", save)
+    saveWhiteboard: (save: WhiteboardSave) => send(call, "PUT", "/api/whiteboard", save),
+    getCatalogue: () => getJson<Catalogue>("/api/catalogue"),
+    getRoster: (courseId?: string | null, since?: string | null) => getJson<Roster>(withQuery("/api/presence/roster", { courseId, since })),
+    getLocks: (courseId: string) => getJson<Locks>(withQuery("/api/locks", { courseId })),
+    getScorm: (courseId: string, loId: string) => getJson<ScormState>(withQuery("/api/scorm", { courseId, loId })),
+    saveScorm: (save: ScormSave) => send(call, "PUT", "/api/scorm", save),
+    getPlayground: (courseId: string, loId?: string | null, studentId?: string | null) => getJson<PlaygroundView>(withQuery("/api/playground", { courseId, loId, studentId })),
+    savePlayground: (save: PlaygroundSave) => send(call, "PUT", "/api/playground", save),
+    removePlayground: (removal: PlaygroundRemoval) => send(call, "DELETE", "/api/playground", removal),
+    reportErrors: (report: ErrorReport) => send(call, "POST", "/api/errors", report),
+    watchLive: (watch: LiveWatch) => sendJson<LiveWatchTier>("POST", "/api/live/watch", watch)
   };
 }
 

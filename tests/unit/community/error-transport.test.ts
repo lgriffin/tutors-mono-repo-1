@@ -1,61 +1,75 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { configureSupabase, createSupabaseErrorTransport } from "../../../packages/adapters/driven/store-supabase/src/index.ts";
+import { createDataApi, dataApiErrorTransport } from "../../../packages/adapters/driven/data-api/src/index.ts";
 
-// The composition root's job: the client the transport inserts through, and the URL and key its unload beacon needs.
-configureSupabase({ from: () => ({ insert: vi.fn() }) } as never, { url: "https://project.supabase.co", key: "anon-key" });
+// Warnings and errors go to the reader's POST /api/errors, never to a table (Rule 0472).
+describe("error transport", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
-// The flush on page unload: tutors.dev answered it with 400 because the URL carried `Prefer=return=none`,
-// which PostgREST parses as a filter (release harness rollback report, tutors-release-harness#38).
-describe("error transport: flush on unload", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  function unloadWith(
-    navigator: Record<string, unknown>,
-    fetch = vi.fn(() => Promise.resolve(new Response())),
-  ) {
+  function transport(base = "", navigator: Record<string, unknown> = {}) {
     let onUnload: (() => void) | undefined;
     vi.stubGlobal("window", {
       location: { href: "https://tutors.dev/note/course/x" },
       addEventListener: (type: string, fn: () => void) => {
         if (type === "beforeunload") onUnload = fn;
-      },
+      }
     });
     vi.stubGlobal("navigator", { userAgent: "test", ...navigator });
-    vi.stubGlobal("fetch", fetch);
-    const send = createSupabaseErrorTransport("reader");
-    send({
-      timestamp: "t",
-      level: "error",
-      message: "boom",
-      app: "reader",
-    } as never);
-    onUnload!();
-    return fetch;
+    const fetchFn = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchFn);
+    const send = dataApiErrorTransport("tutors-reader", createDataApi(fetchFn, base));
+    return { send, fetchFn, unload: () => onUnload!() };
   }
 
-  it("beacons to the table with only the key in the query string", () => {
-    const sendBeacon = vi.fn(() => true);
-    unloadWith({ sendBeacon });
-    expect(sendBeacon).toHaveBeenCalledOnce();
-    const [url] = sendBeacon.mock.calls[0] as unknown as [string];
-    expect(url).toBe(
-      "https://project.supabase.co/rest/v1/app_errors?apikey=anon-key",
-    );
-    expect(new URL(url).searchParams.has("Prefer")).toBe(false);
+  const entry = (level: string, message = "boom") => ({ timestamp: "t", level, message, app: "tutors-reader", courseId: "web-dev-101", studentId: "bob" }) as never;
+
+  it("batches warnings and errors into one report to /api/errors, and drops the rest", async () => {
+    vi.useFakeTimers();
+    const { send, fetchFn } = transport();
+    send(entry("info"));
+    send(entry("warn", "slow"));
+    send(entry("error"));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(fetchFn).toHaveBeenCalledOnce();
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe("/api/errors");
+    const report = JSON.parse(String(init?.body));
+    expect(report.app).toBe("tutors-reader");
+    expect(report.entries.map((e: { level: string }) => e.level)).toEqual(["warn", "error"]);
+    // The student is the session's, so the browser does not send one.
+    expect(report.entries[0]).toMatchObject({ courseId: "web-dev-101", url: "https://tutors.dev/note/course/x" });
+    expect(JSON.stringify(report)).not.toContain("bob");
   });
 
-  it("falls back to a keepalive fetch that asks for no body in the header PostgREST reads", () => {
-    const fetch = unloadWith({});
-    expect(fetch).toHaveBeenCalledOnce();
-    const [url, init] = fetch.mock.calls[0] as unknown as [
-      string,
-      NonNullable<Parameters<typeof fetch>[1]> & {
-        headers: Record<string, string>;
-      },
-    ];
-    expect(new URL(url).searchParams.has("Prefer")).toBe(false);
-    expect(init.headers.Prefer).toBe("return=minimal");
-    expect(init.keepalive).toBe(true);
+  it("does not report its own failed reports, which would post forever", async () => {
+    vi.useFakeTimers();
+    const { send, fetchFn } = transport();
+    send({ timestamp: "t", level: "warn", message: "Data API call failed", path: "/api/errors" } as never);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("beacons the buffer on unload from the reader's own origin", () => {
+    const sendBeacon = vi.fn(() => true);
+    const { send, fetchFn, unload } = transport("", { sendBeacon });
+    send(entry("error"));
+    unload();
+    expect(sendBeacon).toHaveBeenCalledOnce();
+    expect((sendBeacon.mock.calls[0] as unknown as [string])[0]).toBe("/api/errors");
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("posts with keepalive on unload from another app, which a beacon cannot reach", () => {
+    const sendBeacon = vi.fn(() => true);
+    const { send, fetchFn, unload } = transport("https://tutors.dev", { sendBeacon });
+    send(entry("error"));
+    unload();
+    expect(sendBeacon).not.toHaveBeenCalled();
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe("https://tutors.dev/api/errors");
+    expect(init).toMatchObject({ method: "POST", keepalive: true, headers: { "content-type": "application/json" } });
   });
 });

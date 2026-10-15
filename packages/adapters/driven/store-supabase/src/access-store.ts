@@ -2,10 +2,9 @@
 import type { ContentLock } from "@tutors/domain/access";
 import type { AccessStore } from "@tutors/application/ports";
 import log from "@tutors/logger";
-import { supabase, type SupabaseClient } from "./client.ts";
+import type { SupabaseClient } from "./client.ts";
 
-export async function getLocksForCourse(courseId: string, client: SupabaseClient | undefined = supabase): Promise<ContentLock[]> {
-  if (!client) return [];
+export async function getLocksForCourse(courseId: string, client: SupabaseClient): Promise<ContentLock[]> {
   if (!courseId) return [];
 
   const { data, error } = await client
@@ -21,8 +20,7 @@ export async function getLocksForCourse(courseId: string, client: SupabaseClient
   return (data ?? []) as ContentLock[];
 }
 
-export async function upsertLock(courseId: string, loRoute: string, locked: boolean, lockedBy: string, client: SupabaseClient | undefined = supabase): Promise<boolean> {
-  if (!client) return false;
+export async function upsertLock(courseId: string, loRoute: string, locked: boolean, lockedBy: string, client: SupabaseClient): Promise<boolean> {
   if (!courseId || !loRoute || !lockedBy) return false;
 
   const { error } = await client.from("tutors_content_locks").upsert(
@@ -43,8 +41,7 @@ export async function upsertLock(courseId: string, loRoute: string, locked: bool
   return true;
 }
 
-export async function removeLock(courseId: string, loRoute: string, client: SupabaseClient | undefined = supabase): Promise<boolean> {
-  if (!client) return false;
+export async function removeLock(courseId: string, loRoute: string, client: SupabaseClient): Promise<boolean> {
   if (!courseId || !loRoute) return false;
 
   // Ask for the deleted rows back, so a delete that matched nothing answers false (the AccessStore contract).
@@ -57,9 +54,8 @@ export async function removeLock(courseId: string, loRoute: string, client: Supa
   return (data?.length ?? 0) > 0;
 }
 
-/** The AccessStore over `client`; the composed (anon) client by default, which may only read locks. */
-export function supabaseAccessStore(client?: SupabaseClient): AccessStore {
-  if (!client) return { locks: getLocksForCourse, setLock: upsertLock, removeLock };
+/** The AccessStore over the reader server's service client: locks are read and changed only behind /api/locks. */
+export function supabaseAccessStore(client: SupabaseClient): AccessStore {
   return {
     locks: (courseId) => getLocksForCourse(courseId, client),
     setLock: (courseId, loRoute, locked, lockedBy) => upsertLock(courseId, loRoute, locked, lockedBy, client),

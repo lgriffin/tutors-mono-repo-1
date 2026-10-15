@@ -129,17 +129,11 @@ export function getDistinctSortedWeeks(entries: CalendarEntry[]) : string[];
 // (from ../../domain/src/learning/utils/calendar-utils.ts)
 export function getMondayForDate(dateString: string) : string;
 
-// (from src/services/supabase.ts)
-export function getSupabase() : SupabaseClient;
-
 // (from src/services/source.ts)
 export function getTutorsTimeSource() : TutorsTimeSource;
 
 // (from ../../domain/src/learning/utils/calendar-utils.ts)
 export function heatColor(minutes: number) : string;
-
-// (from src/services/supabase.ts)
-export function initSupabase(url: string, anonKey: string) : void;
 
 // (from ../../domain/src/learning/utils/calendar-utils.ts)
 export function minutesOf(value: unknown) : number;
@@ -149,9 +143,6 @@ export function readerTimeSource(readerUrl: string, fetchFn: typeof fetch = (...
 
 // (from src/services/source.ts)
 export function setTutorsTimeSource(source: TutorsTimeSource) : void;
-
-// (from src/services/source.ts)
-export function supabaseTimeSource() : TutorsTimeSource;
 
 // (from ../../domain/src/learning/utils/lab-utils.ts)
 export function toggleLabViewMode(current: LabViewMode) : LabViewMode;
@@ -173,6 +164,6 @@ export const TutorsTime: TutorsTimeService;
 |------|-------|
 | class | 2 |
 | const | 1 |
-| function | 21 |
+| function | 18 |
 | type | 25 |
-| **Total** | **49** |
+| **Total** | **46** |

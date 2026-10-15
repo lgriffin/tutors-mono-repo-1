@@ -40,6 +40,11 @@
 - Whiteboards: edits are saved through the server, for signed-in students only, in a personal room only its owner can read or overwrite; personal rooms have their own namespace, so no shared room id can name one, and no longer use public Realtime channels; an anonymous visitor is told to sign in to save (Rule 0068) (network, dom on `reader:whiteboard`) (PR #320, PR #328)
 
   Deploy with `PRIVATE_SUPABASE_SERVICE_ROLE_KEY` (a Secret, never a `PUBLIC_` variable) and `PRIVATE_API_ALLOWED_ORIGINS`; see guides/SERVER-WRITES.md. Apply the anon-access revocation after the new pods are serving traffic.
+- The browser reads no table and calls no database function: content locks (`GET /api/locks`), SCORM state (`GET`/`PUT /api/scorm`, the session's own only), playground hand-ins (`GET`/`PUT`/`DELETE /api/playground`, a student their own and an educator the class's), the presence roster (`GET /api/presence/roster`), error reports (`POST /api/errors`, 16 KB, 20 entries and 30 reports a minute per address) and Live watcher reports (`POST /api/live/watch`) go through the reader's server, which answers 503 without the service key (Rules 0471, 0473, 0474, 0475) (network) (PR #2)
+- Playground hand-ins no longer need a minted Supabase token: `/api/runtime-token` and `PRIVATE_SUPABASE_JWT_SECRET` are gone, and hand-in is offered wherever the reader has its service key (network) (PR #2)
+- Database: the contract step that follows this release now revokes every grant the anon and authenticated roles hold on public-schema tables, views, sequences and functions and drops every policy naming them, leaving Realtime alone (`supabase/contracts/revoke_anon_student_data.sql`, Rule 0472); it is not a migration until this release is in production (PR #2)
+
+  Deploy with `PUBLIC_READER_URL` on the catalogue and live apps, and the catalogue and live origins added to the reader's `PRIVATE_API_ALLOWED_ORIGINS`.
 ### v17.0.0 (2026-10)
 
 #### Breaking Changes
@@ -258,6 +263,10 @@
 
 ## Live (`tutors-live`)
 
+### Unreleased
+
+- The stored roster and the watcher reports go through the reader's `GET /api/presence/roster` and `POST /api/live/watch` at `PUBLIC_READER_URL` instead of the database; Realtime channels are unchanged (Rule 0471) (network) (PR #2)
+
 ### v17.0.0 (2026-10)
 
 #### Breaking Changes
@@ -310,6 +319,7 @@
 
 ### Unreleased
 
+- The catalogue and the student count come from the reader's `GET /api/catalogue` at `PUBLIC_READER_URL`; the catalogue holds no database key, and when the reader has no database it shows an empty catalogue without an error (Rules 0370, 0471) (network) (PR #2)
 - The student count comes from `get_student_count()`, which returns the number without reading any student's profile (Rule 0070) (network) (PR #320)
 - The catalogue no longer deletes courses from the browser; the unused `pruneCatalogue` and `deleteCourses` are removed (PR #320)
 ### v17.0.0 (2026-10)
@@ -350,6 +360,7 @@
 
 ### Unreleased
 
+- Warnings and errors are reported to the reader's `POST /api/errors`; the health check reads error counts with the time server's service key (Rule 0471) (network) (PR #2)
 - Course time data is read from the reader's `GET /api/time/<course>` with the viewer's reader session instead of from the database with the anon key; an educator of the course sees every student, anyone else signed in sees their own time, and a viewer not signed in to the reader is shown a link to sign in (Rule 0067) (network, dom, screenshot) (PR #320)
 - The Moodle sync writes assignments with the service_role key (PR #320)
 
@@ -525,6 +536,7 @@ Rules can be traced to the work that introduced them.
 
 ### Unreleased
 
+- `time` 6.0.0 (breaking): the Supabase source is removed (`supabaseTimeSource`, `getSupabase`, `initSupabase`); the default source is `readerTimeSource("")`, the reader's data API on the page's own origin, and the library no longer depends on `@supabase/supabase-js` (Rule 0471) (PR #2)
 - `time`: a pluggable data source. `readerTimeSource(readerUrl)` reads a course's rows from the Tutors reader with the viewer's session; `supabaseTimeSource()` (the default) keeps reading the tables. New exports `setTutorsTimeSource`, `getTutorsTimeSource`, `TutorsTimeSourceError`; `getStudentDisplayInfo` takes the course id and no longer returns an email address
 - `gen-lib` (`tutors`, `tutors-lite`): lab step ids come from the step's file name, so a course under a dotted directory (`.claude`, `~/.cache`, `my.courses`) no longer gets broken step ids and routes
 - `gen-lib` (`tutors`, `tutors-lite`): titles no longer keep the space after `#` or a trailing `\r` from CRLF files. `llms/` file names are slugs of those titles, so they lose their stray leading and trailing dashes (`-simple--llms.txt` is now `simple-llms.txt`); the reader derives the same names from `tutors.json`

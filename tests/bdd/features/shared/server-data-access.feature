@@ -178,3 +178,79 @@ Feature: Student data goes through the reader's server
       When a visitor opens the catalogue
       Then the catalogue shows 3 students
       And no student's profile was read
+
+  @rule-0471 @ears-ubiquitous
+  Rule: Tutors shall read and change data from the browser only through the reader's server, with no browser code calling a database table or function.
+
+    Scenario: A lab visit and a catalogue visit call nothing with the anon key
+      Given "Alice" is signed in to the reader
+      When she opens the first lab of "web-dev-101"
+      And a visitor opens the catalogue
+      Then the anon key was used for no table and no database function
+      And no browser code in the reader, catalogue, live or time apps calls a table or a database function
+
+  @rule-0472 @ears-unwanted
+  Rule: If a browser presents the anon key to the database, then tutors shall give it no table, view, sequence or function in the public schema once the server-side contract step has run, and leave Realtime open to it.
+
+    Scenario: The contract step closes the public schema to the browser roles
+      When the contract step supabase/contracts/revoke_anon_student_data.sql is read
+      Then it drops every public-schema policy that names anon, authenticated or public
+      And it revokes every privilege on every public-schema table, view and sequence from anon and authenticated
+      And it revokes execute on every public-schema function from anon and authenticated
+      And it names nothing in the realtime schema
+      And every policy supabase/migrations gives the anon key is on a public-schema table
+
+  @rule-0473 @ears-state-driven
+  Rule: While a session is signed in, the reader shall answer each of its read routes with only what that session is allowed to see.
+
+    @active
+    Scenario: A student reads back only their own SCORM state
+      Given "Alice" saved SCORM state on the first lab of "web-dev-101"
+      And "Bob" is signed in to the reader
+      When the browser asks the reader for the SCORM state of the first lab of "web-dev-101"
+      Then the reader answers 200
+      And the answer holds no SCORM state
+
+    @inactive
+    Scenario: An anonymous visitor reads no SCORM state
+      Given "Alice" saved SCORM state on the first lab of "web-dev-101"
+      And nobody is signed in to the reader
+      When the browser asks the reader for the SCORM state of the first lab of "web-dev-101"
+      Then the reader answers 401
+      And no row is read from or written to the database
+
+  @rule-0474 @ears-unwanted
+  Rule: If the reader's server has no service key, then the reader shall answer 503 to each of its data routes and read or write no row.
+
+    Scenario Outline: A data route on a server without the service key
+      Given "Alice" is signed in to the reader
+      And the reader's server has no service key
+      When the browser calls the reader's <route> route for "web-dev-101"
+      Then the reader answers 503
+      And no row is read from or written to the database
+
+      Examples:
+        | route           |
+        | catalogue       |
+        | presence roster |
+        | locks           |
+        | SCORM           |
+        | playground      |
+        | errors          |
+        | live watch      |
+
+  @rule-0475 @ears-event-driven
+  Rule: When a browser hands in or withdraws playground work, the reader shall store or remove only the signed-in student's own hand-in, whoever the request names and whether or not the session teaches the course.
+
+    Scenario: A hand-in naming another student is stored under the session's login
+      Given "Alice" is signed in to the reader
+      When the browser hands in playground work on the first lab of "web-dev-101" naming the student "bob"
+      Then the reader answers 204
+      And the only hand-in stored on the first lab is "alice"'s
+
+    Scenario: An educator cannot withdraw a student's hand-in
+      Given "Alice" handed in playground work on the first lab of "web-dev-101"
+      And "Eve" is signed in to the reader
+      When the browser withdraws the playground hand-in of "alice" on the first lab of "web-dev-101"
+      Then the reader answers 403
+      And the only hand-in stored on the first lab is "alice"'s

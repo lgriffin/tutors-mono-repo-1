@@ -8,7 +8,7 @@
 import { localYyyyMmDd } from "@tutors/domain/learning";
 import type { LearningEventSink } from "@tutors/application/ports";
 import log from "@tutors/logger";
-import { fail, supabase, type SupabaseClient } from "./client.ts";
+import { fail, type SupabaseClient } from "./client.ts";
 
 /** Formats a date as the calendar's `YYYY-MM-DD` day, in local time. */
 export function formatDate(date: Date): string {
@@ -125,7 +125,7 @@ export async function recordTick(db: SupabaseClient, login: string, input: { cou
 export function supabaseLearningEventSink(client?: SupabaseClient): LearningEventSink {
   return {
     async record(event, learnerId) {
-      const db = client ?? supabase;
+      const db = client;
       if (!db || !learnerId || !event.courseId) return;
       if (event.kind === "page-load") {
         if (!event.loId) return;

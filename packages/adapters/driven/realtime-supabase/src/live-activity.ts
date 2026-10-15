@@ -33,6 +33,21 @@ export async function claimLivePublish(client: SupabaseClient, courseId: string)
   return { tier: claim.tier, topics: claim.topics.filter((topic): topic is string => typeof topic === "string") };
 }
 
+/**
+ * Reports a Tutors Live tab as a watcher of a Realtime topic, so the reader's server publishes to it
+ * (POST /api/live/watch). Called by the reader's server only, with its service client.
+ * @returns the day's budget tier, or null when the report failed (including before the migration is applied)
+ */
+export async function watchLiveTopic(client: SupabaseClient, topic: string, watcher: string): Promise<LiveBudgetTier | null> {
+  const { data, error } = await client.rpc("realtime_watch", { p_topic: topic, p_watcher: watcher });
+  if (error) {
+    log.warn("realtime_watch failed:", error);
+    return null;
+  }
+  const tier = (data as { tier?: string } | null)?.tier;
+  return tier === "normal" || tier === "slow" || tier === "paused" ? tier : null;
+}
+
 const MAX_ID = 200;
 const MAX_USER_ID = 100;
 const MAX_TEXT = 1000;

@@ -1,8 +1,9 @@
 /**
  * @tutors/tutors-time-lib is a facade for one major version: the learning-activity domain
  * (calendar and lab models, their types and formatting helpers) now lives in
- * @tutors/domain/learning. The Supabase reading services stay here. Every export this package
- * had is still here, with the same name and behaviour.
+ * @tutors/domain/learning. The time source stays here: it reads a course's rows from the reader's
+ * data API. 6.0.0 removed the Supabase source (`supabaseTimeSource`, `getSupabase`, `initSupabase`):
+ * no browser reads the tables with the anon key any more (Rule 0471); every other export is unchanged.
  */
 export type {
   CalendarEntry,
@@ -46,8 +47,7 @@ export { BaseCalendarModel, BaseLabModel } from "@tutors/domain/learning";
 // Where a course id's tutors.json is served; the time app's PIN and educator checks read it.
 export { courseJsonUrl } from "@tutors/domain/course";
 
-export { getSupabase, initSupabase } from "./services/supabase.ts";
-export { readerTimeSource, supabaseTimeSource, setTutorsTimeSource, getTutorsTimeSource, TutorsTimeSourceError, withoutTrailingSlashes } from "./services/source.ts";
+export { readerTimeSource, setTutorsTimeSource, getTutorsTimeSource, TutorsTimeSourceError, withoutTrailingSlashes } from "./services/source.ts";
 export type { TutorsTimeSource, TutorsTimeRows } from "./services/source.ts";
 export { CourseTime } from "./services/course-time.ts";
 export { TutorsTime } from "./services/tutors-time.ts";

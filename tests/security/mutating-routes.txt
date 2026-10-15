@@ -17,6 +17,11 @@ reader POST /api/presence | who: a signed-in student who shares presence; stored
 reader PUT /api/locks | who: a signed-in educator of the course (enrollment.yaml educators or PRIVATE_TUTORS_ADMINS), else 403 (Rule 0065)
 reader DELETE /api/locks | who: a signed-in educator of the course, else 403 (Rule 0065)
 reader PUT /api/whiteboard | who: a signed-in user; a personal room is always the session's own (Rule 0068)
+reader PUT /api/scorm | who: a signed-in learner, for their own SCORM state; stored under the session's login whatever the body names (Rule 0473)
+reader PUT /api/playground | who: a signed-in student, for their own hand-in; student id and name come from the session (Rule 0475)
+reader DELETE /api/playground | who: a signed-in student, for their own hand-in only; an educator withdraws nobody's (Rule 0475)
+reader POST /api/errors | who: anyone, as the anon insert it replaces allowed, from the reader or an origin in PRIVATE_API_ALLOWED_ORIGINS; 16 KB, 20 entries, 30 reports a minute per address; the student is the session's (Rule 0472)
+reader POST /api/live/watch | who: anyone, as the anon realtime_watch it replaces allowed, from the reader or an origin in PRIVATE_API_ALLOWED_ORIGINS (Tutors Live); the topic must be a Live activity topic (Rule 0472)
 reader POST /api/auth/sign-in/social | hook | who: anyone; GitHub only, Better Auth verifies origin and return URL
 reader POST /api/auth/callback/github | hook | who: OAuth callback holder; Better Auth verifies signed state (GitHub normally uses GET)
 reader POST /api/auth/sign-out | hook | who: session holder; Better Auth verifies origin and deletes browser cookies

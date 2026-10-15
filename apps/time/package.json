@@ -20,6 +20,7 @@
     "@tutors/course-http": "workspace:*",
     "@tutors/identity-better-auth": "workspace:*",
     "@tutors/moodle": "workspace:*",
+    "@tutors/data-api": "workspace:*",
     "@tutors/realtime-supabase": "workspace:*",
     "@tutors/store-supabase": "workspace:*",
     "@tutors/svelte-state": "workspace:*",

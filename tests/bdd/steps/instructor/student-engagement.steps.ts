@@ -14,7 +14,7 @@ import { freshBrowser, publishedCourse, studentOpensLab } from "../../support/co
 import type { Course } from "../../../../packages/jsr/model/src/tutors.ts";
 import { liveService } from "../../../../packages/adapters/driving/svelte-state/src/community/services/live.svelte.ts";
 import type { TutorsConnectLatestRow } from "../../../../packages/adapters/driving/svelte-state/src/community/types.svelte.ts";
-import { getTutorsConnectLatestLosByCourseId } from "../../../../packages/adapters/driven/store-supabase/src/index.ts";
+import { readerRequest } from "../../support/reader-api.ts";
 import { isReceivedAtInLocalMonth, isReceivedAtInLocalWeek, isReceivedAtInLocalYear, isReceivedAtOnLocalDay } from "../../../../packages/domain/src/learning/index.ts";
 
 const feature = await loadFeature("tests/bdd/features/instructor/student-engagement.feature");
@@ -57,7 +57,9 @@ describeFeature(feature, ({ Background, Scenario, ScenarioOutline }) => {
     Given("{string} accessed lab {number} of the course at {string}", accessedAt);
     And("{string} accessed lab {number} of the course at {string}", accessedAt);
     When("the instructor loads the latest activity for the course", async () => {
-      feed = await getTutorsConnectLatestLosByCourseId(course.courseId);
+      // Tutors Live's own read: the reader's GET /api/presence/roster.
+      const response = await readerRequest("GET", `/api/presence/roster?courseId=${course.courseId}`);
+      feed = ((await response.json()) as { rows: TutorsConnectLatestRow[] }).rows;
     });
     Then("the system shall show a feed of latest activity, most recent first", () => {
       const received = feed.map((row) => row.received_at);

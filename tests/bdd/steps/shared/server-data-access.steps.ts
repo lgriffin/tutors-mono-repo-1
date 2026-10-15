@@ -13,12 +13,14 @@ vi.mock("$app/env/private", async () => (await import("../../support/supabase-re
 vi.mock("$app/env", () => ({ browser: true, building: false, goto: vi.fn() }));
 
 import type { Course, Lo } from "../../../../packages/jsr/model/src/tutors.ts";
-import { catalogueService } from "../../../../packages/adapters/driven/store-supabase/src/catalogue.ts";
+import { readFileSync } from "node:fs";
 import { load as loadTimeCourse } from "../../../../apps/time/src/routes/[courseid]/(calendar-lab)/+layout.ts";
+import { load as loadCataloguePage } from "../../../../apps/catalogue/src/routes/+page.ts";
+import { scanBrowserCode } from "../../../../scripts/checks/browser-data-access.ts";
 import { freshBrowser, githubUser, labsOf, openLo, publishedCourse, signIn } from "../../support/connect.ts";
 import { anonPolicies, anyAnonPolicy, builtSchema, type Schema } from "../../support/migrations.ts";
 import { apiRequests, readerRequest, serveCourseJson, setReaderSession, takeCourseHostDown } from "../../support/reader-api.ts";
-import { recorder } from "../../support/supabase-recorder.ts";
+import { privateEnv, recorder } from "../../support/supabase-recorder.ts";
 import { tutorsId } from "../../../../packages/adapters/driving/svelte-state/src/index.svelte.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/server-data-access.feature");
@@ -36,9 +38,15 @@ function personalRoom(course: Course, lo: Lo, login: string): string {
   return `wb-personal:${encodeURIComponent(course.courseId)}:${encodeURIComponent(lo.route)}:${encodeURIComponent(login)}`;
 }
 
+/** The catalogue page's data, loaded as the catalogue app loads it: from the reader at PUBLIC_READER_URL. */
+const openCatalogue = () => loadCataloguePage({ fetch: globalThis.fetch } as Parameters<typeof loadCataloguePage>[0]) as Promise<{ courseRecords: unknown[]; studentCount: number }>;
+
+const SERVICE_KEY = privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY;
+const CONTRACT_STEP = "supabase/contracts/revoke_anon_student_data.sql";
+
 type TimeData = { role: string; calendar: Record<string, unknown>[]; learningRecords: Record<string, unknown>[]; users: Record<string, unknown>[] };
 
-describeFeature(feature, ({ Background, Rule }) => {
+describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
   let course: Course;
   let response: Response;
   let body: unknown;
@@ -120,6 +128,36 @@ describeFeature(feature, ({ Background, Rule }) => {
     vi.setSystemTime(now);
   };
   const hostDown = (_ctx: unknown, courseId: string) => takeCourseHostDown(courseId);
+
+  AfterEachScenario(() => {
+    privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = SERVICE_KEY;
+  });
+
+  /** Forgets the calls the Given steps made, so a Then about the request under test sees only its own. */
+  const forgetCalls = () => {
+    recorder.tableCalls.length = 0;
+    recorder.rpcCalls.length = 0;
+  };
+  const scormRow = (login: string) => ({
+    course_id: course.courseId,
+    student_id: login,
+    lo_id: firstLab().route,
+    scorm_version: "1.2",
+    cmi: { "cmi.core.lesson_location": `${login}-page-3` }
+  });
+  const handIn = (login: string) => ({
+    student_id: login,
+    student_name: capitalised(login),
+    course_id: course.courseId,
+    lo_id: firstLab().route,
+    runtime: "python",
+    entry: "main.py",
+    files: [{ path: "main.py", content: `print('${login}')` }],
+    last_output: "",
+    last_ok: null,
+    updated_at: new Date().toISOString()
+  });
+  const handInsOnFirstLab = () => recorder.rows("playground_snapshots").filter((r) => r.course_id === course.courseId && r.lo_id === firstLab().route);
 
   Background(({ Given }) => {
     Given("the course {string} is published with {number} labs and {string} as its educator", (_ctx, courseId: string, labs: number, educator: string) => {
@@ -436,7 +474,7 @@ describeFeature(feature, ({ Background, Rule }) => {
         recorder.seed("tutors-connect-profiles", Array.from({ length: count }, (_, i) => ({ tutorId: `student${i}`, profile: [] })));
       });
       When("a visitor opens the catalogue", async () => {
-        shown = await catalogueService.getStudentCount();
+        shown = (await openCatalogue()).studentCount;
       });
       Then("the catalogue shows {number} students", (_ctx, count: number) => {
         expect(shown).toBe(count);
@@ -446,4 +484,167 @@ describeFeature(feature, ({ Background, Rule }) => {
       });
     });
   });
+
+  Rule("Tutors shall read and change data from the browser only through the reader's server, with no browser code calling a database table or function.", ({ RuleScenario }) => {
+    RuleScenario("A lab visit and a catalogue visit call nothing with the anon key", ({ Given, When, Then, And }) => {
+      Given("{string} is signed in to the reader", signedIn);
+      When("she opens the first lab of {string}", async (_ctx, courseId: string) => {
+        expectCourse(courseId);
+        await openLo(course, firstLab());
+      });
+      And("a visitor opens the catalogue", async () => {
+        await openCatalogue();
+      });
+      Then("the anon key was used for no table and no database function", () => {
+        // The reader's server did the work, with the service key.
+        expect(recorder.rows("learning_records").length).toBeGreaterThan(0);
+        expect(recorder.callsWith(ANON_KEY)).toEqual([]);
+      });
+      And("no browser code in the reader, catalogue, live or time apps calls a table or a database function", () => {
+        expect(scanBrowserCode()).toEqual([]);
+      });
+    });
+  });
+
+  Rule(
+    "If a browser presents the anon key to the database, then tutors shall give it no table, view, sequence or function in the public schema once the server-side contract step has run, and leave Realtime open to it.",
+    ({ RuleScenario }) => {
+      RuleScenario("The contract step closes the public schema to the browser roles", ({ When, Then, And }) => {
+        let sql = "";
+        const browserRoles = /FOREACH browser_role IN ARRAY ARRAY\['anon', 'authenticated'\]/;
+        When("the contract step supabase/contracts/revoke_anon_student_data.sql is read", () => {
+          // Comments out: only what the step runs counts.
+          sql = readFileSync(CONTRACT_STEP, "utf8").replace(/--.*$/gm, "");
+        });
+        Then("it drops every public-schema policy that names anon, authenticated or public", () => {
+          expect(sql).toMatch(/FROM pg_policies\s+WHERE schemaname = 'public' AND roles && ARRAY\['anon', 'authenticated', 'public'\]::name\[\]/);
+          expect(sql).toMatch(/DROP POLICY IF EXISTS %I ON public\.%I/);
+        });
+        And("it revokes every privilege on every public-schema table, view and sequence from anon and authenticated", () => {
+          expect(sql).toMatch(/WHERE n\.nspname = 'public' AND c\.relkind IN \('r', 'p', 'v', 'm', 'S'\)/);
+          expect(sql).toMatch(browserRoles);
+          expect(sql).toContain("REVOKE ALL PRIVILEGES ON TABLE public.%I FROM %I");
+          expect(sql).toContain("REVOKE ALL PRIVILEGES ON SEQUENCE public.%I FROM %I");
+          expect(sql).toContain("REVOKE ALL PRIVILEGES ON TABLE public.%I FROM PUBLIC");
+          // Nothing granted back to a browser role.
+          expect(sql).not.toMatch(/GRANT [^;]* TO (anon|authenticated|PUBLIC)\b/i);
+        });
+        And("it revokes execute on every public-schema function from anon and authenticated", () => {
+          expect(sql).toMatch(/FROM pg_proc p JOIN pg_namespace n ON n\.oid = p\.pronamespace\s+WHERE n\.nspname = 'public' AND p\.prokind = 'f'/);
+          expect(sql).toContain("REVOKE EXECUTE ON FUNCTION %s FROM %I");
+          expect(sql).toContain("REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC");
+        });
+        And("it names nothing in the realtime schema", () => {
+          expect(sql).not.toMatch(/\brealtime\s*\./i);
+          expect(sql).not.toMatch(/nspname\s*=\s*'realtime'/i);
+        });
+        And("every policy supabase/migrations gives the anon key is on a public-schema table", () => {
+          const opened = builtSchema().policies.filter((p) => p.roles.some((r) => r === "anon" || r === "public" || r === "authenticated"));
+          expect(opened.length).toBeGreaterThan(0);
+          for (const policy of opened) expect(policy.table, policy.name).not.toContain(".");
+        });
+      });
+    }
+  );
+
+  Rule("While a session is signed in, the reader shall answer each of its read routes with only what that session is allowed to see.", ({ RuleScenario }) => {
+    const savedScorm = (_ctx: unknown, name: string, courseId: string) => {
+      expectCourse(courseId);
+      recorder.seed("scorm_records", [scormRow(name.toLowerCase())]);
+    };
+    const askScorm = async (_ctx: unknown, courseId: string) => {
+      expectCourse(courseId);
+      forgetCalls();
+      const query = new URLSearchParams({ courseId, loId: firstLab().route });
+      await answer(await readerRequest("GET", `/api/scorm?${query}`));
+    };
+
+    RuleScenario("A student reads back only their own SCORM state", ({ Given, And, When, Then }) => {
+      Given("{string} saved SCORM state on the first lab of {string}", savedScorm);
+      And("{string} is signed in to the reader", signedIn);
+      When("the browser asks the reader for the SCORM state of the first lab of {string}", askScorm);
+      Then("the reader answers {number}", readerAnswers);
+      And("the answer holds no SCORM state", () => {
+        expect(body).toEqual({ cmi: {} });
+      });
+    });
+
+    RuleScenario("An anonymous visitor reads no SCORM state", ({ Given, And, When, Then }) => {
+      Given("{string} saved SCORM state on the first lab of {string}", savedScorm);
+      And("nobody is signed in to the reader", nobodySignedIn);
+      When("the browser asks the reader for the SCORM state of the first lab of {string}", askScorm);
+      Then("the reader answers {number}", readerAnswers);
+      And("no row is read from or written to the database", nothingTouched);
+    });
+  });
+
+  Rule("If the reader's server has no service key, then the reader shall answer 503 to each of its data routes and read or write no row.", ({ RuleScenarioOutline }) => {
+    RuleScenarioOutline("A data route on a server without the service key", ({ Given, And, When, Then }, variables) => {
+      Given("{string} is signed in to the reader", signedIn);
+      And("the reader's server has no service key", () => {
+        privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = "";
+        forgetCalls();
+      });
+      When("the browser calls the reader's <route> route for {string}", async (_ctx, courseId: string) => {
+        expectCourse(courseId);
+        const loId = firstLab().route;
+        const calls: Record<string, () => Promise<Response>> = {
+          catalogue: () => readerRequest("GET", "/api/catalogue"),
+          "presence roster": () => readerRequest("GET", `/api/presence/roster?${new URLSearchParams({ courseId })}`),
+          locks: () => readerRequest("GET", `/api/locks?${new URLSearchParams({ courseId })}`),
+          SCORM: () => readerRequest("GET", `/api/scorm?${new URLSearchParams({ courseId, loId })}`),
+          playground: () => readerRequest("GET", `/api/playground?${new URLSearchParams({ courseId, loId })}`),
+          errors: () => readerRequest("POST", "/api/errors", { app: "tutors-reader", entries: [{ level: "error", message: "boom", courseId }] }),
+          "live watch": () => readerRequest("POST", "/api/live/watch", { topic: courseId, watcher: "tab-1" })
+        };
+        const call = calls[String(variables.route)];
+        expect(call, String(variables.route)).toBeDefined();
+        await answer(await call());
+      });
+      Then("the reader answers {number}", readerAnswers);
+      And("no row is read from or written to the database", nothingTouched);
+    });
+  });
+
+  Rule(
+    "When a browser hands in or withdraws playground work, the reader shall store or remove only the signed-in student's own hand-in, whoever the request names and whether or not the session teaches the course.",
+    ({ RuleScenario }) => {
+      const onlyHandIn = (_ctx: unknown, login: string) => {
+        expect(handInsOnFirstLab().map((r) => r.student_id)).toEqual([login]);
+      };
+
+      RuleScenario("A hand-in naming another student is stored under the session's login", ({ Given, When, Then, And }) => {
+        Given("{string} is signed in to the reader", signedIn);
+        When("the browser hands in playground work on the first lab of {string} naming the student {string}", async (_ctx, courseId: string, named: string) => {
+          expectCourse(courseId);
+          await answer(
+            await readerRequest("PUT", "/api/playground", {
+              courseId,
+              loId: firstLab().route,
+              studentId: named,
+              runtime: "python",
+              entry: "main.py",
+              files: [{ path: "main.py", content: "print('hi')" }]
+            })
+          );
+        });
+        Then("the reader answers {number}", readerAnswers);
+        And("the only hand-in stored on the first lab is {string}'s", onlyHandIn);
+      });
+
+      RuleScenario("An educator cannot withdraw a student's hand-in", ({ Given, And, When, Then }) => {
+        Given("{string} handed in playground work on the first lab of {string}", (_ctx, name: string, courseId: string) => {
+          expectCourse(courseId);
+          recorder.seed("playground_snapshots", [handIn(name.toLowerCase())]);
+        });
+        And("{string} is signed in to the reader", signedIn);
+        When("the browser withdraws the playground hand-in of {string} on the first lab of {string}", async (_ctx, login: string, courseId: string) => {
+          expectCourse(courseId);
+          await answer(await readerRequest("DELETE", "/api/playground", { courseId, loId: firstLab().route, studentId: login }));
+        });
+        Then("the reader answers {number}", readerAnswers);
+        And("the only hand-in stored on the first lab is {string}'s", onlyHandIn);
+      });
+    }
+  );
 });

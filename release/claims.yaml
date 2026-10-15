@@ -281,3 +281,26 @@ claims:
     scope: "time:*"
     reason: "CHANGELOG 17.0.0 Time: Time runs on SvelteKit 3 (#466)"
     until: "17.0.0"
+
+  # Server-side data access (Rules 0471 to 0475): the browser reads no table and calls no database
+  # function. New reader routes: GET /api/catalogue, GET /api/presence/roster, GET /api/locks,
+  # GET and PUT /api/scorm, GET, PUT and DELETE /api/playground, POST /api/errors, POST /api/live/watch;
+  # /api/runtime-token is removed. The anon grants they replace (every public-schema table, view,
+  # sequence and function, Realtime aside) are revoked by supabase/contracts/revoke_anon_student_data.sql,
+  # which is claimed as a migration in the release that promotes it, not in this one.
+  - artefact: network
+    scope: "reader:*"
+    rule: "0471"
+    reason: "Rule 0471: the reader reads locks, SCORM state, playground hand-ins and the roster, and reports errors and Live watchers, through its own /api routes instead of the database"
+  - artefact: network
+    scope: "catalogue:*"
+    rule: "0471"
+    reason: "Rule 0471: the catalogue reads GET /api/catalogue on the reader instead of tutors-connect-courses and get_student_count"
+  - artefact: network
+    scope: "live:*"
+    rule: "0471"
+    reason: "Rule 0471: Live reads GET /api/presence/roster and posts POST /api/live/watch on the reader instead of tutors-connect-latest and realtime_watch"
+  - artefact: network
+    scope: "time:*"
+    rule: "0471"
+    reason: "Rule 0471: Time posts its error reports to the reader's POST /api/errors instead of inserting into app_errors"

@@ -1,23 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// The display lookups read one row through getSupabase(); stub the client so each test
-// chooses the row (or error) that comes back.
+// The display lookups read one row through the time source (the reader's data API in the apps); a
+// stand-in source answers the row (or nothing, for a failed read) each test chooses.
 let result: { data: unknown; error: unknown } = { data: null, error: null };
 const from = vi.fn();
 
-vi.mock("../../../packages/jsr/time/src/services/supabase", () => ({
-  getSupabase: () => ({
-    from: (table: string) => {
-      from(table);
-      const query = {
-        select: () => query,
-        eq: () => query,
-        maybeSingle: async () => result,
-      };
-      return query;
-    },
-  }),
-}));
+const { setTutorsTimeSource } = await import("../../../packages/jsr/time/src/services/source");
+const answer = (what: string) => async () => {
+  from(what);
+  return (result.error ? null : result.data) as never;
+};
+setTutorsTimeSource({
+  courseRows: async () => {
+    throw new Error("the display lookups read no course rows");
+  },
+  courseRecord: answer("tutors-connect-courses"),
+  user: answer("tutors-connect-users")
+});
 
 const { TutorsTime } =
   await import("../../../packages/jsr/time/src/services/tutors-time");

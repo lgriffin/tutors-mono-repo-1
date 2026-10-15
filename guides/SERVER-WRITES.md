@@ -25,12 +25,14 @@ Two checks keep the seam honest:
 
 - `no-database-client-in-browser-code` (`.dependency-cruiser.cjs`, run by `pnpm test:runway`):
   browser code may not import `@supabase/supabase-js`. The exceptions are the anon client factory
-  used for Realtime channels and public reads (`packages/adapters/driven/store-supabase/src/client.ts`, composed by the apps),
+  the Realtime gateway uses (`packages/adapters/driven/store-supabase/src/client.ts`, composed by the apps),
   server-only files, and type-only imports.
-- `tests/architecture/browser-data-access.test.ts`: what browser code does with that anon client is
-  limited to reading the public tables (`tutors-connect-courses`, `tutors-connect-latest`,
-  `tutors_content_locks`), inserting into `app_errors`, and calling `get_student_count` and
-  `get_error_counts`, plus `realtime_watch` for public Live watcher registration. The publisher's budget claim stays in `realtime-supabase/src/live-activity.ts`, which only the reader's `/api/live/activity` route composes; the snippet store (`store-supabase/src/snippets.ts`) is composed only by the reader's and the time app's servers over the service key. Two tables of the code run-time are allowed from the browser: `playground_snapshots`, which the adapter reaches as the signed-in student with the token `/api/runtime-token` mints (policies on the token's claims, none for anon), and `scorm_records`, still written with the anon key under its own per-learner policies (`TODO(data-api)` in the check). Anything else belongs behind a route.
+- `tests/architecture/browser-data-access.test.ts` (Rule 0471): browser code calls no table and no
+  database function, with no exceptions. The anon client is for Realtime channels only. Every read
+  the browser used to make with it (the catalogue, the presence roster, the locks, SCORM state,
+  playground hand-ins, the error log, `get_student_count`, `get_error_counts`, `realtime_watch`) is a
+  route below. Server modules (everything in `store-supabase/src` but `client.ts`, and
+  `realtime-supabase/src/live-activity.ts`) are composed only by the reader's and the time app's servers.
 
 **The reader is the data API's host for now, and that is temporary.** The routes live in the reader
 because it is the app with Better Auth. The time dashboard calling the reader for its data is the smell
@@ -50,7 +52,14 @@ All in the reader for now, under `apps/reader/src/routes/api/`. The helpers they
 | `GET`, `PUT /api/profile` | a signed-in user | their own course-visit history in `tutors-connect-profiles` |
 | `POST /api/courses/visit` | anyone viewing a course | counts a visit in the public catalogue; the course must be published, and its title, credits and privacy come from its tutors.json |
 | `POST /api/presence` | a signed-in student who shares presence | the latest learning object in `tutors-connect-latest`; the user in the payload is replaced with the session's |
+| `GET /api/locks` | anyone (public, any origin) | a course's content locks |
 | `PUT`, `DELETE /api/locks` | an educator of the course | lock, unlock or remove a lock in `tutors_content_locks` |
+| `GET /api/catalogue` | anyone (public, any origin) | the catalogue of visited courses and the student count (`get_student_count`, Rule 0070) |
+| `GET /api/presence/roster` | anyone (public, any origin) | the latest presence snapshots students chose to share, in one course (`courseId`) or the most recent across courses, received since `since` |
+| `GET`, `PUT /api/scorm` | a signed-in learner | their own SCORM run-time state for one learning object, under the session's login (Rule 0473) |
+| `GET`, `PUT`, `DELETE /api/playground` | a signed-in user | playground hand-ins: a student reads, saves and withdraws only their own; an educator of the course (or an admin) also reads everyone's (Rules 0435 to 0437, 0475) |
+| `POST /api/errors` | anyone, from the reader or an origin in `PRIVATE_API_ALLOWED_ORIGINS` | the logger's warnings and errors into `app_errors`; at most 16 KB and 20 entries a report, 30 reports a minute per address; the student is the session's |
+| `POST /api/live/watch` | anyone, from the reader or an origin in `PRIVATE_API_ALLOWED_ORIGINS` | a Tutors Live tab reports the topic it watches (`realtime_watch`) and hears the day's budget tier |
 | `GET`, `PUT /api/whiteboard` | reading a shared board: anyone; a personal board or saving: a signed-in user | a whiteboard learning object's saved scene; personal rooms have a separate namespace derived from the session |
 | `GET /api/time/[courseId]` | a signed-in user; the time dashboard's origin with the reader's cookie | a course's time rows (`start` / `end` optionally bound calendar reads): all of them for an educator, otherwise the viewer's own and classmates pseudonymised |
 
@@ -59,12 +68,14 @@ Common to every route:
 - **Identity comes from the session**, never from the body. A request that names another student is
   stored under the caller's own login (Rule 0072). No session: 401 before any row is read (Rule 0071).
 - **Writes accept only `application/json`.** A cross-site page cannot send that without a CORS
-  preflight, and the write routes answer none, so only the reader's own pages can write. SvelteKit's
+  preflight, and the write routes answer none (`POST /api/errors` and `POST /api/live/watch` answer
+  one only for the origins in `PRIVATE_API_ALLOWED_ORIGINS`), so only Tutors' own pages can write. SvelteKit's
   own origin check turns away cross-site form posts (`tests/security/mutating-routes.txt`).
 - **Input is checked** (`validate.ts`): course ids, routes, sentiments, calendar days (the browser's
   local day, within a day of the server's), body sizes.
 - **503 without a key.** When `PRIVATE_SUPABASE_SERVICE_ROLE_KEY` is not set (local development,
-  anonymous mode) the routes answer 503 and the browser carries on without saving.
+  anonymous mode) the routes answer 503 and the browser carries on without saving; the catalogue
+  shows no courses and Live no stored roster (Rule 0474).
 
 ## Who may do what: one authorization module
 
@@ -99,8 +110,8 @@ session cookie is `SameSite=Lax` and host-only; the browser sends it because the
 reader are the same site (`*.tutors.dev`). Two settings make that work:
 
 - the time app's `PUBLIC_READER_URL` must be the host people sign in to the reader at;
-- the reader lists the time app's origin in `PRIVATE_API_ALLOWED_ORIGINS`, which is the only origin
-  that gets CORS headers. A request from any other origin is refused before the database is touched.
+- the reader lists the time app's origin in `PRIVATE_API_ALLOWED_ORIGINS`, the only origins that get
+  credentialed CORS headers. A request from any other origin is refused before the database is touched.
 
 A viewer who is not signed in to the reader gets a link to its sign-in page instead of data (the
 calendar and lab layout; no Rule covers this yet, since the time app has no browser tests).
@@ -112,10 +123,13 @@ per answer, the same across the calendar and learning records of that answer, an
 next (Rule 0075). They follow neither row order nor alphabetical order, and a student cannot follow
 "student-3" through a term to single a classmate out.
 
-The live dashboard reads `tutors-connect-latest`, and the catalogue reads `tutors-connect-courses`
-and the student count. These are public data: presence a student chose to share, and the course
-list. The anon key keeps reading them. The catalogue's student count now comes from
-`get_student_count()`, which returns only the number (Rule 0070).
+The live dashboard and the catalogue read through the reader too, at their own `PUBLIC_READER_URL`:
+Live's stored roster from `GET /api/presence/roster` and its watcher reports to `POST /api/live/watch`,
+the catalogue's courses and student count from `GET /api/catalogue`. These are public data (presence
+a student chose to share, and the course list), so the read routes answer any origin without
+credentials; the reader lists the Live and catalogue origins in `PRIVATE_API_ALLOWED_ORIGINS` only so
+their error reports and watcher posts pass. The student count comes from `get_student_count()`, which
+returns only the number (Rule 0070).
 
 ## The key, and the debt it carries
 
@@ -155,14 +169,16 @@ Calendar date ranges reach the database query through the time API.
 **Release N (the one that ships this change): expand.**
 
 1. Set `PRIVATE_SUPABASE_SERVICE_ROLE_KEY` on reader and time, `PRIVATE_API_ALLOWED_ORIGINS` on
-   reader, and `PUBLIC_READER_URL` on time.
+   reader (the catalogue, live and time origins), and `PUBLIC_READER_URL` on catalogue, live and time.
+   `PRIVATE_SUPABASE_JWT_SECRET` is no longer read and can be removed.
 2. Apply the pending migrations (`20261017000000` to `20261017000200`) as usual, then deploy the new
    reader and time pods. Everything in `supabase/migrations` is safe to run before the new pods are
    up: nothing added by this PR removes what an older pod or tab uses.
 
-**Release N+1: contract.** `supabase/contracts/revoke_anon_student_data.sql` removes the anon
-policies and table grants for personal data and writes, and revokes anon access to the legacy and atomic
-student-counter RPCs (public catalogue, shared presence and lock reads remain). It is not a
+**Release N+1: contract.** `supabase/contracts/revoke_anon_student_data.sql` drops every
+public-schema policy that names a browser role and revokes every grant the anon and authenticated
+roles hold on public-schema tables, views, sequences and functions (Rule 0472). Realtime keeps
+working: its authorization lives in the `realtime` schema, which the step does not touch. It is not a
 migration yet, so no release run or `supabase db push` can apply it early, and it refuses to run
 unless `tutors.contract_ok` is set. In the release after N:
 
@@ -174,11 +190,13 @@ unless `tutors.contract_ok` is set. In the release after N:
    claim its drops. `pnpm check:migrations` refuses it until CHANGELOG.md records v<N> as released,
    so it cannot land in the same release as the routes that make it safe
    ([supabase/contracts/README.md](../supabase/contracts/README.md)).
-5. Once it has run on production, old browser tabs must reload: their direct anon writes stop. Keep
+5. Once it has run on production, old browser tabs must reload: their direct anon reads and writes stop. Keep
    the patched pods during any rollback rather than restoring the public write policies.
 
 Until step 5 has succeeded on production the exposure is **not** closed: the anon key can still
-read and write the tables the old code used.
+read and write the tables the old code used. "Release N" is the release that ships server-side data
+access (PR #320's routes and the reads that followed them); the contract cannot be a migration
+before CHANGELOG.md records that release.
 
 ## Presence is the first message-bus candidate
 
@@ -193,8 +211,8 @@ bus and of `can()`.
 - **Realtime broadcast channels** (presence, live) are still joined with the anon key, so anyone can
   send a fake `lo-event`. Nothing is stored from them any more; `tutors-connect-latest` is written
   only by `/api/presence`.
-- **`app_errors`** still accepts inserts from anyone holding the anon key, so the table can be filled
-  with junk, but it can no longer be read.
+- **`app_errors`** accepts reports from anyone through `POST /api/errors`, bounded by size and by a
+  per-address rate, so it can still be filled with some junk; it cannot be read from a browser.
 - **The time app's `POST /api/sync`** still has no authentication. It writes only what it fetches
   from Moodle, now with the service key.
 - **Assignments and submissions** reach browsers only as counts, and only for educators, through

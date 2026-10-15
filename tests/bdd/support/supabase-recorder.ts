@@ -15,10 +15,11 @@ type BroadcastHandler = (message: BroadcastMessage) => void;
 
 export type TableCall = {
   table: string;
-  op: "select" | "upsert" | "update" | "delete";
+  op: "select" | "insert" | "upsert" | "update" | "delete";
   key?: string;
   columns?: string;
   row?: Row;
+  rows?: Row[];
   options?: { onConflict?: string };
   filters: Filter[];
   /** How many rows a select handed back, so a step can see what the database actually returned. */
@@ -47,6 +48,15 @@ class RecordingQuery implements PromiseLike<{ data: unknown; error: DbError | nu
     this.call.op = "upsert";
     this.call.row = row;
     this.call.options = options;
+    return this;
+  }
+
+  /** Many rows at once, as an insert into the error log sends them; `row` is the first, `rows` all of them. */
+  insert(rows: Row | Row[]) {
+    const all = Array.isArray(rows) ? rows : [rows];
+    this.call.op = "insert";
+    this.call.row = all[0];
+    this.call.rows = all;
     return this;
   }
 
@@ -128,6 +138,10 @@ class RecordingQuery implements PromiseLike<{ data: unknown; error: DbError | nu
     if (error) return { data: null, error };
 
     const rows = this.db.rows(this.call.table);
+    if (this.call.op === "insert") {
+      rows.push(...this.call.rows!.map((row) => ({ ...row })));
+      return { data: null, error: null };
+    }
     if (this.call.op === "upsert") {
       const row = this.call.row!;
       const keys = (this.call.options?.onConflict ?? Object.keys(row)[0]).split(",").map((k) => k.trim());

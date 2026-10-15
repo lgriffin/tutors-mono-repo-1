@@ -1,18 +1,18 @@
 /**
  * CourseTime, the time app's per-course read model, over the rows a TutorsTimeSource answers with:
  * how it turns 30-second blocks into minutes and attaches learners' names, what it asks the source
- * for, and how a failed read is reported. The default source (supabaseTimeSource) is driven over a
- * scripted Supabase client at the end, with what it asks the database for.
+ * for, and how a failed read is reported. The reader source on the page's own origin, the default
+ * when no app sets one, is checked at the end.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { scriptedSupabase } from "../../support/scripted-supabase.ts";
 import type { TutorsTimeRows } from "../../../packages/domain/src/learning/time-rows.ts";
 
-const supabase = vi.hoisted(() => ({ current: null as unknown }));
-vi.mock("../../../packages/jsr/time/src/services/supabase.ts", () => ({ getSupabase: () => supabase.current, initSupabase: vi.fn() }));
 
 import { CourseTime } from "../../../packages/jsr/time/src/services/course-time.ts";
-import { setTutorsTimeSource, supabaseTimeSource, type TutorsTimeSource } from "../../../packages/jsr/time/src/services/source.ts";
+import { getTutorsTimeSource, readerTimeSource, setTutorsTimeSource, type TutorsTimeSource } from "../../../packages/jsr/time/src/services/source.ts";
+
+/** The source as no app has set it: the reader's data API on the page's own origin. */
+const resetTutorsTimeSource = () => setTutorsTimeSource(readerTimeSource(""));
 
 const entry = (studentid: string, id: string, timeactive: number) => ({ id, courseid: "cs101", studentid, timeactive, pageloads: 1 });
 const record = (student_id: string, lo_id: string, duration: number | null) => ({ course_id: "cs101", student_id, lo_id, type: "lab", duration, date_last_accessed: "2026-01-05" });
@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
-  setTutorsTimeSource(supabaseTimeSource());
+  resetTutorsTimeSource();
 });
 
 describe("calendar data", () => {
@@ -125,28 +125,12 @@ describe("loadTime", () => {
   });
 });
 
-describe("the Supabase source (the default, when no reader is set)", () => {
-  it("reads the calendar within the dates in id order, the learning records and the learners' names, in pages", async () => {
-    const { client, calls } = scriptedSupabase({
-      calendar: [{ data: [entry("ann", "2026-01-05", 4)] }],
-      learning_records: [{ data: [record("ann", "/lab/1", 2)] }],
-      "tutors-connect-courses": [{ data: { course_id: "cs101", course_record: { title: "CS101" } } }],
-      "tutors-connect-users": [{ data: [user("ann", "Ann A")] }]
-    });
-    supabase.current = client;
-    const rows = await supabaseTimeSource().courseRows("cs101", "2026-01-01", "2026-01-31");
-    expect(rows.role).toBe("educator");
-    expect(rows.calendar).toEqual([entry("ann", "2026-01-05", 4)]);
-    expect(rows.learningRecords).toEqual([record("ann", "/lab/1", 2)]);
-    expect(rows.users.map((u) => u.github_id)).toEqual(["ann"]);
-    expect(rows.course).toEqual({ course_id: "cs101", course_record: { title: "CS101" } });
-    expect(calls.filter((c) => c.table === "calendar").map((c) => c.op)).toEqual(["select", "eq", "order", "gte", "lte", "range"]);
-    expect(calls.find((c) => c.op === "in")?.args).toEqual(["github_id", ["ann"]]);
-  });
-
-  it("reports a failed calendar read, and answers nobody for an unknown learner", async () => {
-    supabase.current = scriptedSupabase({ calendar: [{ data: null, error: { message: "down" } }] }).client;
-    await expect(supabaseTimeSource().courseRows("cs101")).rejects.toThrow("Failed to fetch calendar data: down");
-    expect(await supabaseTimeSource().user("nobody")).toBeNull();
+describe("the reader source on the page's own origin (the default)", () => {
+  it("asks the reader's /api/time and reports what it answered", async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchFn);
+    resetTutorsTimeSource();
+    await expect(getTutorsTimeSource().courseRows("cs101")).rejects.toThrow("The reader answered 401 for the time data of cs101");
+    expect(fetchFn.mock.calls[0][0]).toBe("/api/time/cs101");
   });
 });

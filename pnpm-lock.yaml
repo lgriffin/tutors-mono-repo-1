@@ -123,9 +123,9 @@ importers:
       '@prometheus-io/client':
         specifier: ^0.16.1
         version: 0.16.1
-      '@tutors/store-supabase':
+      '@tutors/data-api':
         specifier: workspace:*
-        version: link:../../packages/adapters/driven/store-supabase
+        version: link:../../packages/adapters/driven/data-api
       isomorphic-dompurify:
         specifier: ^4.5.0
         version: 4.5.0(@noble/hashes@2.4.0)
@@ -211,6 +211,9 @@ importers:
       '@tutors/application':
         specifier: workspace:*
         version: link:../../packages/application
+      '@tutors/data-api':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driven/data-api
       '@tutors/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -489,6 +492,9 @@ importers:
       '@tutors/course-http':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/course-http
+      '@tutors/data-api':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driven/data-api
       '@tutors/identity-better-auth':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/identity-better-auth
@@ -1125,9 +1131,6 @@ importers:
 
   packages/jsr/time:
     dependencies:
-      '@supabase/supabase-js':
-        specifier: ^2.117.1
-        version: 2.117.2(@opentelemetry/api@1.9.1)
       '@tutors/domain':
         specifier: workspace:*
         version: link:../../domain
