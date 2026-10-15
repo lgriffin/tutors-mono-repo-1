@@ -25,7 +25,6 @@
 
   let preview = $state(false);
   let confirmingDelete = $state(false);
-  let warned = false;
 
   $effect(() => {
     notesService.restorePanel();
@@ -36,10 +35,22 @@
   });
 
   $effect(() => {
-    if (notesService.sessionOnly.value && !warned) {
-      warned = true;
+    if (notesService.sessionOnly.value && notesService.takeSessionOnlyWarning()) {
       toaster.create({ type: "warning", title: t("notes.sessionOnlyTitle"), description: t("notes.sessionOnly") });
     }
+  });
+
+  // A note still settling when the learner closes or reloads the page is written as the page goes.
+  $effect(() => {
+    const keep = () => void notesService.flush();
+    const hidden = () => document.visibilityState === "hidden" && keep();
+    addEventListener("pagehide", keep);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      keep();
+      removeEventListener("pagehide", keep);
+      document.removeEventListener("visibilitychange", hidden);
+    };
   });
 
   const kindLabel = (kind: string) => t(`notes.kind.${kind}` as MessageKey);

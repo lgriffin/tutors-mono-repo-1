@@ -543,7 +543,7 @@ Is feidhmchlár foinse oscailte é Tutors - tá an comhpháirt bailiúcháin son
   "notes.placeholder": "Scríobh nóta príobháideach don chéim seo. Oibríonn markdown.",
   "notes.saving": "Á shábháil…",
   "notes.saved": "Sábháilte sa bhrabhsálaí seo",
-  "notes.private": "Príobháideach duit, coinnithe sa bhrabhsálaí seo",
+  "notes.private": "Coinnithe sa bhrabhsálaí seo amháin, ní sheoltar áit ar bith í",
   "notes.otherSteps": "Céimeanna eile le nótaí",
   "notes.exportCourse": "Easpórtáil nótaí an chúrsa",
   "notes.exportLab": "Easpórtáil an tsaotharlann seo",

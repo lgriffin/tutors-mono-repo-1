@@ -127,6 +127,36 @@ describe("notesService: the note on screen", () => {
     expect(notesService.body.value).toBe("");
   });
 
+  it("keeps later typing on the newest step when arrivals overlap a slow save", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const slow = Object.assign(Object.create(store), {
+      put: async (note: Parameters<InMemoryNotesStore["put"]>[0]) => {
+        await gate;
+        return store.put(note);
+      }
+    }) as InMemoryNotesStore;
+    configureAdapters({ notes: slow });
+    await notesService.arrive(at("01"));
+    notesService.edit("typed on one");
+    const toTwo = notesService.arrive(at("02"));
+    const toThree = notesService.arrive(at("03"));
+    release();
+    await Promise.all([toTwo, toThree]);
+    expect(notesService.step.value).toEqual(at("03"));
+    await type("typed on three");
+    expect((await store.get(at("01")))?.body).toBe("typed on one");
+    expect((await store.get(at("03")))?.body).toBe("typed on three");
+    expect(await store.get(at("02"))).toBeNull();
+  });
+
+  it("writes a settling note at once when flushed, as a page that is going away does", async () => {
+    await notesService.arrive(at("01"));
+    notesService.edit("last words");
+    void notesService.flush();
+    expect(store.notes.size).toBe(1);
+  });
+
   it("renders the preview with the composed renderer", () => {
     configureAdapters({ renderer: new PassThroughRenderer() });
     expect(notesService.renderMarkdown("**hi**")).toContain("hi");
@@ -227,6 +257,10 @@ describe("notesService: exports and deleting", () => {
 });
 
 describe("notesService: when the browser refuses notes (Rule 0383)", () => {
+  it("has nothing to warn about while the browser keeps notes", () => {
+    expect(notesService.takeSessionOnlyWarning()).toBe(false);
+  });
+
   it("keeps the session's notes in memory and says so once", async () => {
     store.failing = true;
     await notesService.arrive(at("01"));
@@ -235,6 +269,8 @@ describe("notesService: when the browser refuses notes (Rule 0383)", () => {
     await notesService.arrive(at("02"));
     await type("second");
     expect(notesService.noted.value).toEqual(["01", "02"]);
+    expect(notesService.takeSessionOnlyWarning()).toBe(true);
+    expect(notesService.takeSessionOnlyWarning()).toBe(false);
     const doc = await notesService.exportCourse(target);
     expect(doc).toContain("first");
     expect(doc).toContain("second");

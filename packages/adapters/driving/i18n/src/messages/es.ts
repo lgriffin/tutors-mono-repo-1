@@ -568,7 +568,7 @@ Tutors es una aplicación de código abierto; el componente de recopilación de 
   "notes.placeholder": "Escribe una nota privada para este paso. Admite markdown.",
   "notes.saving": "Guardando…",
   "notes.saved": "Guardada en este navegador",
-  "notes.private": "Privada, guardada en este navegador",
+  "notes.private": "Guardada solo en este navegador, nunca se envía",
   "notes.otherSteps": "Otros pasos con notas",
   "notes.exportCourse": "Exportar notas del curso",
   "notes.exportLab": "Exportar este laboratorio",

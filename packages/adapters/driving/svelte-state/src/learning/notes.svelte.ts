@@ -60,7 +60,10 @@ function createNotesService() {
   const saveState = rune<"idle" | "pending" | "saved">("idle");
 
   let titles: StepTitles = {};
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  /** The edit waiting for typing to settle, with the step it was typed on. */
+  let pending: { timer: ReturnType<typeof setTimeout>; ref: StepRef; text: string; kind: NoteKind; titles: StepTitles } | null = null;
+  /** Whether the learner has been told their notes last for this session only. */
+  let warned = false;
   let wrapped: { over: NotesStore; store: ReturnType<typeof withMemoryFallback> } | null = null;
   let arrival = 0;
 
@@ -83,26 +86,25 @@ function createNotesService() {
     return note;
   }
 
-  /** Keeps a note still waiting for typing to settle, now. */
+  /**
+   * Keeps the edit still waiting for typing to settle, now, under the step it was typed on. The
+   * browser's storage is written before this first awaits, so a page that is going away keeps it.
+   */
   async function flush(): Promise<void> {
-    if (!timer) return;
+    if (!pending) return;
+    const { timer, ref, text, kind: k, titles: t } = pending;
     clearTimeout(timer);
-    timer = null;
-    if (step.value) await keep(step.value, body.value, kind.value, titles);
+    pending = null;
+    await keep(ref, text, k, t);
   }
 
   function schedule(): void {
     const ref = step.value;
     if (!ref) return;
-    const text = body.value;
-    const k = kind.value;
-    const t = titles;
     saveState.value = "pending";
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      void keep(ref, text, k, t);
-    }, NOTE_SAVE_DELAY_MS);
+    if (pending) clearTimeout(pending.timer);
+    const timer = setTimeout(() => void flush(), NOTE_SAVE_DELAY_MS);
+    pending = { timer, ref, text: body.value, kind: kind.value, titles };
   }
 
   function setPanel(next: Partial<NotesPanelState>): void {
@@ -129,13 +131,19 @@ function createNotesService() {
      * then the panel shows this step's own note and keeps its state (Rule 0381).
      */
     async arrive(ref: StepRef, stepTitles: StepTitles = {}): Promise<void> {
-      await flush();
+      // The new step is claimed before anything is awaited, so an older arrival finishing late
+      // cannot take it back, and typing from here on is saved under this step.
       const mine = ++arrival;
+      const kept = flush();
       step.value = ref;
       titles = stepTitles;
+      body.value = "";
+      kind.value = "note";
       saveState.value = "idle";
-      const view = await openStepNotes({ notes: store() })(panel.value, ref);
+      await kept;
       if (mine !== arrival) return;
+      const view = await openStepNotes({ notes: store() })(panel.value, ref);
+      if (mine !== arrival || body.value) return;
       body.value = view.note?.body ?? "";
       kind.value = view.note?.kind ?? "note";
       await refreshNoted(ref);
@@ -154,6 +162,13 @@ function createNotesService() {
     },
 
     flush,
+
+    /** True the first time the notes turn out to last for this session only, so the learner is told once. */
+    takeSessionOnlyWarning(): boolean {
+      if (!sessionOnly.value || warned) return false;
+      warned = true;
+      return true;
+    },
 
     /** The note as the reader renders markdown, for the panel's preview; the caller sanitises it. */
     renderMarkdown(text: string): string {
@@ -202,8 +217,9 @@ function createNotesService() {
 
     /** Forgets the step, the session's warning and the wrapped store: for tests and sign-out. */
     reset(): void {
-      if (timer) clearTimeout(timer);
-      timer = null;
+      if (pending) clearTimeout(pending.timer);
+      pending = null;
+      warned = false;
       wrapped = null;
       arrival++;
       titles = {};

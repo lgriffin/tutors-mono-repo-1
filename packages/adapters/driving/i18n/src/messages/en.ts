@@ -568,7 +568,7 @@ Tutors is an open source application - the data collection component [is here](h
   "notes.placeholder": "Write a private note for this step. Markdown works.",
   "notes.saving": "Saving…",
   "notes.saved": "Saved in this browser",
-  "notes.private": "Private to you, kept in this browser",
+  "notes.private": "Kept only in this browser, never sent anywhere",
   "notes.otherSteps": "Other steps with notes",
   "notes.exportCourse": "Export course notes",
   "notes.exportLab": "Export this lab",

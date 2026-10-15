@@ -568,7 +568,7 @@ Tutors ist eine Open-Source-Anwendung - die Komponente zur Datenerfassung [finde
   "notes.placeholder": "Schreiben Sie eine private Notiz zu diesem Schritt. Markdown funktioniert.",
   "notes.saving": "Wird gespeichert…",
   "notes.saved": "In diesem Browser gespeichert",
-  "notes.private": "Nur für Sie, in diesem Browser gespeichert",
+  "notes.private": "Nur in diesem Browser gespeichert, nie gesendet",
   "notes.otherSteps": "Weitere Schritte mit Notizen",
   "notes.exportCourse": "Kursnotizen exportieren",
   "notes.exportLab": "Dieses Lab exportieren",
