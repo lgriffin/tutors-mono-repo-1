@@ -17,6 +17,8 @@ export const variables = defineEnvVars({
   PRIVATE_AUTH_GITHUB_SECRET: optionalString,
   PRIVATE_AUTH_SECRET: optionalString,
   PRIVATE_SUPABASE_SERVICE_ROLE_KEY: optionalString,
+  DATA_STORE: optionalString,
+  PRIVATE_DATABASE_URL: optionalString,
   PRIVATE_API_ALLOWED_ORIGINS: optionalString,
   PRIVATE_COURSE_HOSTS: optionalString,
   PRIVATE_TUTORS_ADMINS: optionalString,

@@ -30,9 +30,16 @@ export function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new ContractFailure(message);
 }
 
+/** JSON with every object's keys sorted: a store that keeps a document as jsonb hands its keys back in its own order, which is not behaviour. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v
+  );
+}
+
 export function assertEqual<T>(actual: T, expected: T, message: string): void {
-  const a = JSON.stringify(actual);
-  const e = JSON.stringify(expected);
+  const a = canonical(actual);
+  const e = canonical(expected);
   if (a !== e) throw new ContractFailure(`${message}: expected ${e}, got ${a}`);
 }
 

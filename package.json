@@ -38,6 +38,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "db:migrate": "tsx scripts/db-migrate.ts",
     "api-report": "tsx scripts/api-surface.ts",
     "api-report:check": "tsx scripts/api-surface.ts --check",
     "architecture-report": "depcruise apps packages --config .dependency-cruiser.cjs --output-type err-long",
@@ -73,6 +74,7 @@
   "devDependencies": {
     "@amiceli/vitest-cucumber": "8.0.0",
     "@axe-core/playwright": "^4.13.0",
+    "@electric-sql/pglite": "^0.5.10",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.0",
     "@stryker-mutator/core": "^10.0.0",
@@ -92,6 +94,7 @@
     "js-yaml": "^4.1.1",
     "katex": "^0.18.2",
     "knip": "6.41.0",
+    "pg": "^8.23.1",
     "prettier": "^3.9.9",
     "prettier-plugin-svelte": "^4.1.1",
     "pyodide": "^314.0.6",
