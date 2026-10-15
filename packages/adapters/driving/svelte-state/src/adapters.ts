@@ -32,7 +32,6 @@ import {
   InMemoryAssistanceFeed,
   InMemoryCourseNotices,
   InMemoryCourseSource,
-  InMemoryHelpDesk,
   InMemorySnippetStore,
   InMemoryLearningEventSink,
   InMemoryNotesStore,
@@ -46,7 +45,8 @@ import {
   PassThroughRenderer,
   RecordingLiveEventReporter,
   RecordingPublisher,
-  ScriptedCodeRuntimePort
+  ScriptedCodeRuntimePort,
+  SignedOutHelpDesk
 } from "@tutors/application/testing";
 
 export type Adapters = {
@@ -125,7 +125,7 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     whiteboard: new InMemoryWhiteboardStore(),
     notes: new InMemoryNotesStore(),
     assistanceFeed: new InMemoryAssistanceFeed(false),
-    helpDesk: new InMemoryHelpDesk(),
+    helpDesk: new SignedOutHelpDesk(),
     ...overrides
   };
 }

@@ -5,7 +5,7 @@
    * time ticking each second, lecturer requests first and then the longest waiting. The lecturer
    * acknowledges, answers a Need-a-hint request with a hint they type, or resolves.
    */
-  import { helpQueueService } from "@tutors/svelte-state/assistance";
+  import { helpQueueService } from "@tutors/svelte-state/assistance/queue";
   import type { HelpKind } from "@tutors/domain/assistance";
   import { t, type MessageKey } from "@tutors/i18n";
 

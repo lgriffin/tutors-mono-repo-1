@@ -4,7 +4,7 @@
    * asked from (Rule 0397), and once the request is resolved, one question whether the help helped
    * (Rule 0398). Nothing shows to a visitor or in anonymous mode.
    */
-  import { helpService } from "@tutors/svelte-state/assistance";
+  import { helpService } from "@tutors/svelte-state/assistance/help";
   import { t } from "@tutors/i18n";
 
   const hint = $derived(helpService.step.value && helpService.request.value ? helpService.hint() : null);
