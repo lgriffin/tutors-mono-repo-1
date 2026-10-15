@@ -34,7 +34,8 @@ function createHelpService() {
 
   let courseRead: string | null = null;
   let poll: ReturnType<typeof setInterval> | null = null;
-  let lastAsk: HelpKind | null = null;
+  /** The last action that was not kept, sent again by retry() (Rule 0394). */
+  let lastFailed: (() => Promise<boolean>) | null = null;
   let reads = 0;
 
   function stopPolling(): void {
@@ -43,7 +44,8 @@ function createHelpService() {
   }
 
   function keepPolling(): void {
-    const live = request.value !== null && isLive(request.value);
+    // Only while the student is on a lab: an action that answers after they left starts no poll.
+    const live = step.value !== null && request.value !== null && isLive(request.value);
     if (live && !poll) poll = setInterval(() => void refresh(), HELP_POLL_MS);
     if (!live) stopPolling();
   }
@@ -66,17 +68,21 @@ function createHelpService() {
     }
   }
 
-  async function act(run: () => ReturnType<ReturnType<typeof adapters>["helpDesk"]["ask"]>): Promise<boolean> {
+  async function act(run: () => ReturnType<ReturnType<typeof adapters>["helpDesk"]["ask"]>, again: () => Promise<boolean>): Promise<boolean> {
     sending.value = true;
+    // A read that started before this action would show the request as it was: its answer is dropped.
+    reads++;
     try {
       const result = await run();
       if (!result.ok) {
         failure.value = result.reason;
+        lastFailed = again;
         // The request moved on elsewhere (another tab, the lecturer): show where it is now.
         if (result.reason === "not-in-state-table" || result.reason === "conflict") await refresh();
         return false;
       }
       failure.value = null;
+      lastFailed = null;
       show(result.request);
       return true;
     } finally {
@@ -96,6 +102,7 @@ function createHelpService() {
      * course; the poll keeps it fresh); signed out or anonymous, the control is hidden (Rule 0399).
      */
     async arrive(ref: StepRef, signedIn: boolean): Promise<void> {
+      const returning = step.value === null;
       step.value = ref;
       const offered = signedIn && !adapters().anonymous;
       if (!offered) {
@@ -105,7 +112,12 @@ function createHelpService() {
         return;
       }
       available.value = true;
-      if (courseRead === ref.courseId) return;
+      if (courseRead === ref.courseId) {
+        // Back on a lab of the same course after leaving: the request may have moved on meanwhile (Rule 0562).
+        if (returning) await refresh();
+        else keepPolling();
+        return;
+      }
       courseRead = ref.courseId;
       failure.value = null;
       show(null);
@@ -118,35 +130,36 @@ function createHelpService() {
     async ask(kind: HelpKind): Promise<boolean> {
       const ref = step.value;
       if (!ref || !available.value || sending.value) return false;
-      lastAsk = kind;
-      return act(() => adapters().helpDesk.ask(ref, kind));
+      return act(() => adapters().helpDesk.ask(ref, kind), () => this.ask(kind));
     },
 
-    /** Sends the last ask again after it was not kept (Rule 0394). */
+    /** Sends the last action that was not kept again (Rule 0394): an ask, a withdraw, a solved or a rating. */
     async retry(): Promise<boolean> {
-      return lastAsk ? this.ask(lastAsk) : false;
+      return lastFailed ? lastFailed() : false;
     },
 
     /** The student takes their request back. */
     async withdraw(): Promise<boolean> {
       const live = request.value;
       if (!live || !isLive(live)) return false;
-      return act(() => adapters().helpDesk.act(live.id, "withdraw"));
+      return act(() => adapters().helpDesk.act(live.id, "withdraw"), () => this.withdraw());
     },
 
     /** The student says they solved it themselves: the request is resolved, and they are asked whether that helped. */
     async solved(): Promise<boolean> {
       const live = request.value;
       if (!live || !isLive(live)) return false;
-      return act(() => adapters().helpDesk.act(live.id, "resolve"));
+      return act(() => adapters().helpDesk.act(live.id, "resolve"), () => this.solved());
     },
 
     /** The student says whether the help helped; asked once (Rule 0398). */
     async rate(helped: boolean): Promise<boolean> {
       const resolved = request.value;
-      if (!resolved || !awaitsRating(resolved)) return false;
-      settled.value = [...settled.value, resolved.id];
-      return act(() => adapters().helpDesk.rate(resolved.id, helped));
+      if (!resolved || !awaitsRating(resolved) || sending.value) return false;
+      const kept = await act(() => adapters().helpDesk.rate(resolved.id, helped), () => this.rate(helped));
+      // Asked once: settled only when the answer was kept, so a failed rating can be sent again.
+      if (kept && !settled.value.includes(resolved.id)) settled.value = [...settled.value, resolved.id];
+      return kept;
     },
 
     /** The student closed the question without answering: not asked again in this session. */
@@ -180,6 +193,12 @@ function createHelpService() {
       return hintsClosed.value.includes(shown.id) ? null : shown.hintText;
     },
 
+    /** True once the student's answer to "did it help?" was kept in this session, however it was sent. */
+    thanked(): boolean {
+      const shown = request.value;
+      return !!shown && shown.helped !== null && settled.value.includes(shown.id);
+    },
+
     /** True while a resolved request waits for the student to say whether it helped, and they have not closed the question (Rule 0398). */
     asksRating(): boolean {
       const shown = request.value;
@@ -189,6 +208,7 @@ function createHelpService() {
     /** Leaves the lab: stops reading the request. */
     leave(): void {
       stopPolling();
+      reads++;
       step.value = null;
     },
 
@@ -197,7 +217,7 @@ function createHelpService() {
       stopPolling();
       reads++;
       courseRead = null;
-      lastAsk = null;
+      lastFailed = null;
       available.value = false;
       step.value = null;
       request.value = null;

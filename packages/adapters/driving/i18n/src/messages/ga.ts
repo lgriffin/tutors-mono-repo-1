@@ -559,6 +559,7 @@ Is feidhmchlár foinse oscailte é Tutors - tá an comhpháirt bailiúcháin son
   "help.waiting": "Ag fanacht",
   "help.acknowledged": "Tá do léachtóir ar an mbealach",
   "help.withdraw": "Tarraing siar",
+  "help.change": "Athraigh an cineál",
   "help.solved": "Réitithe",
   "help.notSent": "Níor seoladh d'iarratas.",
   "help.retry": "Bain triail eile as",

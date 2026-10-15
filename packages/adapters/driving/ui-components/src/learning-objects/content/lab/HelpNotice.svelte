@@ -4,16 +4,13 @@
    * asked from (Rule 0397), and once the request is resolved, one question whether the help helped
    * (Rule 0398). Nothing shows to a visitor or in anonymous mode.
    */
-  import { helpService } from "@tutors/svelte-state/assistance";
+  import { helpService } from "@tutors/svelte-state/assistance/help";
   import { t } from "@tutors/i18n";
 
   const hint = $derived(helpService.step.value && helpService.request.value ? helpService.hint() : null);
   const asking = $derived(helpService.step.value && helpService.request.value ? helpService.asksRating() : false);
-  let thanked = $state(false);
-
-  async function rate(helped: boolean) {
-    thanked = await helpService.rate(helped);
-  }
+  // From the service, so a rating kept through Retry thanks the student too.
+  const thanked = $derived(helpService.step.value && helpService.request.value ? helpService.thanked() : false);
 </script>
 
 {#if helpService.available.value}
@@ -30,8 +27,8 @@
     <aside class="help-rating ui-panel" role="status">
       <span>{t("help.helpedQuestion")}</span>
       <span class="help-actions">
-        <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => rate(true)}>{t("help.yes")}</button>
-        <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => rate(false)}>{t("help.no")}</button>
+        <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => helpService.rate(true)}>{t("help.yes")}</button>
+        <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => helpService.rate(false)}>{t("help.no")}</button>
         <button type="button" class="ui-button help-small" onclick={() => helpService.dismiss()}>{t("help.notNow")}</button>
       </span>
     </aside>

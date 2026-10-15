@@ -9,6 +9,7 @@ import { sameStep, stepKey, type Note, type StepRef } from "@tutors/domain/learn
 import type { AssistanceChange, AssistanceFeed } from "../ports/assistance-feed.ts";
 import type { AssistanceStore } from "../ports/assistance-store.ts";
 import type { FeedbackStore } from "../ports/feedback-store.ts";
+import type { HelpDesk, HelpDeskResult } from "../ports/help-desk.ts";
 import type { InsightsPeriod, InsightsRead } from "../ports/insights-read.ts";
 import type { NotesStore } from "../ports/notes-store.ts";
 import type { Unsubscribe } from "../ports/presence.ts";
@@ -153,5 +154,27 @@ export class InMemoryInsightsRead implements InsightsRead {
   async reflections(courseId: string, period: InsightsPeriod): Promise<Reflection[]> {
     this.reads++;
     return this.reflectionRows.filter((r) => r.ref.courseId === courseId && within(r.sharedAt, period)).map(copy);
+  }
+}
+
+/** A help desk for a deployment where nobody can sign in: every ask is refused and there is nothing to read. */
+export class SignedOutHelpDesk implements HelpDesk {
+  async ask(): Promise<HelpDeskResult> {
+    return { ok: false, reason: "signed-out" };
+  }
+  async act(): Promise<HelpDeskResult> {
+    return { ok: false, reason: "signed-out" };
+  }
+  async answerHint(): Promise<HelpDeskResult> {
+    return { ok: false, reason: "signed-out" };
+  }
+  async rate(): Promise<HelpDeskResult> {
+    return { ok: false, reason: "signed-out" };
+  }
+  async mine(): Promise<HelpRequest | null> {
+    return null;
+  }
+  async queue(): Promise<HelpRequest[]> {
+    throw new Error("nobody is signed in to read a help queue");
   }
 }
