@@ -1,5 +1,7 @@
 <script lang="ts">
   import CourseShell from "@tutors/ui-navigators/TutorsShell.svelte";
+  import ShareSnippet from "@tutors/ui-navigators/panels/ShareSnippet.svelte";
+  import BroadcastListener from "@tutors/ui-navigators/panels/BroadcastListener.svelte";
   import { onDestroy, type Snippet } from "svelte";
   import { tutorsConnectService } from "@tutors/svelte-state/connect";
   import { presenceService } from "@tutors/svelte-state/community";
@@ -108,3 +110,6 @@
 
   {@render children()}
 </CourseShell>
+<!-- A student's "share a snippet with my tutor", and the tutor's broadcasts to the class (#155, #78). -->
+<ShareSnippet />
+<BroadcastListener />

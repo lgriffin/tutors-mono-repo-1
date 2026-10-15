@@ -87,6 +87,9 @@ export class CourseTime implements TutorsTimeCourse;
 
 // --- functions ---
 
+// (from ../../domain/src/course/utils/course-url.ts)
+export function courseJsonUrl(courseId: string) : string;
+
 // (from ../../domain/src/learning/utils/lab-utils.ts)
 export function extractLabIdentifier(loId: string) : string;
 
@@ -146,6 +149,6 @@ export const TutorsTime: TutorsTimeService;
 |------|-------|
 | class | 1 |
 | const | 1 |
-| function | 15 |
+| function | 16 |
 | type | 23 |
-| **Total** | **40** |
+| **Total** | **41** |

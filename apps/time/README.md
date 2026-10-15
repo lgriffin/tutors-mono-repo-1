@@ -35,6 +35,7 @@ Runs on http://localhost:5176
 - `@tutors/ui-navigators`, `@tutors/ui-components` and `@tutors/ui-primitives` for the shell, heatmaps, tables and icons
 - `@tutors/themes` and `@tutors/i18n` for themes and interface text
 - `@tutors/store-supabase` for Supabase access, composed in `src/lib/compose.ts`; `@tutors/moodle` and `@tutors/application` for the Moodle assignment source behind its port
+- `@tutors/identity-better-auth` (and the `@tutors/identity` contracts) for the educator sign-in behind the shared-snippets page; `@tutors/course-http` for the course's published enrollment the educator check reads; `@tutors/realtime-supabase` and `@tutors/svelte-state` for the snippet pings the page hears, composed in `src/lib/compose.ts`
 - `@tutors/logger`, `@tutors/metrics` and `@tutors/clock` for logs, `GET /metrics`, the server clock seam (`HARNESS_NOW`) and `GET /version`
 - AG Grid, Heat.js, Tailwind CSS v4 + Skeleton UI
 

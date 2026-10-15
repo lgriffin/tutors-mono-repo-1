@@ -6,3 +6,9 @@ export const toaster = createToaster({
   gap: 16,
   duration: 8000
 });
+
+/**
+ * How long (ms) a lecturer's broadcast stays on screen. Longer than the regular toast because the
+ * recipient is reading a message from their tutor rather than glancing at it.
+ */
+export const BROADCAST_TOAST_DURATION = 15_000;

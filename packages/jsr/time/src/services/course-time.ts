@@ -8,6 +8,7 @@ import type {
 } from "@tutors/domain/learning";
 import { BaseCalendarModel } from "@tutors/domain/learning";
 import { BaseLabModel } from "@tutors/domain/learning";
+import { courseJsonUrl } from "@tutors/domain/course";
 import { getSupabase } from "./supabase.ts";
 
 export class CourseTime implements TutorsTimeCourse {
@@ -244,21 +245,25 @@ export class CourseTime implements TutorsTimeCourse {
   }
 
   /**
-   * Fetch tutors.json from the course's Netlify deployment and extract ignorePin.
+   * Fetch the course's published tutors.json and extract ignorePin.
    * Returns empty string if fetch fails, JSON is invalid, or ignorePin is missing.
+   *
+   * The origin comes from `courseJsonUrl`, so locally served and self-hosted courses resolve
+   * too, not just Netlify ones. An unreachable course yields `""`, which no input can satisfy.
    */
   static async getCoursePin(courseId: string): Promise<string> {
     const id = courseId.trim();
     if (!id) return "";
 
     try {
-      const url = `https://${id}.netlify.app/tutors.json`;
+      const url = courseJsonUrl(id);
       const res = await fetch(url);
       if (!res.ok) return "";
 
       const data = await res.json();
+      // `ignorepin: 4321` in properties.yaml parses as a number; the signature promises a string.
       const pin = data?.properties?.ignorepin;
-      return pin;
+      return pin == null ? "" : String(pin);
     } catch {
       return "";
     }

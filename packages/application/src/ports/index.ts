@@ -14,3 +14,5 @@ export * from "./access-store.ts";
 export * from "./event-publisher.ts";
 export * from "./clock.ts";
 export * from "./assignment-source.ts";
+export * from "./snippet-store.ts";
+export * from "./course-notices.ts";

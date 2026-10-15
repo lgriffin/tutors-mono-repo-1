@@ -93,7 +93,7 @@ C4Container
   }
 
   System_Ext(courseSite, "Published course site", "Static host")
-  ContainerDb_Ext(postgres, "Supabase Postgres", "tutors-connect-users, learning_records, calendar, tutors-connect-latest, tutors_content_locks, tutors-connect-courses, app_errors")
+  ContainerDb_Ext(postgres, "Supabase Postgres", "tutors-connect-users, learning_records, calendar, tutors-connect-latest, tutors_content_locks, tutors-connect-courses, app_errors, course_gists")
   Container_Ext(realtime, "Supabase Realtime", "Broadcast channels: one per course and tutors-all-course-access")
   System_Ext(github, "GitHub", "OAuth")
   System_Ext(moodle, "Moodle", "Web services")
@@ -203,13 +203,13 @@ C4Component
     Component(crossCutting, "themes · i18n · a11y · tour · privacy", "Svelte", "Theme, locale, reduced motion, tours, consent")
 
     Component(svelteState, "svelte-state", "Svelte 5 runes", "currentCourse, currentLo, tutorsId; courseService, analyticsService, presenceService, liveService, tutorsConnectService, rbacService, markdownService")
-    Component(application, "@tutors/application", "TypeScript", "loadCourse, recordLearningEvent, recordHeartbeat, sharePresence, courseRoster, visitCourse, courseAdmission, loadContentLocks")
+    Component(application, "@tutors/application", "TypeScript", "loadCourse, recordLearningEvent, recordHeartbeat, sharePresence, courseRoster, visitCourse, courseAdmission, loadContentLocks, shareSnippet, broadcastToCourse, isCourseEducator")
     Component(domain, "@tutors/domain", "TypeScript", "course tree, learning events, presence rules, access rules, quiz")
 
     Component(courseHttp, "course-http", "CourseSource", "GET tutors.json")
     Component(renderMarkdown, "render-markdown", "ContentRenderer", "markdown-it, Shiki, KaTeX")
-    Component(storeSupabase, "store-supabase", "LearningEventSink, ProfilePort, AccessStore, LearningRecords, catalogue", "PostgREST")
-    Component(realtimeSupabase, "realtime-supabase", "PresencePort", "Broadcast channels + tutors-connect-latest")
+    Component(storeSupabase, "store-supabase", "LearningEventSink, ProfilePort, AccessStore, LearningRecords, SnippetStore, catalogue", "PostgREST")
+    Component(realtimeSupabase, "realtime-supabase", "PresencePort, CourseNotices", "Broadcast channels + tutors-connect-latest")
     Component(profileLocal, "profile-localstorage", "ProfilePort", "Browser localStorage")
     Component(busInprocess, "bus-inprocess", "EventPublisher", "In-process listeners")
     Component(identityAdapter, "identity-better-auth", "SessionPort, IdentityClient", "Better Auth, GitHub")
@@ -330,6 +330,8 @@ classDiagram
 | `EventPublisher` | Tell the rest of the application something happened | `bus-inprocess` | `RecordingPublisher` | `eventPublisherContract` |
 | `Clock` | The instant, so time can be frozen | `clock` | `FixedClock` | — |
 | `AssignmentSource` | Assignments and submissions from the VLE | `moodle` | `InMemoryAssignmentSource` | — |
+| `SnippetStore` | Keep a learner's shared snippet for the course's educators; read the ones not yet expired; count a learner's recent shares | `store-supabase` (servers, service key), `course-http` (`httpSnippetStore`, the browser: posts to the reader's server) | `InMemorySnippetStore` | `snippetStoreContract` |
+| `CourseNotices` | Post a course notice (a content-free "snippet shared" ping, a lecturer's broadcast) and watch for them | `realtime-supabase` (`supabaseCourseNotices` in the browser, `publishCourseNotice` on the server) | `InMemoryCourseNotices` | `courseNoticesContract` |
 
 Application events (`AppEvent`) are `learning` (a learner's page load or tick), `presence` (a sharing learner moved) and `course-visit` (a learner opened a course; the catalogue counts it). They are how one part of the product reacts to another without importing it.
 
@@ -341,9 +343,9 @@ Application events (`AppEvent`) are `learning` (a learner's page load or tick), 
 
 | Package | Technology (the only package that imports it) | Ports | Also exports |
 |---|---|---|---|
-| `@tutors/store-supabase` | `@supabase/supabase-js` (shared with realtime-supabase) | `LearningEventSink`, `LearningRecords`, `ProfilePort`, `AccessStore` | The client seam (`createSupabaseClient`, `configureSupabase`), the catalogue (`catalogueService`, `updateCourseList`), the error transport, the health check |
-| `@tutors/realtime-supabase` | `@supabase/supabase-js` Realtime (the only package that drives a channel: `gateway.ts`) | `PresencePort`; the `@tutors/realtime` broker adapter and `realtimeClientOptions`; `receiveLiveActivity`, the reader server's side of Tutors Live | `ALL_COURSES_CHANNEL`, `LIVE_ACTIVITY_ROUTE`, the budget calls (`watchLiveTopic`, `claimLivePublish`) |
-| `@tutors/course-http` | `fetch` | `CourseSource` | `CourseNotFoundError`, `CourseUnreachableError` (defined in the port) |
+| `@tutors/store-supabase` | `@supabase/supabase-js` (shared with realtime-supabase) | `LearningEventSink`, `LearningRecords`, `ProfilePort`, `AccessStore`, `SnippetStore` (`course_gists`, service key only) | The client seam (`createSupabaseClient`, `configureSupabase`), the catalogue (`catalogueService`, `updateCourseList`), the error transport, the health check |
+| `@tutors/realtime-supabase` | `@supabase/supabase-js` Realtime (the only package that drives a channel: `gateway.ts`) | `PresencePort`, `CourseNotices` (`supabaseCourseNotices`: watch through the gateway, post to the reader's server; `publishCourseNotice`: the server's HTTP send on `snippets:<courseId>` and `broadcast:<courseId>`); the `@tutors/realtime` broker adapter and `realtimeClientOptions`; `receiveLiveActivity`, the reader server's side of Tutors Live | `ALL_COURSES_CHANNEL`, `LIVE_ACTIVITY_ROUTE`, `COURSE_NOTICES_ROUTE`, the budget calls (`watchLiveTopic`, `claimLivePublish`) |
+| `@tutors/course-http` | `fetch` | `CourseSource`; `SnippetStore` for the browser (`httpSnippetStore`, `POST /api/gists` on the reader's server) | `CourseNotFoundError`, `CourseUnreachableError` (defined in the port), `SnippetRefusedError` |
 | `@tutors/render-markdown` | `markdown-it` and plugins, `shiki`, `katex` | `ContentRenderer` | The conversions the model facade re-exports (`convertLoToHtml`, ...) |
 | `@tutors/profile-localstorage` | `localStorage` | `ProfilePort` | — |
 | `@tutors/bus-inprocess` | none | `EventPublisher` | — |
@@ -355,7 +357,7 @@ Application events (`AppEvent`) are `learning` (a learner's page load or tick), 
 
 | Package | Role | Reaches the outside world through |
 |---|---|---|
-| `@tutors/svelte-state` | The reader's state (`currentCourse`, `currentLo`, `tutorsId`, ...) and services (`courseService`, `analyticsService`, `presenceService`, `liveService`, `tutorsConnectService`, `rbacService`, `markdownService`). The only package in which `$state`, `$derived` and `$effect` appear in `.ts` modules. | `adapters()`, the port set the app installed with `configureAdapters` |
+| `@tutors/svelte-state` | The reader's state (`currentCourse`, `currentLo`, `tutorsId`, ...) and services (`courseService`, `analyticsService`, `presenceService`, `liveService`, `tutorsConnectService`, `rbacService`, `markdownService`, `noticeService`, `snippetService`). The only package in which `$state`, `$derived` and `$effect` appear in `.ts` modules. | `adapters()`, the port set the app installed with `configureAdapters` |
 | `@tutors/ui-primitives` → `@tutors/ui-navigators` → `@tutors/ui-components` | The UI, in a strict one-directional layering | `svelte-state` |
 | `@tutors/themes`, `@tutors/i18n`, `@tutors/a11y`, `@tutors/tour`, `@tutors/privacy` | Cross-cutting | `svelte-state`; none imports a UI package |
 
@@ -379,10 +381,10 @@ flowchart LR
 
 | App | Root | Composes |
 |---|---|---|
-| reader | `apps/reader/src/lib/compose.ts` `composeReader(env, { identityClient })` | Clock, `markdownRenderer`, `httpCourseSource()`, `localStorageProfile()`, `inProcessPublisher()`, and in a signed-in deployment the Supabase sink, presence, profile and access store; subscribes the catalogue's `updateCourseList` to `course-visit` events |
+| reader | `apps/reader/src/lib/compose.ts` `composeReader(env, { identityClient })` | Clock, `markdownRenderer`, `httpCourseSource()`, `localStorageProfile()`, `inProcessPublisher()`, and in a signed-in deployment the Supabase sink, presence, profile, access store, `httpSnippetStore()` and `supabaseCourseNotices(client)`; subscribes the catalogue's `updateCourseList` to `course-visit` events. The server routes `/api/gists` and `/api/notices` compose `supabaseSnippetStore` over the service key and `publishCourseNotice` from `lib/server/snippets.ts` |
 | live | `apps/live/src/lib/compose.ts` `composeLive(env)` | Clock and `supabasePresence(client)`; Live only listens |
 | catalogue | `apps/catalogue/src/lib/compose.ts` `composeCatalogue(env)` | The Supabase client behind the catalogue reads |
-| time | `apps/time/src/lib/compose.ts` `composeTime(env)` | The Supabase client for the health check and error transport, and the time library's client; `moodleAssignmentSource` is composed on the server from private environment |
+| time | `apps/time/src/lib/compose.ts` `composeTime(env)` | The Supabase client for the health check and error transport, the time library's client, and `supabaseCourseNotices(client)` so the snippets page hears the pings; `moodleAssignmentSource` and `supabaseSnippetStore` (service key, behind the educator check) are composed on the server from private environment (`lib/server/snippets.ts`). The time app installs the same identity handle as the reader, so its server knows who asks for a course's snippets |
 
 The reader's `hooks.server.ts` also decides the **auth mode** from `PUBLIC_ANON_MODE` and `PRIVATE_AUTH_SECRET` (`enabled`, `anonymous`, `unconfigured`) and installs the identity handle; a misconfigured deployment serves courses anonymously and logs the misconfiguration once at startup.
 
@@ -471,6 +473,8 @@ sequenceDiagram
 ```
 
 The reader **never broadcasts from the browser**: `PresencePort.publish` keeps the latest snapshot and posts the event to the reader's own server (`POST /api/live/activity`, `receiveLiveActivity`), which asks the database (`realtime_claim_live_publish`) which feeds a Tutors Live tab is watching and publishes only to those, within the day's budget of 120,000 Live messages (`supabase/migrations/20261016_realtime_live_budget.sql`; Rules 0330 to 0338). The reader reads the roster from stored rows; a course channel delivers every student's page view to every other student, so joining it grows with the square of the class. Live's course page is the only subscriber to a course channel and its landing page the only subscriber to the platform-wide feed; both go through the `@tutors/realtime` gateway (budget, jittered rejoin, counts; Rules 0311 to 0318), report themselves as watchers once a minute (`realtime_watch`) and read stored activity instead while the budget is paused.
+
+Course notices follow the same shape (Rules 0420 to 0428). A learner's shared snippet goes to the reader's server (`POST /api/gists`, `shareSnippet`), which keeps it in `course_gists` under the service key and publishes a content-free ping (`{ type, id, courseId, sentAt }`) on `snippets:<courseId>`; a lecturer's broadcast goes to `POST /api/notices`, which checks the sender against the course's published `enrollment.educators` (`isCourseEducator`), holds the one-per-course-per-minute limit and publishes on `broadcast:<courseId>`. Browsers only subscribe, through the gateway. These publishes are bounded by the application's own limits rather than the day's Live budget, whose claim function knows only the activity topics; `TODO(budget)` in `realtime-supabase/src/notices.ts` marks it.
 
 ### 9.4 Signing in and the actor
 
@@ -605,7 +609,7 @@ Every Supabase table and channel has exactly one adapter that reads or writes it
 
 | Table or channel | Adapter | Port | Written by | Read by |
 |---|---|---|---|---|
-| `tutors-connect-users` | `store-supabase` (profile), `tutors-time-lib` read model (names) | `ProfilePort`, `LearningRecords` | Reader on sign-in (`upsertLearner`), sentiment and sharing changes | Reader (profile), Time (full names) |
+| `tutors-connect-users` | `store-supabase` (profile, snippets: avatars), `tutors-time-lib` read model (names) | `ProfilePort`, `LearningRecords`, `SnippetStore` | Reader on sign-in (`upsertLearner`), sentiment and sharing changes | Reader (profile), Time (full names, snippet avatars) |
 | `tutors-connect-profiles` | `store-supabase` (profile, catalogue count) | `ProfilePort` | Reader (course visits of a signed-in learner) | Reader, Catalogue (count) |
 | `learning_records` | `store-supabase` (learning-events, learning-records), `tutors-time-lib` read model | `LearningEventSink`, `LearningRecords` | Reader (page loads, ticks: `record_page_view` / `record_heartbeat` RPCs or per-table upserts) | Time |
 | `calendar` | `store-supabase` (learning-events, learning-records), `tutors-time-lib` read model | `LearningEventSink`, `LearningRecords` | Reader (one row per learner per day) | Time |
@@ -613,11 +617,14 @@ Every Supabase table and channel has exactly one adapter that reads or writes it
 | `tutors_content_locks` | `store-supabase` (access-store) | `AccessStore` | Reader, by a lecturer | Reader |
 | `tutors-connect-courses` | `store-supabase` (catalogue, course-catalogue) | the catalogue service | Reader, on a course visit (through the `course-visit` event) | Catalogue |
 | `app_errors` | `store-supabase` (error-transport) | the logger's transport | Every app's logger | Operators |
+| `course_gists` | `store-supabase` (snippets); no policy lets the anon role read or write it, so only a server holding `PRIVATE_SUPABASE_SERVICE_KEY` reaches it | `SnippetStore` | Reader's server (`POST /api/gists`, 48-hour expiry); `scripts/purge-course-gists.ts` deletes expired rows (`.github/workflows/gist-cleanup.yml`) | Time's server, for an educator the course's enrollment lists |
 | `assignments` | Time app server (`lib/server/db`) | — (Time's own cache of Moodle assignments) | Time | Time |
 | `assignments_submissions` | Time app server (`lib/server/db`) | — (Time's own cache of Moodle submissions) | Time | Time |
 | `realtime_settings`, `realtime_budget`, `realtime_watchers` | `realtime-supabase` (through the `realtime_watch`, `realtime_claim_live_publish` and `live_budget_tier` functions only; no policy lets a browser read them) | `PresencePort` | Live tabs (watchers), the reader's server (the day's spend) | The functions |
 | Realtime channel `<courseId>` | `realtime-supabase` | `PresencePort` | The reader's server (HTTP send, never joined) | Live course page |
 | Realtime channel `tutors-all-course-access` | `realtime-supabase` | `PresencePort` | The reader's server (HTTP send) | Live landing page |
+| Realtime channel `snippets:<courseId>` | `realtime-supabase` (notices) | `CourseNotices` | The reader's server (HTTP send, after a snippet is kept; carries no content) | Time's snippets page, through the gateway |
+| Realtime channel `broadcast:<courseId>` | `realtime-supabase` (notices) | `CourseNotices` | The reader's server (HTTP send, `POST /api/notices`, educators only, one a minute per course) | Every reader tab on the course, through the gateway |
 
 Migrations are expand-only and live under `supabase/migrations/`; `pnpm check:migrations` holds the rule. A migration ships before or after the code that uses it, never in the same deploy as a contraction.
 
@@ -687,6 +694,7 @@ The product's behaviour is specified the same way. The features that govern each
 | Learning records and progress | `student/learning-progress`, `instructor/analytics-calendar`, `instructor/analytics-lab`, `time/lab-analytics` |
 | Presence and live views | `student/live-presence`, `live/presence-tracking`, `shared/realtime-usage`, `shared/realtime-gateway`, `shared/live-activity-budget`, `instructor/student-engagement` |
 | Sign-in, sessions and admission | `shared/authentication`, `shared/sign-in-session`, `instructor/whitelist-management`, `ui/content-locks` |
+| Snippet sharing and lecturer broadcasts | `instructor/snippet-sharing` |
 | Catalogue and discovery | `student/course-discovery`, `ui/catalogue` |
 | Reading, search, labs, quizzes, resources | `ui/reading`, `ui/search`, `student/search-content`, `student/lab-interaction`, `ui/learning-activities`, `ui/resource-cards`, `ui/course-tools` |
 | Shell, themes, accessibility, i18n, tours | `ui/shell-and-navigation`, `ui/preferences-and-themes`, `shared/theming`, `ui/accessibility`, `developer/theme-customisation`, `developer/i18n-localisation`, `developer/guided-tour` |
@@ -742,7 +750,7 @@ The facades exist so that published courses and tools built on them keep working
 
 - **Images**: one per app, built from the Node 22 runtime image (no package manager in the runtime layer, Rule 0220), pushed to quay.io/tutors-sdk with a cosign signature and an SBOM.
 - **Kubernetes**: `deploy/k8s/base`, `components`, `variants` and one overlay per app under `deploy/k8s/overlays/`; `deploy/k8s/next` reuses production images for the next hosts. `pnpm check:k8s` and the platform-conformance tests hold the restricted-SCC, arbitrary-UID and read-only-root policies.
-- **Environment**: `PUBLIC_ANON_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY` are read by the composition roots; `PRIVATE_AUTH_SECRET`, `PRIVATE_AUTH_GITHUB_ID`, `PRIVATE_AUTH_GITHUB_SECRET` by the reader's identity handle; `MOODLE_WS_URL` and its token by the time app's server; `HARNESS_NOW` freezes the clock for the release harness.
+- **Environment**: `PUBLIC_ANON_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY` are read by the composition roots; `PRIVATE_AUTH_SECRET`, `PRIVATE_AUTH_GITHUB_ID`, `PRIVATE_AUTH_GITHUB_SECRET` by the reader's and the time app's identity handles; `PRIVATE_SUPABASE_SERVICE_KEY` by the reader's and the time app's servers for `course_gists` (never by a composition root, never sent to a browser); `MOODLE_WS_URL` and its token by the time app's server; `HARNESS_NOW` freezes the clock for the release harness.
 - **Observability**: every server line is one JSON object with a request id (`@tutors/logger`), `/metrics` is Prometheus (`@tutors/metrics`), `/version` and `/healthz` are served by every app; the error transport writes to `app_errors`.
 - **Release**: `release/claims.yaml`, `deployed.json`, `openvex.json`, `slo.yaml` and `SOP.md` are what the [release harness](https://github.com/tutors-sdk/tutors-release-harness) reads when it compares production with a release candidate. Main is the release candidate; students only see a release.
 

@@ -19,6 +19,7 @@ import { liveWatcherId, watchLiveTopic } from "./budget.ts";
 export { supabaseRealtimeAdapter, realtimeClientOptions } from "./gateway.ts";
 export * from "./budget.ts";
 export * from "./live-activity.ts";
+export * from "./notices.ts";
 
 /** The platform-wide activity feed Tutors Live's landing page subscribes to. */
 export const ALL_COURSES_CHANNEL: string = topics.platformActivity();

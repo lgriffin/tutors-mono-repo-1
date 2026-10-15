@@ -8,16 +8,20 @@ import type {
   AccessStore,
   Clock,
   ContentRenderer,
+  CourseNotices,
   CourseSource,
   EventPublisher,
   IdentityClient,
   LearningEventSink,
   PresencePort,
-  ProfilePort
+  ProfilePort,
+  SnippetStore
 } from "@tutors/application/ports";
 import {
   InMemoryAccessStore,
+  InMemoryCourseNotices,
   InMemoryCourseSource,
+  InMemorySnippetStore,
   InMemoryLearningEventSink,
   InMemoryPresence,
   InMemoryProfile,
@@ -37,6 +41,10 @@ export type Adapters = {
   profile: { local: ProfilePort; signedIn: ProfilePort | null };
   accessStore: AccessStore;
   publisher: EventPublisher;
+  /** Where a learner's shared snippet goes (the reader's server, in the browser). */
+  snippets: SnippetStore;
+  /** Lecturer broadcasts and snippet pings, per course. */
+  notices: CourseNotices;
   identityClient: IdentityClient | null;
   /**
    * The whiteboard's own persistence client, until it has a port of its own. Typed as unknown
@@ -60,6 +68,8 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     profile: { local: profile, signedIn: null },
     accessStore: new InMemoryAccessStore(systemClock),
     publisher: new RecordingPublisher(),
+    snippets: new InMemorySnippetStore(systemClock),
+    notices: new InMemoryCourseNotices(false),
     identityClient: null,
     whiteboardClient: undefined,
     ...overrides

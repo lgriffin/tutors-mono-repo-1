@@ -9,7 +9,7 @@ import type { IdentityClient } from "@tutors/application/ports";
 import { anonymousAdapters, type Adapters } from "@tutors/svelte-state/adapters";
 import { clock } from "@tutors/clock";
 import { markdownRenderer } from "@tutors/render-markdown";
-import { httpCourseSource } from "@tutors/course-http";
+import { httpCourseSource, httpSnippetStore } from "@tutors/course-http";
 import { localStorageProfile } from "@tutors/profile-localstorage";
 import { inProcessPublisher } from "@tutors/bus-inprocess";
 import {
@@ -20,7 +20,7 @@ import {
   supabaseProfile,
   updateCourseList
 } from "@tutors/store-supabase";
-import { realtimeClientOptions, supabasePresence } from "@tutors/realtime-supabase";
+import { realtimeClientOptions, supabaseCourseNotices, supabasePresence } from "@tutors/realtime-supabase";
 import { initSupabase } from "@tutors/tutors-time-lib";
 import log, { withRequestId } from "@tutors/logger";
 
@@ -74,6 +74,10 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     presence: supabasePresence(client, clock.now),
     profile: { local: localStorageProfile(), signedIn: supabaseProfile() },
     accessStore: supabaseAccessStore(),
+    // A shared snippet goes to the reader's server, which keeps it with its service key; notices
+    // (a lecturer's broadcast, a snippet ping) are posted to the server too and watched through the gateway.
+    snippets: httpSnippetStore(),
+    notices: supabaseCourseNotices(client),
     whiteboardClient: client
   };
 }

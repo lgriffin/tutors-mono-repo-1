@@ -6,15 +6,19 @@
 import { describe, it } from "vitest";
 import {
   accessStoreContract,
+  courseNoticesContract,
   eventPublisherContract,
   InMemoryAccessStore,
+  InMemoryCourseNotices,
   InMemoryLearningEventSink,
   InMemoryPresence,
   InMemoryProfile,
+  InMemorySnippetStore,
   learningEventSinkContract,
   presenceContract,
   profileContract,
   RecordingPublisher,
+  snippetStoreContract,
   type ContractCase
 } from "@tutors/application/testing";
 import { localStorageProfile, type KeyValueStorage } from "@tutors/profile-localstorage";
@@ -53,3 +57,5 @@ contract("PresencePort: in memory", presenceContract(() => new InMemoryPresence(
 contract("EventPublisher: in memory", eventPublisherContract(() => new RecordingPublisher()));
 contract("EventPublisher: in process", eventPublisherContract(() => inProcessPublisher()));
 contract("LearningEventSink: in memory", learningEventSinkContract(() => new InMemoryLearningEventSink()));
+contract("SnippetStore: in memory", snippetStoreContract(() => new InMemorySnippetStore()));
+contract("CourseNotices: in memory", courseNoticesContract(() => new InMemoryCourseNotices()));

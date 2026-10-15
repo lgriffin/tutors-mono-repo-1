@@ -6,6 +6,8 @@
   import { t } from "@tutors/i18n";
   import { Tabs, Switch } from "@skeletonlabs/skeleton-svelte";
   import type { Lo, Composite } from "@tutors/tutors-model-lib";
+  import { siteUrls } from "@tutors/ui-primitives/utils/site-urls";
+  import BroadcastPanel from "../panels/BroadcastPanel.svelte";
 
   // Administration only: the course summary is its own Course Info row in the same menu, so this
   // panel no longer carries a copy of it and opens on Content Locks. Mount it for educators only -
@@ -48,6 +50,7 @@
     <Tabs.List>
       <Tabs.Trigger value="locks">{t("lecturer.locks.title")}</Tabs.Trigger>
       <Tabs.Trigger value="enrollment">{t("lecturer.enrollment.title")}</Tabs.Trigger>
+      <Tabs.Trigger value="broadcast">{t("broadcast.title")}</Tabs.Trigger>
       <Tabs.Trigger value="access">{t("lecturer.access.title")}</Tabs.Trigger>
       <Tabs.Indicator />
     </Tabs.List>
@@ -152,6 +155,17 @@
           <p class="ui-muted info-text">No enrollment file detected.</p>
         {/if}
       </div>
+    </Tabs.Content>
+
+    <Tabs.Content value="broadcast">
+      <!-- Snippets live in the Tutors Time app, not here: reading them needs the service-role key, which
+           only a server route may hold. This is a link out, and the destination re-checks
+           `enrollment.educators` server-side; being able to see the link is not what grants access. -->
+      <a href={`${siteUrls.time}/${course?.courseId ?? ""}/gists`} target="_blank" rel="noopener noreferrer" class="info-row flex items-center justify-between">
+        <span class="flex items-center gap-2"><Icon type="note" height="20" /><span class="info-text">{t("lecturer.snippets.title")}</span></span>
+        <span class="ui-muted info-text">{t("lecturer.snippets.hint")} ↗</span>
+      </a>
+      <BroadcastPanel />
     </Tabs.Content>
 
     <Tabs.Content value="access">

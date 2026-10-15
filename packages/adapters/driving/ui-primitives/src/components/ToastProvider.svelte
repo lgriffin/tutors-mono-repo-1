@@ -21,7 +21,10 @@
               class="ui-button ui-button-primary"
               onclick={() => {
                 toaster.dismiss(toast.id);
-                goto(toast.meta.actionUrl);
+                // A lecturer's action may point outside the app (another Tutors app, an external resource).
+                const url = String(toast.meta.actionUrl);
+                if (/^https?:\/\//i.test(url)) window.location.href = url;
+                else goto(url);
               }}
             >
               {toast.meta.actionLabel ?? "Go"}

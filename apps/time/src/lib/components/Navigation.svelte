@@ -18,7 +18,8 @@
     { label: "classTime.labsByStep", path: "lab/bystep", icon: "lucide:list-ordered" },
     { label: "classTime.rawCalendar", path: "calendar/raw", icon: "lucide:table" },
     { label: "classTime.learningRecords", path: "lab/learning-records", icon: "lucide:notebook-tabs" },
-    { label: "classTime.assignments", path: "assignments", icon: "lucide:clipboard-list" }
+    { label: "classTime.assignments", path: "assignments", icon: "lucide:clipboard-list" },
+    { label: "classTime.snippets", path: "gists", icon: "lucide:file-code" }
   ];
 </script>
 
