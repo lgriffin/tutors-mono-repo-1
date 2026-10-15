@@ -13,6 +13,7 @@ import type {
   CourseNotices,
   CourseSource,
   EventPublisher,
+  HelpDesk,
   IdentityClient,
   LearningEventSink,
   PlaygroundLive,
@@ -31,6 +32,7 @@ import {
   InMemoryAssistanceFeed,
   InMemoryCourseNotices,
   InMemoryCourseSource,
+  InMemoryHelpDesk,
   InMemorySnippetStore,
   InMemoryLearningEventSink,
   InMemoryNotesStore,
@@ -86,6 +88,12 @@ export type Adapters = {
    * composes none; publishing is the reader server's.
    */
   assistanceFeed: AssistanceFeed;
+  /**
+   * Help requests as the person signed in: a student asks from a lab step, a lecturer works the
+   * queue in Tutors Live. The browser only asks; the reader's server keeps and moves requests
+   * (Rule 0390). With nobody to sign in, every ask is refused.
+   */
+  helpDesk: HelpDesk;
 };
 
 const systemClock: Clock = { now: () => new Date(), nowMs: () => Date.now() };
@@ -117,6 +125,7 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     whiteboard: new InMemoryWhiteboardStore(),
     notes: new InMemoryNotesStore(),
     assistanceFeed: new InMemoryAssistanceFeed(false),
+    helpDesk: new InMemoryHelpDesk(),
     ...overrides
   };
 }

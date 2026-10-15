@@ -5,7 +5,8 @@
  */
 import { courseVisitOf, onlineStatusFor, parseSentiment, parseSharing, type CourseVisit, type PresenceEvent, type StoredPresence } from "@tutors/domain/presence";
 import type { Course } from "@tutors/domain/course";
-import type { AccessStore, LearningEventSink, PlaygroundSnapshots, ProfilePort, ScormRecords, WhiteboardStore } from "@tutors/application/ports";
+import type { AccessStore, HelpDesk, HelpDeskRefusal, HelpDeskResult, LearningEventSink, PlaygroundSnapshots, ProfilePort, ScormRecords, WhiteboardStore } from "@tutors/application/ports";
+import type { HelpRequest } from "@tutors/domain/assistance";
 import log from "@tutors/logger";
 import { dataApi, type DataApi } from "./client.ts";
 
@@ -176,4 +177,46 @@ export function readerApiPresenceRoster(api: DataApi = dataApi): (courseId: stri
 /** A Tutors Live tab's watcher report through POST /api/live/watch, for the realtime adapter's `watch` option. */
 export function readerApiLiveWatch(api: DataApi = dataApi): (topic: string, watcher: string) => Promise<"normal" | "slow" | "paused" | null> {
   return async (topic, watcher) => (await api.watchLive({ topic, watcher }))?.tier ?? null;
+}
+
+const HELP_REFUSALS: readonly HelpDeskRefusal[] = ["invalid", "unavailable", "not-found", "conflict", "not-in-state-table", "not-permitted", "hint-required"];
+
+/**
+ * What the reader answered a help post with: the request it kept, or the refusal it named. 401 is
+ * nobody signed in; a 503 naming no refusal is a server that keeps no help requests; a 400 naming
+ * none is a post it could not read; anything else (no answer, an origin it does not list) is
+ * "try again".
+ */
+async function helpAnswer(response: Response | null): Promise<HelpDeskResult> {
+  if (!response) return { ok: false, reason: "unavailable" };
+  const body = (await response.json().catch(() => null)) as { request?: HelpRequest; reason?: string } | null;
+  if (response.ok && body?.request) return { ok: true, request: body.request };
+  if (response.status === 401) return { ok: false, reason: "signed-out" };
+  const named = HELP_REFUSALS.find((r) => r === body?.reason);
+  if (named) return { ok: false, reason: named };
+  if (response.status === 503) return { ok: false, reason: "not-kept" };
+  return { ok: false, reason: response.status === 400 ? "invalid" : "unavailable" };
+}
+
+/**
+ * Help requests through /api/assistance: the reader's server runs each ask as the session's actor
+ * (Rule 0390). From Tutors Live's origin the calls carry the lecturer's session.
+ */
+export function readerApiHelpDesk(api: DataApi = dataApi): HelpDesk {
+  return {
+    ask: async (ref, kind) => helpAnswer(await api.postHelp({ action: "request", courseId: ref.courseId, labRoute: ref.labRoute, stepId: ref.stepId, kind })),
+    act: async (id, action) => helpAnswer(await api.postHelp({ action, id })),
+    answerHint: async (id, hintText) => helpAnswer(await api.postHelp({ action: "answer-hint", id, hintText })),
+    rate: async (id, helped) => helpAnswer(await api.postHelp({ action: "rate", id, helped })),
+    async mine(courseId) {
+      const answer = await api.getMyHelpRequest(courseId);
+      if (!answer) throw new Error("Your help request could not be read");
+      return answer.request ?? null;
+    },
+    async queue(courseId) {
+      const answer = await api.getHelpQueue(courseId);
+      if (!answer) throw new Error("The help queue could not be read");
+      return answer.queue.map((entry) => entry.request);
+    }
+  };
 }

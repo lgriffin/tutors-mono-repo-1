@@ -13,7 +13,8 @@
     "./community": "./src/community/index.ts",
     "./connect": "./src/connect/index.ts",
     "./rbac": "./src/rbac/index.ts",
-    "./learning": "./src/learning/index.ts"
+    "./learning": "./src/learning/index.ts",
+    "./assistance": "./src/assistance/index.ts"
   },
   "dependencies": {
     "@marp-team/marp-core": "^4.3.1",

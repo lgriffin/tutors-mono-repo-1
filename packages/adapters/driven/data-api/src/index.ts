@@ -9,7 +9,8 @@ export {
   readerApiScormRecords,
   readerApiPlaygroundSnapshots,
   readerApiPresenceRoster,
-  readerApiLiveWatch
+  readerApiLiveWatch,
+  readerApiHelpDesk
 } from "./adapters.ts";
 export { dataApiErrorTransport, MAX_ERROR_BATCH, MAX_REPORT_BYTES } from "./errors.ts";
 export type * from "./contract.ts";

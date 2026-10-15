@@ -158,15 +158,16 @@ export interface LiveWatchTier {
 
 /**
  * POST /api/assistance: a signed-in student asks for help on a step, or anyone acts on a request by
- * id: the student who asked withdraws or resolves it, an educator of the course acknowledges,
+ * id: the student who asked withdraws, resolves or rates it, an educator of the course acknowledges,
  * answers a hint or resolves it. Answers `{ request }` (201 for a new one), or `{ message, reason }`.
  */
 export type HelpPost =
   | { action: "request"; courseId: string; labRoute: string; stepId: string; kind: HelpKind }
   | { action: "acknowledge" | "resolve" | "withdraw"; id: string }
-  | { action: "answer-hint"; id: string; hintText: string };
+  | { action: "answer-hint"; id: string; hintText: string }
+  | { action: "rate"; id: string; helped: boolean };
 
-/** GET /api/assistance/mine?courseId=: the student's own live request, from stored rows. */
+/** GET /api/assistance/mine?courseId=: the student's own live (or just resolved) request, from stored rows. */
 export interface MyHelpRequest {
   request: HelpRequest | null;
 }

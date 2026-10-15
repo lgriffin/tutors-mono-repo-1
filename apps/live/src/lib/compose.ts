@@ -6,14 +6,15 @@
  * With PUBLIC_REALTIME=valkey there is no Supabase client: presence streams from Live's own server
  * (GET /api/realtime/stream, Rule 0482) and reports no watcher, as there is no budget; a course's
  * help queue streams from the reader's server with the lecturer's session (Rule 0392), and is not
- * offered on Supabase Realtime.
+ * offered on Supabase Realtime. On either, the queue is read and worked through the reader's
+ * /api/assistance with the session (the help desk).
  */
 import { anonymousAdapters, type Adapters } from "@tutors/svelte-state/adapters";
 import { clock } from "@tutors/clock";
 import { createSupabaseClient } from "@tutors/store-supabase";
 import { realtimeClientOptions, supabasePresence } from "@tutors/realtime-supabase";
 import { realtimeKindOf, sseAssistanceFeed, valkeyBrowserRealtime } from "@tutors/realtime-valkey";
-import { createDataApi, readerApiLiveWatch, readerApiPresenceRoster, type DataApi } from "@tutors/data-api";
+import { createDataApi, readerApiHelpDesk, readerApiLiveWatch, readerApiPresenceRoster, type DataApi } from "@tutors/data-api";
 import log, { withRequestId } from "@tutors/logger";
 
 export type LiveEnv = { PUBLIC_ANON_MODE?: string; PUBLIC_SUPABASE_URL?: string; PUBLIC_SUPABASE_ANON_KEY?: string; PUBLIC_READER_URL?: string; PUBLIC_REALTIME?: string };
@@ -34,7 +35,8 @@ export function composeLive(env: LiveEnv): Adapters {
       anonymous: false,
       presence: valkeyBrowserRealtime({ presence: { roster: readerApiPresenceRoster(api) } }).presence,
       // The help queue streams from the reader, which checks the lecturer's session (Rule 0392).
-      assistanceFeed: sseAssistanceFeed({ streamBase: api.base })
+      assistanceFeed: sseAssistanceFeed({ streamBase: api.base }),
+      helpDesk: readerApiHelpDesk(api)
     };
   }
   const client = api ? createSupabaseClient(url, key, withRequestId(), realtimeClientOptions()) : undefined;
@@ -45,6 +47,8 @@ export function composeLive(env: LiveEnv): Adapters {
   return {
     ...anonymousAdapters({ clock }),
     anonymous: false,
-    presence: supabasePresence(client, clock.now, { roster: readerApiPresenceRoster(api), watch: readerApiLiveWatch(api) })
+    presence: supabasePresence(client, clock.now, { roster: readerApiPresenceRoster(api), watch: readerApiLiveWatch(api) }),
+    // No stream of the help queue on Supabase Realtime: the queue is read from stored rows every minute (Rule 0393).
+    helpDesk: readerApiHelpDesk(api)
   };
 }

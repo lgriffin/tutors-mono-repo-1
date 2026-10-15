@@ -117,7 +117,12 @@ export function createDataApi(fetchFn: FetchFn = (input, init) => globalThis.fet
     watchLive: (watch: LiveWatch) => sendJson<LiveWatchTier>("POST", "/api/live/watch", watch),
     // Help requests carry the session even from Tutors Live's origin: the reader decides from it who may act.
     postHelp: (post: HelpPost) => send(call, "POST", "/api/assistance", post, "include"),
-    getMyHelpRequest: (courseId: string) => getJson<MyHelpRequest>(withQuery("/api/assistance/mine", { courseId })),
+    // Nobody signed in has no request of their own; any other failure is null.
+    getMyHelpRequest: async (courseId: string): Promise<MyHelpRequest | null> => {
+      const response = await send(call, "GET", withQuery("/api/assistance/mine", { courseId }));
+      if (response?.status === 401) return { request: null };
+      return response?.ok ? ((await response.json()) as MyHelpRequest) : null;
+    },
     getHelpQueue: async (courseId: string) => {
       const response = await send(call, "GET", withQuery("/api/assistance", { courseId }), undefined, "include");
       return response?.ok ? ((await response.json()) as HelpQueue) : null;

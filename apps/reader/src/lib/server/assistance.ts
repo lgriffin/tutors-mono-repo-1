@@ -5,7 +5,7 @@
  * /api/assistance. Every write runs here, as the session's actor (Rule 0390); a browser only asks.
  */
 import { clock } from "@tutors/clock";
-import { acknowledgeHelp, answerHint, helpQueue, myHelpRequest, requestHelp, resolveHelp, withdrawHelp, type AssistanceDeps, type HelpRefusal } from "@tutors/application";
+import { acknowledgeHelp, answerHint, helpQueue, myHelpRequest, rateHelp, requestHelp, resolveHelp, withdrawHelp, type AssistanceDeps, type HelpRefusal } from "@tutors/application";
 import { stepRef, type StepRef } from "@tutors/domain/learning";
 import { readerServer } from "./api/adapters.ts";
 import { educatorsOf } from "./snippets.ts";
@@ -24,15 +24,19 @@ export function assistance(fetchFn: typeof fetch) {
     answerHint: answerHint(deps),
     resolve: resolveHelp(deps),
     withdraw: withdrawHelp(deps),
+    rate: rateHelp(deps),
     queue: helpQueue(deps),
     mine: myHelpRequest(deps),
     educatorsOf: deps.educatorsOf
   };
 }
 
-/** What a browser posts: a student asking on a step, or anyone acting on a request by id. */
+/** What a browser posts: a student asking on a step, anyone acting on a request by id, or the student rating it. */
 export type HelpPost =
-  { action: "request"; ref: StepRef; kind: string } | { action: "acknowledge" | "resolve" | "withdraw"; id: string } | { action: "answer-hint"; id: string; hintText: string };
+  | { action: "request"; ref: StepRef; kind: string }
+  | { action: "acknowledge" | "resolve" | "withdraw"; id: string }
+  | { action: "answer-hint"; id: string; hintText: string }
+  | { action: "rate"; id: string; helped: boolean };
 
 const text = (value: unknown, max: number): string | null => (typeof value === "string" && value.trim() && value.length <= max ? value.trim() : null);
 
@@ -49,16 +53,18 @@ export function parseHelpPost(body: Record<string, unknown>): HelpPost | string 
     case "acknowledge":
     case "resolve":
     case "withdraw":
-    case "answer-hint": {
+    case "answer-hint":
+    case "rate": {
       const id = text(body.id, 64);
       if (!id) return "id is required";
+      if (body.action === "rate") return typeof body.helped === "boolean" ? { action: "rate", id, helped: body.helped } : "helped is true or false";
       if (body.action !== "answer-hint") return { action: body.action, id };
       const hintText = typeof body.hintText === "string" ? body.hintText : "";
       if (hintText.length > MAX_HINT_LENGTH) return `a hint is at most ${MAX_HINT_LENGTH} characters`;
       return { action: "answer-hint", id, hintText };
     }
     default:
-      return "action is one of request, acknowledge, answer-hint, resolve, withdraw";
+      return "action is one of request, acknowledge, answer-hint, resolve, withdraw, rate";
   }
 }
 
