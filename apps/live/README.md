@@ -53,6 +53,7 @@ Runs on http://localhost:5174
 - `@tutors/ui` components
 - `@tutors/svelte-state` for live presence tracking, over the `@tutors/domain` and `@tutors/application` rings
 - `@tutors/realtime-supabase` and `@tutors/store-supabase` (its Realtime client only) are the adapters `src/lib/compose.ts` puts behind the presence port; `@tutors/data-api` reads the stored roster and reports watchers and errors through the reader's `/api/presence/roster`, `/api/live/watch` and `/api/errors` at `PUBLIC_READER_URL`
+- `@tutors/realtime-valkey` replaces them when `PUBLIC_REALTIME=valkey`: the presence page streams a course's or the platform's activity from this app's own `/api/realtime/stream`, which subscribes to the Valkey at `PRIVATE_VALKEY_URL` that the reader's server publishes to
 - `@tutors/app-config` for the shared Vite-based SvelteKit configuration (build time only)
 - `@tutors/i18n` for interface text in the reader's six languages
 - `@tutors/clock` for the server clock seam (`HARNESS_NOW`) and the `GET /version` endpoint

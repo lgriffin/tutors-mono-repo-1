@@ -24,6 +24,7 @@
     "@tutors/notes-localstorage": "workspace:*",
     "@tutors/profile-localstorage": "workspace:*",
     "@tutors/realtime-supabase": "workspace:*",
+    "@tutors/realtime-valkey": "workspace:*",
     "@tutors/render-markdown": "workspace:*",
     "@tutors/runtime-wasm": "workspace:*",
     "@tutors/scorm-runtime": "workspace:*",
@@ -32,7 +33,8 @@
     "@tutors/workspace-indexeddb": "workspace:*",
     "dompurify": "^3.4.14",
     "isomorphic-dompurify": "^4.5.0",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "redis": "^6.2.1"
   },
   "devDependencies": {
     "@codemirror/lang-python": "^6.2.1",

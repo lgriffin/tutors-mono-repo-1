@@ -1,0 +1,106 @@
+/**
+ * What the reader's server publishes, on Valkey: Tutors Live's activity (POST /api/live/activity),
+ * course notices (POST /api/gists, POST /api/notices) and the messages a browser hands it to
+ * publish (POST /api/realtime/publish). There is no daily budget: publishing to a Valkey channel
+ * nobody streams costs nothing, so every learning event goes to its course's and the platform's
+ * activity topics, and the Live tabs that stream them hear it.
+ */
+import { parseLiveActivity } from "@tutors/domain/presence";
+import type { CourseNotice } from "@tutors/application/ports";
+import { topics } from "@tutors/realtime";
+import log from "@tutors/logger";
+import type { RealtimeHub } from "./hub.ts";
+import { noticeEvent, noticeTopic } from "./notices.ts";
+import { PLAYGROUND_EVENTS, playgroundTopicOf } from "./topics.ts";
+
+export const LO_EVENT = "lo-event";
+
+/** The answer to POST /api/live/activity: the same shape as on Supabase, always the normal tier. */
+export type ValkeyActivityResponse = { status: number; body?: { tier: "normal"; topics: string[] } | { message: string } };
+
+/**
+ * Publishes one learning event to its course's and the platform's activity topics.
+ * 400 for a malformed body; 204 with no hub (anonymous mode); otherwise 202 with the topics it was
+ * published to (none when Valkey failed, which is logged).
+ */
+export async function publishLiveActivity(raw: string, hub: RealtimeHub | null): Promise<ValkeyActivityResponse> {
+  const record = parseLiveActivity(raw);
+  if (typeof record === "string") return { status: 400, body: { message: record } };
+  if (!hub) return { status: 204 };
+  const targets = [topics.courseActivity(record.courseId), topics.platformActivity()];
+  const results = await Promise.allSettled(targets.map((topic) => hub.publish(topic, { event: LO_EVENT, payload: record })));
+  const published: string[] = [];
+  results.forEach((result, i) => {
+    if (result.status === "fulfilled") published.push(targets[i]);
+    else log.error("Live activity publish failed:", targets[i], result.reason);
+  });
+  return { status: 202, body: { tier: "normal", topics: published } };
+}
+
+/** Publishes one course notice to its topic; false with no hub, no course, or when Valkey failed. */
+export async function publishNotice(hub: RealtimeHub | null, notice: CourseNotice): Promise<boolean> {
+  if (!hub || !notice.courseId) return false;
+  try {
+    await hub.publish(noticeTopic(notice.courseId, notice.type), { event: noticeEvent(notice.type), payload: notice });
+    return true;
+  } catch (error) {
+    log.error("Publishing a course notice failed:", notice.type, notice.courseId, error);
+    return false;
+  }
+}
+
+/** A playground state carries the student's files; anything larger than this is refused. */
+export const MAX_BROWSER_MESSAGE_BYTES = 256 * 1024;
+/** Per topic, across every browser on this server: a share sends one state every 1.5 s. */
+export const BROWSER_MESSAGES_PER_SECOND = 10;
+
+export type BrowserPublishResponse = { status: 202 | 400 | 403 | 413 | 429 | 502; message?: string };
+
+/**
+ * A limiter over one-second windows per topic, shared by every request a server answers. The
+ * gateway already holds each tab to its budget; this holds a topic to one, whoever sends.
+ */
+export function topicRateLimiter(perSecond = BROWSER_MESSAGES_PER_SECOND, now: () => number = Date.now): (topic: string) => boolean {
+  const windows = new Map<string, { start: number; count: number }>();
+  return (topic) => {
+    const at = now();
+    const current = windows.get(topic);
+    if (!current || at - current.start >= 1000) {
+      if (windows.size > 10_000) windows.clear();
+      windows.set(topic, { start: at, count: 1 });
+      return true;
+    }
+    if (current.count >= perSecond) return false;
+    current.count++;
+    return true;
+  };
+}
+
+/**
+ * A browser's message to publish (POST /api/realtime/publish): only a live share's `state` or a
+ * lecturer's `watching`, only on a playground topic. Anything else is refused before Valkey sees it.
+ */
+export async function publishBrowserMessage(raw: string, hub: RealtimeHub, allow: (topic: string) => boolean): Promise<BrowserPublishResponse> {
+  if (new TextEncoder().encode(raw).length > MAX_BROWSER_MESSAGE_BYTES) return { status: 413, message: "body is larger than 256 KB" };
+  let body: { topic?: unknown; event?: unknown; payload?: unknown; from?: unknown } | null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return { status: 400, message: "body is not JSON" };
+  }
+  if (!body || typeof body !== "object") return { status: 400, message: "body is not an object" };
+  const topic = playgroundTopicOf(body.topic);
+  if (!topic) return { status: 403, message: "a browser publishes only to a playground topic" };
+  if (typeof body.event !== "string" || !(PLAYGROUND_EVENTS as readonly string[]).includes(body.event)) {
+    return { status: 400, message: `event is one of ${PLAYGROUND_EVENTS.join(", ")}` };
+  }
+  const from = typeof body.from === "string" && body.from.length <= 64 ? body.from : undefined;
+  if (!allow(topic)) return { status: 429, message: "too many messages on this topic" };
+  try {
+    await hub.publish(topic, { event: body.event, payload: body.payload ?? {}, ...(from ? { from } : {}) });
+    return { status: 202 };
+  } catch (error) {
+    log.error("Publishing a browser's realtime message failed:", topic, error);
+    return { status: 502, message: "the message was not published" };
+  }
+}
