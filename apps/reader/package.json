@@ -21,6 +21,7 @@
     "@tutors/data-api": "workspace:*",
     "@tutors/domain": "workspace:*",
     "@tutors/live-events-http": "workspace:*",
+    "@tutors/notes-localstorage": "workspace:*",
     "@tutors/profile-localstorage": "workspace:*",
     "@tutors/realtime-supabase": "workspace:*",
     "@tutors/render-markdown": "workspace:*",

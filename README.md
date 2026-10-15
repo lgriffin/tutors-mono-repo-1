@@ -69,6 +69,7 @@ Each wraps one technology behind a port and imports no other adapter.
 | `course-http` | `@tutors/course-http` | CourseSource: reads a published `tutors.json` over HTTP |
 | `render-markdown` | `@tutors/render-markdown` | ContentRenderer: markdown-it, Shiki and KaTeX |
 | `profile-localstorage` | `@tutors/profile-localstorage` | ProfilePort in the browser, for a visitor who is not signed in |
+| `notes-localstorage` | `@tutors/notes-localstorage` | NotesStore in the browser: a learner's private notes per lab step, never sent to a server |
 | `bus-inprocess` | `@tutors/bus-inprocess` | EventPublisher, in process |
 | `identity-better-auth` | `@tutors/identity-better-auth` | SessionPort and IdentityClient over Better Auth (`/server` and `/client` entry points) |
 | `moodle` | `@tutors/moodle` | AssignmentSource over Moodle web services |

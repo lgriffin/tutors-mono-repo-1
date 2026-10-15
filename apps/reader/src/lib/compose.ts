@@ -14,6 +14,7 @@ import { clock } from "@tutors/clock";
 import { markdownRenderer } from "@tutors/render-markdown";
 import { httpCourseSource, httpSnippetStore } from "@tutors/course-http";
 import { localStorageProfile } from "@tutors/profile-localstorage";
+import { localStorageNotes } from "@tutors/notes-localstorage";
 import { inProcessPublisher } from "@tutors/bus-inprocess";
 import { wasmCodeRuntime } from "@tutors/runtime-wasm";
 import { indexedDbWorkspaceStore } from "@tutors/workspace-indexeddb";
@@ -59,6 +60,8 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     // frame on the reader's own host, and the work stays in the student's own browser.
     codeRuntime: wasmCodeRuntime(),
     workspaces: indexedDbWorkspaceStore(),
+    // A learner's notes stay in their own browser in every mode (decision D1, Rule 0380).
+    notes: localStorageNotes(),
     // Live events are anonymous, so they are reported in every mode, and only from a reader in
     // front of a person: a render on the server posts nothing.
     liveEvents: httpLiveEventReporter({
