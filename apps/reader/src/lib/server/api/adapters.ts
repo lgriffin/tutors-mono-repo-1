@@ -18,7 +18,9 @@ export function readerServer(): ReaderServer {
     DATA_STORE: env.DATA_STORE,
     PRIVATE_DATABASE_URL: env.PRIVATE_DATABASE_URL,
     PRIVATE_COURSE_HOSTS: env.PRIVATE_COURSE_HOSTS,
-    PRIVATE_TUTORS_ADMINS: env.PRIVATE_TUTORS_ADMINS
+    PRIVATE_TUTORS_ADMINS: env.PRIVATE_TUTORS_ADMINS,
+    PUBLIC_REALTIME: publicEnv.PUBLIC_REALTIME,
+    PRIVATE_VALKEY_URL: env.PRIVATE_VALKEY_URL
   };
   const key = JSON.stringify(current);
   if (composed?.env !== key) composed = { env: key, server: composeReaderServer(current) };

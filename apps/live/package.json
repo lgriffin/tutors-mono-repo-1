@@ -46,6 +46,7 @@
     "@tutors/live-postgres": "workspace:*",
     "@tutors/live-redis": "workspace:*",
     "@tutors/realtime-supabase": "workspace:*",
+    "@tutors/realtime-valkey": "workspace:*",
     "@tutors/store-supabase": "workspace:*",
     "isomorphic-dompurify": "^4.5.0",
     "pg": "^8.23.0",

@@ -6,8 +6,9 @@ import * as check from "#lib/server/api/validate.ts";
 
 /**
  * A Tutors Live tab reports the Realtime topic it watches, so the reader's server publishes to it
- * (POST /api/live/activity), and hears the day's budget tier. The server calls `realtime_watch` with
- * its service key (Rule 0472). Anonymous, as the anon key it replaces allowed; other origins only
+ * (POST /api/live/activity), and hears the day's budget tier. On Supabase the server calls
+ * `realtime_watch` with its service key (Rule 0472); on Valkey there is no budget and the tier is
+ * always `normal`. Anonymous, as the anon key it replaces allowed; other origins only
  * from PRIVATE_API_ALLOWED_ORIGINS (Tutors Live's).
  */
 export const POST: RequestHandler = async ({ request, url }) => {
@@ -26,9 +27,9 @@ export const POST: RequestHandler = async ({ request, url }) => {
   const topic = body?.topic === ALL_COURSES_CHANNEL ? ALL_COURSES_CHANNEL : check.courseId(body?.topic);
   const watcher = check.text(body?.watcher, 64);
   if (!topic || !watcher) return answer(400, { message: "topic is a Live activity topic and watcher an id" }, cors);
-  const { data } = readerServer();
-  if (!data) return answer(503, { message: "Tutors Live is not configured on this server" }, cors);
-  return answer(200, { tier: await data.watchLive(topic, watcher) }, cors);
+  const { data, realtime } = readerServer();
+  if (!data && !realtime.hub) return answer(503, { message: "Tutors Live is not configured on this server" }, cors);
+  return answer(200, { tier: await realtime.watchLive(topic, watcher) }, cors);
 };
 
 export const OPTIONS: RequestHandler = async ({ request, url }) => preflight(request, url, "POST");

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({ createClient: (await import("../../bdd/support/supabase-recorder.ts")).createClient }));
 vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../bdd/support/supabase-recorder.ts")).createClient }));
-vi.mock("$app/env/public", () => ({ PUBLIC_SUPABASE_URL: "https://mock.supabase.co", PUBLIC_SUPABASE_ANON_KEY: "mock-anon-key", PUBLIC_ANON_MODE: "FALSE" }));
+vi.mock("$app/env/public", () => ({ PUBLIC_SUPABASE_URL: "https://mock.supabase.co", PUBLIC_SUPABASE_ANON_KEY: "mock-anon-key", PUBLIC_ANON_MODE: "FALSE", PUBLIC_REALTIME: undefined }));
 vi.mock("$app/env/private", async () => (await import("../../bdd/support/supabase-recorder.ts")).privateEnv);
 
 import type { Course } from "@tutors/tutors-model-lib";

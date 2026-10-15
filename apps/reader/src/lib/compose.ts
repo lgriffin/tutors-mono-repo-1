@@ -4,8 +4,9 @@
  * shows nobody present and offers no sign-in; otherwise the learner's record, presence snapshot,
  * locks, whiteboard scenes, SCORM state and playground hand-ins travel through the reader's own
  * data API (@tutors/data-api; the server reads and writes them with its service key,
- * guides/SERVER-WRITES.md), the browser's Supabase client carries only the Realtime channels, and
- * Better Auth the session. Both hooks files call this once, so the server and the browser run the same
+ * guides/SERVER-WRITES.md), realtime is Supabase's channels on the browser's Supabase client (the
+ * default) or, with PUBLIC_REALTIME=valkey, the reader server's server-sent event streams (no Supabase
+ * client at all), and Better Auth the session. Both hooks files call this once, so the server and the browser run the same
  * wiring; tests call it with the environment they want.
  */
 import type { IdentityClient } from "@tutors/application/ports";
@@ -21,6 +22,7 @@ import { indexedDbWorkspaceStore } from "@tutors/workspace-indexeddb";
 import { httpLiveEventReporter } from "@tutors/live-events-http";
 import { createSupabaseClient } from "@tutors/store-supabase";
 import { realtimeClientOptions, supabaseCourseNotices, supabasePlaygroundLive, supabasePresence } from "@tutors/realtime-supabase";
+import { realtimeKindOf, valkeyBrowserRealtime } from "@tutors/realtime-valkey";
 import {
   readerApiAccessStore,
   readerApiCourseVisit,
@@ -41,6 +43,8 @@ export type ReaderEnv = {
   PUBLIC_SUPABASE_ANON_KEY?: string;
   /** Where Tutors Live's ingest endpoint is; unset, the reader reports nothing to it. */
   PUBLIC_LIVE_EVENTS_URL?: string;
+  /** `supabase` (the default) or `valkey`. */
+  PUBLIC_REALTIME?: string;
 };
 
 /** `PUBLIC_ANON_MODE=TRUE` turns the learner record, presence and sign-in off entirely. */
@@ -72,6 +76,7 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
   };
 
   if (isAnonymous(env)) return anonymousAdapters(shared);
+  if (realtimeKindOf(env) === "valkey") return signedInAdapters(shared, publisher, valkeyRealtime());
 
   const url = env.PUBLIC_SUPABASE_URL;
   const key = env.PUBLIC_SUPABASE_ANON_KEY;
@@ -83,6 +88,35 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     return { ...anonymousAdapters(shared), anonymous: false };
   }
 
+  // The presence snapshot is stored by the server (POST /api/presence); the channel itself stays in the browser.
+  const presence = supabasePresence(client, clock.now, {
+    store: readerApiPresenceStore(),
+    roster: readerApiPresenceRoster(),
+    watch: readerApiLiveWatch()
+  });
+  return signedInAdapters(shared, publisher, {
+    presence,
+    // TODO(budget): the live share is browser-published through the gateway; see realtime-supabase/src/playground-live.ts.
+    playgroundLive: supabasePlaygroundLive(presence.gateway),
+    notices: supabaseCourseNotices(client)
+  });
+}
+
+/**
+ * Realtime on Valkey (Rule 0482): one gateway per tab over the reader server's streams; sends go to
+ * its POST /api/realtime/publish. Presence stores its snapshot and reads its roster through the
+ * data API, and reports no watcher: there is no budget to report to.
+ */
+function valkeyRealtime(): Pick<Adapters, "presence" | "playgroundLive" | "notices"> {
+  return valkeyBrowserRealtime({ presence: { store: readerApiPresenceStore(), roster: readerApiPresenceRoster() } });
+}
+
+/** A signed-in deployment: the data API for every write, and realtime over the broker PUBLIC_REALTIME picks. */
+function signedInAdapters(
+  shared: Partial<Adapters>,
+  publisher: ReturnType<typeof inProcessPublisher>,
+  realtime: Pick<Adapters, "presence" | "playgroundLive" | "notices">
+): Adapters {
   // The catalogue counts every course visit; it listens rather than being called from the reader,
   // and the count is written by the server (POST /api/courses/visit) from the published course.
   const reportVisit = readerApiCourseVisit();
@@ -90,28 +124,21 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     if (event.type === "course-visit") void reportVisit(event.course, clock.now());
   });
 
-  // The presence snapshot is stored by the server (POST /api/presence); the channel itself stays in the browser.
-  const presence = supabasePresence(client, clock.now, {
-    store: readerApiPresenceStore(),
-    roster: readerApiPresenceRoster(),
-    watch: readerApiLiveWatch()
-  });
   return {
     ...anonymousAdapters(shared),
     anonymous: false,
     learningEvents: readerApiLearningEventSink(),
-    presence,
+    presence: realtime.presence,
     profile: { local: localStorageProfile(), signedIn: readerApiProfile() },
     accessStore: readerApiAccessStore(),
     whiteboard: readerApiWhiteboardStore(),
     scormRecords: readerApiScormRecords(),
     // Snapshots have an owner: the server keeps them under the session's login and decides who may read them (Rule 0475).
     playgroundSnapshots: readerApiPlaygroundSnapshots(),
-    // TODO(budget): the live share is browser-published through the gateway; see realtime-supabase/src/playground-live.ts.
-    playgroundLive: supabasePlaygroundLive(presence.gateway),
+    playgroundLive: realtime.playgroundLive,
     // A shared snippet goes to the reader's server, which keeps it with its service key; notices
     // (a lecturer's broadcast, a snippet ping) are posted to the server too and watched through the gateway.
     snippets: httpSnippetStore(),
-    notices: supabaseCourseNotices(client)
+    notices: realtime.notices
   };
 }

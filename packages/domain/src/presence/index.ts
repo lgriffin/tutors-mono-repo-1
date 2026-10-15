@@ -6,3 +6,4 @@ export * from "./learner.ts";
 export * from "./events.ts";
 export * from "./roster.ts";
 export * from "./course-visit.ts";
+export * from "./live-activity.ts";

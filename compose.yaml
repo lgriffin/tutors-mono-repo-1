@@ -84,6 +84,10 @@ services:
       # COMPOSE_DATABASE_URL points it elsewhere.
       DATA_STORE: ${DATA_STORE:-}
       PRIVATE_DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgres://tutors:tutors@postgres:5432/tutors}
+      # Unset, realtime is Supabase. PUBLIC_REALTIME=valkey uses the `realtime-valkey`
+      # profile's Valkey over the compose network; COMPOSE_VALKEY_URL points it elsewhere.
+      PUBLIC_REALTIME: ${PUBLIC_REALTIME:-}
+      PRIVATE_VALKEY_URL: ${COMPOSE_VALKEY_URL:-redis://valkey:6379}
 
   catalogue:
     <<: *app
@@ -119,6 +123,10 @@ services:
       LIVE_REDIS_URL: ${LIVE_REDIS_URL:-}
       LIVE_DATABASE_URL: ${LIVE_DATABASE_URL:-}
       LIVE_TERMS: ${LIVE_TERMS:-}
+      # Unset, realtime is Supabase. PUBLIC_REALTIME=valkey uses the `realtime-valkey`
+      # profile's Valkey over the compose network; COMPOSE_VALKEY_URL points it elsewhere.
+      PUBLIC_REALTIME: ${PUBLIC_REALTIME:-}
+      PRIVATE_VALKEY_URL: ${COMPOSE_VALKEY_URL:-redis://valkey:6379}
 
   # The full pipeline, off by default:
   #
@@ -127,8 +135,17 @@ services:
   # brings up Valkey, TimescaleDB and the ingest consumer. Point the live app at
   # them with LIVE_BUS=redis LIVE_HOT_STORE=valkey LIVE_WAREHOUSE=postgres and
   # the two URLs below.
+  #
+  # Realtime without Supabase uses the same Valkey:
+  #
+  #   PUBLIC_ANON_MODE=FALSE PUBLIC_REALTIME=valkey docker compose --profile realtime-valkey up --build
+  #
+  # (In anonymous mode the reader publishes and streams nothing, so realtime needs sign-in on.)
+  #
+  # The reader's server publishes to it and the reader and live servers stream
+  # each topic to browsers over server-sent events (/api/realtime/stream).
   valkey:
-    profiles: ["live-pipeline"]
+    profiles: ["live-pipeline", "realtime-valkey"]
     image: valkey/valkey:8-alpine
     command: ["valkey-server", "--save", "", "--appendonly", "no"]
     ports:
@@ -233,6 +250,8 @@ services:
       # COMPOSE_DATABASE_URL points it elsewhere.
       DATA_STORE: ${DATA_STORE:-}
       PRIVATE_DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgres://tutors:tutors@postgres:5432/tutors}
+      # The snippets page streams its pings from the reader's server; only the browser reads this.
+      PUBLIC_REALTIME: ${PUBLIC_REALTIME:-}
 
 volumes:
   timescale-data:

@@ -5,7 +5,10 @@
  * default) over the service_role client, or `postgres` over PRIVATE_DATABASE_URL (store-postgres,
  * Rule 0477). Read once from the private environment by `lib/server/api/adapters.ts`; tests compose
  * it with the environment they want. Without the store's credentials (or in anonymous mode) there
- * is no data: the routes answer 503.
+ * is no data: the routes answer 503. PUBLIC_REALTIME picks how the server publishes to Tutors Live
+ * and course notices: Supabase Realtime over the service client (the default), or `valkey`, Valkey
+ * pub/sub at PRIVATE_VALKEY_URL that the realtime stream routes fan out over server-sent events
+ * (realtime-valkey, Rule 0481).
  */
 import type { AccessStore, LearningEventSink, LearningRecords, ProfilePort, ScormRecords, SnippetStore, WhiteboardStore } from "@tutors/application/ports";
 import { createAuthorization, listFromEnv, type Authorization } from "@tutors/application";
@@ -52,7 +55,9 @@ import {
   type PlaygroundSnapshotRows,
   type SupabaseClient
 } from "@tutors/store-supabase";
-import { watchLiveTopic, type LiveBudgetTier } from "@tutors/realtime-supabase";
+import { publishCourseNotice, receiveLiveActivity, watchLiveTopic, type LiveActivityResponse, type LiveBudgetTier } from "@tutors/realtime-supabase";
+import { publishLiveActivity, publishNotice, realtimeHub, realtimeKindOf, type RealtimeHub } from "@tutors/realtime-valkey";
+import type { CourseNotice } from "@tutors/application/ports";
 import type { TutorsConnectLatestRow } from "@tutors/domain/learning";
 import log, { withRequestId } from "@tutors/logger";
 
@@ -67,6 +72,10 @@ export type ReaderServerEnv = {
   PRIVATE_DATABASE_URL?: string;
   PRIVATE_COURSE_HOSTS?: string;
   PRIVATE_TUTORS_ADMINS?: string;
+  /** `supabase` (the default) or `valkey`. */
+  PUBLIC_REALTIME?: string;
+  /** The Valkey the server publishes to when PUBLIC_REALTIME=valkey; unset, one process's memory. */
+  PRIVATE_VALKEY_URL?: string;
 };
 
 /** One check of the store, for GET /healthz. */
@@ -76,8 +85,6 @@ type StoreCheck = { status: "ok" | "error" | "skipped"; latencyMs: number; messa
 export type ReaderServerData = {
   /** Which store the ports are over. */
   store: "supabase" | "postgres";
-  /** The Supabase service client, for the Tutors Live and notice publishing the realtime adapter does on the server; null when Supabase is not configured (S3 moves this to Valkey). */
-  realtime: SupabaseClient | null;
   /** The store's health check and the last hour's error counts. */
   health: { check(): Promise<StoreCheck>; errorCounts(): Promise<{ app: string; level: string; count: number }[]> };
   learningEvents: LearningEventSink;
@@ -101,14 +108,26 @@ export type ReaderServerData = {
   playground: PlaygroundSnapshotRows;
   /** The error log (POST /api/errors). */
   recordErrors(rows: AppErrorRow[]): Promise<void>;
-  /** A Tutors Live tab watching a Realtime topic (POST /api/live/watch); the day's tier, or null. */
+};
+
+/** What the server publishes to browsers, over the broker PUBLIC_REALTIME picks. */
+type ServerRealtime = {
+  kind: "supabase" | "valkey";
+  /** A learning event a reader posted (POST /api/live/activity), published to Tutors Live. */
+  activity(raw: string): Promise<LiveActivityResponse>;
+  /** A course notice (a snippet ping, a lecturer's broadcast); false when it was not published. */
+  notice(notice: CourseNotice): Promise<boolean>;
+  /** A Tutors Live tab watching a topic (POST /api/live/watch); the day's tier, or null. On Valkey there is no budget: always `normal`. */
   watchLive(topic: string, watcher: string): Promise<LiveBudgetTier | null>;
+  /** The hub the realtime stream and publish routes use: Valkey's, or null on Supabase and in anonymous mode. */
+  hub: RealtimeHub | null;
 };
 
 export type ReaderServer = {
   authorization: Authorization;
   /** Null when the server has no store: anonymous mode, or the store's key or URL is missing (or the service key is the anon key). */
   data: ReaderServerData | null;
+  realtime: ServerRealtime;
 };
 
 function isAnonymous(env: ReaderServerEnv): boolean {
@@ -140,7 +159,6 @@ function dataStoreOf(env: { DATA_STORE?: string }): "supabase" | "postgres" {
 function supabaseData(db: SupabaseClient): ReaderServerData {
   return {
     store: "supabase",
-    realtime: db,
     health: { check: () => checkSupabase(db), errorCounts: () => getRecentErrorCounts(db) },
     learningEvents: supabaseLearningEventSink(db),
     profile: supabaseProfile(db),
@@ -154,15 +172,13 @@ function supabaseData(db: SupabaseClient): ReaderServerData {
     scorm: supabaseScormRecords(db),
     snippets: supabaseSnippetStore(db),
     playground: supabasePlaygroundSnapshotRows(db),
-    recordErrors: (rows) => insertAppErrors(db, rows),
-    watchLive: (topic, watcher) => watchLiveTopic(db, topic, watcher)
+    recordErrors: (rows) => insertAppErrors(db, rows)
   };
 }
 
-function postgresData(sql: SqlClient, realtime: SupabaseClient | null): ReaderServerData {
+function postgresData(sql: SqlClient): ReaderServerData {
   return {
     store: "postgres",
-    realtime,
     health: { check: () => checkPostgres(sql), errorCounts: () => recentErrorCounts(sql) },
     learningEvents: postgresLearningEventSink(sql),
     profile: postgresProfile(sql),
@@ -176,9 +192,31 @@ function postgresData(sql: SqlClient, realtime: SupabaseClient | null): ReaderSe
     scorm: postgresScormRecords(sql),
     snippets: postgresSnippetStore(sql),
     playground: postgresPlaygroundSnapshotRows(sql),
-    recordErrors: (rows) => insertPostgresAppErrors(sql, rows),
-    // The Realtime budget is Supabase's until S3 replaces it: without a service client there is no tier to report.
-    watchLive: (topic, watcher) => (realtime ? watchLiveTopic(realtime, topic, watcher) : Promise.resolve(null))
+    recordErrors: (rows) => insertPostgresAppErrors(sql, rows)
+  };
+}
+
+/** Supabase Realtime over the service client: the day's Live budget, HTTP sends. Without a client nothing is published. */
+function supabaseRealtime(client: SupabaseClient | null): ServerRealtime {
+  return {
+    kind: "supabase",
+    activity: (raw) => receiveLiveActivity(raw, client ?? undefined),
+    notice: (notice) => publishCourseNotice(client ?? undefined, notice),
+    watchLive: (topic, watcher) => (client ? watchLiveTopic(client, topic, watcher) : Promise.resolve(null)),
+    hub: null
+  };
+}
+
+/** Valkey pub/sub (Rule 0481): no budget, no database call; the hub is null in anonymous mode, so nothing is published. */
+function valkeyRealtime(env: ReaderServerEnv): ServerRealtime {
+  const hub = isAnonymous(env) ? null : realtimeHub(env.PRIVATE_VALKEY_URL);
+  if (hub?.kind === "memory") log.warn("PUBLIC_REALTIME=valkey but PRIVATE_VALKEY_URL is missing; realtime reaches this server's own streams only");
+  return {
+    kind: "valkey",
+    activity: (raw) => publishLiveActivity(raw, hub),
+    notice: (notice) => publishNotice(hub, notice),
+    watchLive: async () => (hub ? "normal" : null),
+    hub
   };
 }
 
@@ -192,15 +230,17 @@ export function composeReaderServer(env: ReaderServerEnv, options: { fetch?: typ
     clock,
     admins: listFromEnv(env.PRIVATE_TUTORS_ADMINS)
   });
+  const realtimeFor = (client: () => SupabaseClient | null) => (realtimeKindOf(env) === "valkey" ? valkeyRealtime(env) : supabaseRealtime(client()));
   if (dataStoreOf(env) === "postgres") {
-    if (isAnonymous(env)) return { authorization, data: null };
+    const realtime = realtimeFor(() => serviceClient(env, false));
+    if (isAnonymous(env)) return { authorization, data: null, realtime };
     const url = env.PRIVATE_DATABASE_URL?.trim();
     if (!url && !options.sql) {
       log.warn("DATA_STORE=postgres but PRIVATE_DATABASE_URL is missing; /api routes answer 503");
-      return { authorization, data: null };
+      return { authorization, data: null, realtime };
     }
-    return { authorization, data: postgresData(options.sql ?? postgresClient(url!), serviceClient(env, false)) };
+    return { authorization, data: postgresData(options.sql ?? postgresClient(url!)), realtime };
   }
   const db = serviceClient(env);
-  return { authorization, data: db ? supabaseData(db) : null };
+  return { authorization, data: db ? supabaseData(db) : null, realtime: realtimeFor(() => db) };
 }

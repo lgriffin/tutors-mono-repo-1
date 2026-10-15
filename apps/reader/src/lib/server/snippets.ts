@@ -1,12 +1,11 @@
 /**
  * The reader server's side of snippet sharing and lecturer broadcasts: the snippet store of the
  * composed data API (Supabase over the service-role key, as `course_gists` is closed to the anon
- * role, or Postgres, as DATA_STORE picks), the realtime publisher over the service client, and the
+ * role, or Postgres, as DATA_STORE picks), the realtime publisher PUBLIC_REALTIME picks, and the
  * educator check that reads a course's published enrollment.
  */
 import { courseEducators, isCourseEducator, createBroadcastLimiter, type EducatorCheck } from "@tutors/application";
 import type { CourseNotices, SnippetStore } from "@tutors/application/ports";
-import { publishCourseNotice } from "@tutors/realtime-supabase";
 import { httpCourseSource } from "@tutors/course-http";
 import { readerServer } from "./api/adapters.ts";
 
@@ -15,9 +14,9 @@ export function serviceSnippetStore(): SnippetStore | null {
   return readerServer().data?.snippets ?? null;
 }
 
-/** Posting publishes over the server's service client at once (none: nothing is published); the server watches nothing. */
+/** Posting publishes at once, over Supabase's service client or to Valkey (neither configured: nothing is published); the server watches nothing. */
 export const serverNotices: CourseNotices = {
-  post: (notice) => publishCourseNotice(readerServer().data?.realtime ?? undefined, notice),
+  post: (notice) => readerServer().realtime.notice(notice),
   watch: () => () => {}
 };
 

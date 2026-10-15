@@ -25,6 +25,9 @@ data:
   # Where the reader and time servers keep student data: supabase (empty) | postgres.
   # postgres reads PRIVATE_DATABASE_URL from the app's secret.
   DATA_STORE: ""
+  # Which broker carries realtime: supabase (empty) | valkey. valkey reads PRIVATE_VALKEY_URL
+  # from the reader's and live's secrets; set the same value on reader, live and time.
+  PUBLIC_REALTIME: ""
   PUBLIC_PDF_KEY: ""
   LOG_LEVEL: "info"
   # Tutors Live. Where the reader posts events; empty disables the emitter.

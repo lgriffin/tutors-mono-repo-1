@@ -27,7 +27,8 @@ reader POST /api/auth/callback/github | hook | who: OAuth callback holder; Bette
 reader POST /api/auth/sign-out | hook | who: session holder; Better Auth verifies origin and deletes browser cookies
 reader POST /api/auth/get-session | hook | who: session holder; Better Auth verifies cookies and renews the session
 reader POST /api/auth/update-user | hook | who: session holder; Better Auth verifies origin, adapter rejects githubId/login changes including null
-reader POST /api/live/activity | who: anyone, as the anon key it replaces allowed; the body is validated (4 KB, LoRecord shape) and published only to watched topics within the day's Live budget
+reader POST /api/live/activity | who: anyone, as the anon key it replaces allowed; the body is validated (4 KB, LoRecord shape) and published only to watched topics within the day's Live budget (on Valkey, to the course's and the platform's activity topics, Rule 0481)
+reader POST /api/realtime/publish | who: a signed-in reader tab (401 otherwise) from the reader's own pages (another Origin is 403); only a playground topic's `state` for the sender's own login or an educator's `watching`, 256 KB, 10 a second per sender on a topic (Rule 0484)
 reader POST /api/gists | who: a signed-in student (the actor from the session); 403 in anonymous mode, 401 without an actor, 413 over 400 kB, 429 past 3 shares an hour; the body is validated (parseSnippetInput) and kept under the service key
 reader POST /api/notices | who: a signed-in educator the course's published enrollment lists (requireEducator, fails closed); 429 past one broadcast a minute per course; the body is validated (parseBroadcastMessage) and published to the course's broadcast topic
 time POST /api/auth/sign-in/social | hook | who: anyone; GitHub only, Better Auth verifies origin and return URL (the educator sign-in for the snippets page)

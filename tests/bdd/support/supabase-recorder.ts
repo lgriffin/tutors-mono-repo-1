@@ -431,13 +431,15 @@ export const createClient = (_url?: string, key?: string, options?: unknown) => 
 export const publicEnv: Record<string, string> = {
   PUBLIC_SUPABASE_URL: "https://supabase.invalid",
   PUBLIC_SUPABASE_ANON_KEY: "anon-key",
-  PUBLIC_ANON_MODE: "FALSE"
+  PUBLIC_ANON_MODE: "FALSE",
+  PUBLIC_REALTIME: ""
 };
 
 export const privateEnv: Record<string, string> = {
   PRIVATE_SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
   DATA_STORE: "",
   PRIVATE_DATABASE_URL: "",
+  PRIVATE_VALKEY_URL: "",
   PRIVATE_API_ALLOWED_ORIGINS: "https://time.test",
   PRIVATE_COURSE_HOSTS: "",
   PRIVATE_TUTORS_ADMINS: ""
