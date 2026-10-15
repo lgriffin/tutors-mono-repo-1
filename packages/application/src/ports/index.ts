@@ -21,3 +21,7 @@ export * from "./playground-snapshots.ts";
 export * from "./playground-live.ts";
 export * from "./snippet-store.ts";
 export * from "./course-notices.ts";
+export * from "./live-bus.ts";
+export * from "./live-presence-store.ts";
+export * from "./live-warehouse.ts";
+export * from "./live-event-reporter.ts";

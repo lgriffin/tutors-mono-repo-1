@@ -1,0 +1,23 @@
+{
+  "name": "@tutors/live-postgres",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Tutors Live on TimescaleDB: the LiveWarehouse adapter and its schema",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tutors/application": "workspace:*",
+    "@tutors/domain": "workspace:*"
+  },
+  "peerDependencies": {
+    "pg": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
+  }
+}

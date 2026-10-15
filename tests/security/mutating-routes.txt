@@ -21,3 +21,4 @@ time POST /api/auth/callback/github | hook | who: OAuth callback holder; Better 
 time POST /api/auth/sign-out | hook | who: session holder; Better Auth verifies origin and deletes browser cookies
 time POST /api/auth/get-session | hook | who: session holder; Better Auth verifies cookies and renews the session
 time POST /api/auth/update-user | hook | who: session holder; Better Auth verifies origin, adapter rejects githubId/login changes including null
+live POST /api/live/events | who: anyone; the Tutors Live ingest endpoint is anonymous by design, so validation and a 64KB body limit are the only controls (tier F must add a rate limit)

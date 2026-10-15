@@ -2,7 +2,7 @@
   "name": "@tutors/domain",
   "version": "0.1.0",
   "license": "MIT",
-  "description": "The Tutors domain: course, learning, presence, access and quiz rules as plain TypeScript with no dependencies",
+  "description": "The Tutors domain: course, learning, presence, access, quiz and live-activity rules as plain TypeScript with no dependencies",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -12,6 +12,7 @@
     "./learning": "./src/learning/index.ts",
     "./presence": "./src/presence/index.ts",
     "./access": "./src/access/index.ts",
-    "./quiz": "./src/quiz/index.ts"
+    "./quiz": "./src/quiz/index.ts",
+    "./live": "./src/live/index.ts"
   }
 }

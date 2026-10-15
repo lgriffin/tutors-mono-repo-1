@@ -16,6 +16,7 @@ import type {
   LearningEventSink,
   PlaygroundLive,
   PlaygroundSnapshots,
+  LiveEventReporter,
   PresencePort,
   ProfilePort,
   ScormRecords,
@@ -35,6 +36,7 @@ import {
   InMemoryScormRecords,
   InMemoryWorkspaceStore,
   PassThroughRenderer,
+  RecordingLiveEventReporter,
   RecordingPublisher,
   ScriptedCodeRuntimePort
 } from "@tutors/application/testing";
@@ -55,6 +57,8 @@ export type Adapters = {
   snippets: SnippetStore;
   /** Lecturer broadcasts and snippet pings, per course. */
   notices: CourseNotices;
+  /** Tutors Live's view of this session: anonymous events, counted whether or not anyone is signed in. */
+  liveEvents: LiveEventReporter;
   identityClient: IdentityClient | null;
   /** Where student code runs (playgrounds, notebook cells). */
   codeRuntime: CodeRuntimePort;
@@ -90,6 +94,8 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     publisher: new RecordingPublisher(),
     snippets: new InMemorySnippetStore(systemClock),
     notices: new InMemoryCourseNotices(false),
+    // Disabled, like a reporter with no endpoint: a reader nobody pointed at Tutors Live reports nothing.
+    liveEvents: new RecordingLiveEventReporter(false),
     identityClient: null,
     codeRuntime: new ScriptedCodeRuntimePort(),
     workspaces: new InMemoryWorkspaceStore(),

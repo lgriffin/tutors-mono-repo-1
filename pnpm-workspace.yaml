@@ -6,6 +6,7 @@ packages:
   - "packages/platform/*"
   - "packages/jsr/*"
   - "apps/*"
+  - "services/*"
 allowBuilds:
   esbuild: true
   msw: true

@@ -1,0 +1,29 @@
+{
+  "name": "@tutors/live-ingest",
+  "version": "17.0.0",
+  "license": "MIT",
+  "description": "Tutors Live ingest consumer: the message bus into Valkey and TimescaleDB, through the live-redis and live-postgres adapters",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:redis --outfile=dist/main.js",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "^8.23.0",
+    "redis": "^6.2.1"
+  },
+  "devDependencies": {
+    "@tutors/application": "workspace:*",
+    "@tutors/live-postgres": "workspace:*",
+    "@tutors/live-redis": "workspace:*",
+    "@tutors/logger": "workspace:*",
+    "@tutors/metrics": "workspace:*",
+    "@types/node": "^26.2.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3"
+  }
+}

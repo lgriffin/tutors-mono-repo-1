@@ -1,0 +1,23 @@
+{
+  "name": "@tutors/live-redis",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Tutors Live over Redis/Valkey: the LiveBus on Redis Streams and the LivePresenceStore on sorted sets",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tutors/application": "workspace:*",
+    "@tutors/domain": "workspace:*"
+  },
+  "peerDependencies": {
+    "redis": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "redis": {
+      "optional": true
+    }
+  }
+}

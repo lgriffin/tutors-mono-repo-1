@@ -14,6 +14,7 @@ import { localStorageProfile } from "@tutors/profile-localstorage";
 import { inProcessPublisher } from "@tutors/bus-inprocess";
 import { wasmCodeRuntime } from "@tutors/runtime-wasm";
 import { indexedDbWorkspaceStore } from "@tutors/workspace-indexeddb";
+import { httpLiveEventReporter } from "@tutors/live-events-http";
 import {
   configureSupabase,
   createSupabaseClient,
@@ -32,6 +33,8 @@ export type ReaderEnv = {
   PUBLIC_ANON_MODE?: string;
   PUBLIC_SUPABASE_URL?: string;
   PUBLIC_SUPABASE_ANON_KEY?: string;
+  /** Where Tutors Live's ingest endpoint is; unset, the reader reports nothing to it. */
+  PUBLIC_LIVE_EVENTS_URL?: string;
 };
 
 /** `PUBLIC_ANON_MODE=TRUE` turns the learner record, presence and sign-in off entirely. */
@@ -47,11 +50,17 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     courseSource: httpCourseSource(),
     profile: { local: localStorageProfile(), signedIn: null },
     publisher,
-    identityClient: options.identityClient ?? null,
     // Student code runs in the browser whatever the deployment: the engine is a sandboxed
     // frame on the reader's own host, and the work stays in the student's own browser.
     codeRuntime: wasmCodeRuntime(),
-    workspaces: indexedDbWorkspaceStore()
+    workspaces: indexedDbWorkspaceStore(),
+    // Live events are anonymous, so they are reported in every mode, and only from a reader in
+    // front of a person: a render on the server posts nothing.
+    liveEvents: httpLiveEventReporter({
+      endpoint: typeof document === "undefined" ? undefined : env.PUBLIC_LIVE_EVENTS_URL || undefined,
+      onError: (error) => log.debug("live events could not be posted", { error: String(error) })
+    }),
+    identityClient: options.identityClient ?? null
   };
 
   if (isAnonymous(env)) {

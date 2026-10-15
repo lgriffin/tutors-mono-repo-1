@@ -108,7 +108,7 @@ describe("architecture rules (runway tier A)", () => {
   });
 
   it("the repo adds no violations beyond the baseline, and the baseline has no stale entries", async () => {
-    const current = (await checkArchitecture(["apps", "packages"])).map(formatViolation);
+    const current = (await checkArchitecture(["apps", "services", "packages"])).map(formatViolation);
     const result = ratchet(current, readBaseline(resolve(REPO_ROOT, BASELINE)));
     expect(result, describeRatchet("dependency-cruiser", BASELINE, result)).toEqual({ added: [], stale: [] });
   }, 120_000);

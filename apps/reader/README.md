@@ -43,6 +43,7 @@ The Playwright specs live in `tests/e2e/`. Run them from the root with `pnpm tes
 - `@tutors/svelte-state/connect`, `@tutors/svelte-state/community`, `@tutors/svelte-state/rbac`, `@tutors/svelte-state` handle sign-in, presence, roles and shared state
 - `@tutors/store-supabase`, `@tutors/realtime-supabase`, `@tutors/profile-localstorage`, `@tutors/bus-inprocess` are the driven adapters behind those ports: the learner record, presence, the browser-only profile and in-process events
 - `@tutors/runtime-wasm`, `@tutors/workspace-indexeddb` run student code in a sandboxed, off-origin frame and keep playground edits in the browser; `@tutors/scorm-runtime` is the SCORM run-time an imported package finds on the reader's window
+- `@tutors/live-events-http` is the adapter behind the `LiveEventReporter` port: the anonymous session events the reader posts to Tutors Live when `PUBLIC_LIVE_EVENTS_URL` is set
 - `@tutors/themes`, `@tutors/i18n` provide themes and interface text
 - `@tutors/tutors-create`, `@tutors/tutors-time-lib` support course creation and the time views
 - `@tutors/logger`, `@tutors/metrics`, `@tutors/clock` provide logging, `/metrics`, `/version` and the server clock seam

@@ -16,11 +16,15 @@ import { adapters } from "../../adapters.ts";
 import { analyticsService, presenceService } from "../../community/index.ts";
 import { currentCourse, currentLo, tutorsId } from "../../index.svelte.ts";
 import { rbacService } from "../../rbac/index.ts";
+import { optInToLiveEvents, optOutOfLiveEvents, reportCourseOpened, reportLoViewed, startLiveEvents } from "./live-events.ts";
 import { type ConnectUser, type CourseVisit, type TutorsConnectService } from "../types.ts";
 import log from "@tutors/logger";
 
 /** Global flag to disable analytics in case of database issues*/
 export let analyticsEnabled = true;
+
+/** Stops the Tutors Live heartbeat. Module scope because the service is a literal. */
+let stopLiveEvents: (() => void) | null = null;
 
 /** The learner's record: the store's once signed in, the browser's otherwise. */
 function profile(): ProfilePort {
@@ -64,6 +68,9 @@ export const tutorsConnectService: TutorsConnectService = {
       tutorsId.value.sentiment! = (await stored.getSentiment(user.login)) ?? "neutral";
       const sharing = await stored.getSharing(user.login);
       tutorsId.value.share = sharing === null ? "online" : String(sharing);
+      // Sharing is the same consent Tutors Live needs, and it is the only thing
+      // that ever puts an identifier - a hash, never a login - on an event.
+      if (sharing !== false) void optInToLiveEvents(user.login);
       analyticsService.updateLogin("", { user: tutorsId.value }).catch((err) => log.error("Failed to update student record:", err));
       if (browser) {
         if (!localStorage.share) {
@@ -100,8 +107,10 @@ export const tutorsConnectService: TutorsConnectService = {
     if (tutorsId.value && browser) {
       if (tutorsId.value.share === "true") {
         localStorage.share = tutorsId.value.share = "false";
+        optOutOfLiveEvents();
       } else {
         localStorage.share = tutorsId.value.share = "true";
+        if (tutorsId.value.login) void optInToLiveEvents(tutorsId.value.login);
       }
       const login = tutorsId.value.login;
       if (tutorsId.value.share === "true" && login && currentCourse.value) {
@@ -139,6 +148,9 @@ export const tutorsConnectService: TutorsConnectService = {
    * @param course - Course being visited
    */
   courseVisit(course: Course) {
+    // Tutors Live is counted in anonymous mode too: the event carries a rotating
+    // token and a course id, and nothing that could identify anyone.
+    reportCourseOpened(course.courseId);
     // Locks gate what students can see, so they must load even in anonymous mode -
     // otherwise `locksLoaded` never becomes true and the course renders empty.
     if (course.hasEnrollment) {
@@ -235,12 +247,17 @@ export const tutorsConnectService: TutorsConnectService = {
    * @param params - Event parameters to record
    */
   learningEvent(params: Record<string, string>): void {
-    if (this.anonMode || this.navigationInFlight) return;
-    if (currentCourse.value && currentLo.value && tutorsId.value) {
-      const identity = [params.loid ?? "", currentLo.value.route, tutorsId.value.login ?? "", tutorsId.value.sentiment ?? "", tutorsId.value.share ?? ""].join("|");
+    if (this.navigationInFlight) return;
+    if (currentCourse.value && currentLo.value) {
+      const identity = [params.loid ?? "", currentLo.value.route, tutorsId.value?.login ?? "", tutorsId.value?.sentiment ?? "", tutorsId.value?.share ?? ""].join("|");
       if (!this.pendingNavigation && identity === this.lastLearningEvent) return;
       this.pendingNavigation = false;
       this.lastLearningEvent = identity;
+
+      // Tutors Live counts the view whether or not anyone is signed in; the same
+      // dedupe applies, so one navigation is one view there too.
+      reportLoViewed(currentCourse.value.courseId, currentLo.value.route, currentLo.value.type);
+      if (this.anonMode || !tutorsId.value) return;
 
       if (analyticsEnabled) analyticsService.learningEvent(currentCourse.value, params, currentLo.value, tutorsId.value);
       if (tutorsId.value.share === "true" && !currentCourse.value.isPrivate) {
@@ -254,6 +271,10 @@ export const tutorsConnectService: TutorsConnectService = {
    * Updates page counts every 30 seconds when page is visible
    */
   startTimer() {
+    stopLiveEvents ??= startLiveEvents(
+      () => currentCourse.value?.courseId,
+      () => currentLo.value?.route
+    );
     if (this.anonMode) return;
     this.intervalId = setInterval(() => {
       if (!document.hidden && currentCourse.value && currentLo.value && tutorsId.value) {
@@ -266,6 +287,8 @@ export const tutorsConnectService: TutorsConnectService = {
    * Stops analytics update timer
    */
   stopTimer() {
+    stopLiveEvents?.();
+    stopLiveEvents = null;
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
