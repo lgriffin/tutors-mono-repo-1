@@ -47,13 +47,14 @@ export async function removeLock(courseId: string, loRoute: string, client: Supa
   if (!client) return false;
   if (!courseId || !loRoute) return false;
 
-  const { error } = await client.from("tutors_content_locks").delete().eq("course_id", courseId).eq("lo_route", loRoute);
+  // Ask for the deleted rows back, so a delete that matched nothing answers false (the AccessStore contract).
+  const { data, error } = await client.from("tutors_content_locks").delete().eq("course_id", courseId).eq("lo_route", loRoute).select("lo_route");
 
   if (error) {
     log.error("removeLock failed:", error);
     return false;
   }
-  return true;
+  return (data?.length ?? 0) > 0;
 }
 
 /** The AccessStore over `client`; the composed (anon) client by default, which may only read locks. */
