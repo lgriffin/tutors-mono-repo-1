@@ -31,8 +31,10 @@ import {
   snippetStoreContract,
   assistanceFeedContract,
   assistanceStoreContract,
+  helpDeskContract,
   feedbackStoreContract,
   InMemoryAssistanceFeed,
+  InMemoryHelpDesk,
   InMemoryAssistanceStore,
   InMemoryFeedbackStore,
   InMemoryInsightsRead,
@@ -101,6 +103,13 @@ contract("SnippetStore: in memory", snippetStoreContract(() => new InMemorySnipp
 contract("CourseNotices: in memory", courseNoticesContract(() => new InMemoryCourseNotices()));
 contract("AssistanceStore: in memory", assistanceStoreContract(() => new InMemoryAssistanceStore()));
 contract("AssistanceFeed: in memory", assistanceFeedContract(() => new InMemoryAssistanceFeed()));
+contract(
+  "HelpDesk: in memory",
+  helpDeskContract(() => {
+    const desk = new InMemoryHelpDesk({ educators: { cs101: ["ellen"] } });
+    return { student: desk.as({ login: "alice", name: "Alice" }), educator: desk.as({ login: "ellen", name: "Ellen" }), visitor: desk };
+  })
+);
 contract("FeedbackStore: in memory", feedbackStoreContract(() => new InMemoryFeedbackStore()));
 contract("NotesStore: in memory", notesStoreContract(() => new InMemoryNotesStore()));
 contract(

@@ -42,11 +42,17 @@ export class InMemoryAssistanceStore implements AssistanceStore {
     this.check();
     return this.rows.filter((r) => r.ref.courseId === courseId && isLive(r)).map(copy);
   }
+  async latest(courseId: string, learnerId: string): Promise<HelpRequest | null> {
+    this.check();
+    const mine = this.rows.filter((r) => r.ref.courseId === courseId && r.learnerId === learnerId);
+    const last = mine.reduce<HelpRequest | null>((a, r) => (!a || Date.parse(r.requestedAt) >= Date.parse(a.requestedAt) ? r : a), null);
+    return last ? copy(last) : null;
+  }
   async replace(next: HelpRequest, prior: HelpRequest): Promise<boolean> {
     this.check();
     const index = this.rows.findIndex((r) => r.id === next.id);
     const stored = this.rows[index];
-    if (index < 0 || stored.state !== prior.state || stored.kind !== prior.kind || !sameStep(stored.ref, prior.ref)) return false;
+    if (index < 0 || stored.state !== prior.state || stored.kind !== prior.kind || !sameStep(stored.ref, prior.ref) || stored.helped !== prior.helped) return false;
     this.rows[index] = copy(next);
     return true;
   }

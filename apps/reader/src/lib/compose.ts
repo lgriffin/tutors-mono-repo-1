@@ -33,7 +33,8 @@ import {
   readerApiPresenceStore,
   readerApiProfile,
   readerApiScormRecords,
-  readerApiWhiteboardStore
+  readerApiWhiteboardStore,
+  readerApiHelpDesk
 } from "@tutors/data-api";
 import log, { withRequestId } from "@tutors/logger";
 
@@ -139,6 +140,8 @@ function signedInAdapters(
     // A shared snippet goes to the reader's server, which keeps it with its service key; notices
     // (a lecturer's broadcast, a snippet ping) are posted to the server too and watched through the gateway.
     snippets: httpSnippetStore(),
-    notices: realtime.notices
+    notices: realtime.notices,
+    // A student's help requests go to the reader's server, which keeps them as the session's login (Rule 0390).
+    helpDesk: readerApiHelpDesk()
   };
 }

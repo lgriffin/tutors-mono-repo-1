@@ -1,1 +1,1 @@
-export { acknowledgeHelp, answerHint, helpQueue, myHelpRequest, requestHelp, resolveHelp, withdrawHelp, type AssistanceDeps, type HelpCaller, type HelpRefusal, type HelpResult, type QueueEntry } from "./help.ts";
+export { acknowledgeHelp, answerHint, helpQueue, myHelpRequest, rateHelp, requestHelp, resolveHelp, withdrawHelp, type AssistanceDeps, type HelpCaller, type HelpRefusal, type HelpResult, type QueueEntry } from "./help.ts";

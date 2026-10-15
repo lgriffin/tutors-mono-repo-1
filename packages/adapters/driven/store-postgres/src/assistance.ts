@@ -2,8 +2,8 @@
  * Help requests in `assistance_requests`; `postgresAssistanceStore` is the application's
  * AssistanceStore over them. Only the reader's server composes it, behind POST /api/assistance,
  * which has checked who is asking. A second live request of a learner in a course is refused by the
- * table's partial unique index, and `replace` is a compare-and-set on the state, kind and step it
- * was read with. The use cases answer a failed query as "try again", so each one is logged here.
+ * table's partial unique index, and `replace` is a compare-and-set on the state, kind, step and
+ * rating it was read with. The use cases answer a failed query as "try again", so each one is logged here.
  */
 import log from "@tutors/logger";
 import type { AssistanceStore } from "@tutors/application/ports";
@@ -21,7 +21,7 @@ async function run<T>(what: string, query: () => Promise<T>): Promise<T> {
 }
 
 const COLUMNS = `id::text AS id, course_id, lab_route, step_id, learner_id, learner_name, kind, state, requested_at,
-  acknowledged_by, acknowledged_at, closed_by, closed_at, closed_reason, hint_text`;
+  acknowledged_by, acknowledged_at, closed_by, closed_at, closed_reason, hint_text, helped`;
 
 /** A UUID; any other id names no row, so it is answered without asking the database. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,7 +39,8 @@ function fromRow(r: Record<string, unknown>): HelpRequest {
     requestedAt: iso(r.requested_at) as string,
     acknowledged: r.acknowledged_by && acknowledgedAt ? { by: r.acknowledged_by as string, at: acknowledgedAt } : null,
     closed: r.closed_by && closedAt && r.closed_reason ? { by: r.closed_by as string, at: closedAt, reason: r.closed_reason as HelpClosure["reason"] } : null,
-    hintText: (r.hint_text as string | null) ?? null
+    hintText: (r.hint_text as string | null) ?? null,
+    helped: typeof r.helped === "boolean" ? r.helped : null
   };
 }
 
@@ -50,8 +51,8 @@ export function postgresAssistanceStore(sql: SqlClient): AssistanceStore {
       const { rows } = await run("assistance_requests insert", () =>
         sql.query(
           `INSERT INTO assistance_requests (course_id, lab_route, step_id, learner_id, learner_name, kind, state, requested_at,
-             acknowledged_by, acknowledged_at, closed_by, closed_at, closed_reason, hint_text)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9, $10::timestamptz, $11, $12::timestamptz, $13, $14)
+             acknowledged_by, acknowledged_at, closed_by, closed_at, closed_reason, hint_text, helped)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9, $10::timestamptz, $11, $12::timestamptz, $13, $14, $15)
            RETURNING ${COLUMNS}`,
           [
             request.ref.courseId,
@@ -67,7 +68,8 @@ export function postgresAssistanceStore(sql: SqlClient): AssistanceStore {
             request.closed?.by ?? null,
             request.closed?.at ?? null,
             request.closed?.reason ?? null,
-            request.hintText
+            request.hintText,
+            request.helped ?? null
           ]
         )
       );
@@ -88,14 +90,22 @@ export function postgresAssistanceStore(sql: SqlClient): AssistanceStore {
       return rows.map(fromRow);
     },
 
+    async latest(courseId: string, learnerId: string): Promise<HelpRequest | null> {
+      if (!courseId || !learnerId) return null;
+      const { rows } = await run("assistance_requests latest", () =>
+        sql.query(`SELECT ${COLUMNS} FROM assistance_requests WHERE course_id = $1 AND learner_id = $2 ORDER BY requested_at DESC LIMIT 1`, [courseId, learnerId])
+      );
+      return rows[0] ? fromRow(rows[0]) : null;
+    },
+
     async replace(next: HelpRequest, prior: HelpRequest): Promise<boolean> {
       if (!UUID.test(next.id)) return false;
       const { rows } = await run("assistance_requests update", () =>
         sql.query(
           `UPDATE assistance_requests SET course_id = $6, lab_route = $7, step_id = $8, learner_id = $9, learner_name = $10, kind = $11, state = $12,
              requested_at = $13::timestamptz, acknowledged_by = $14, acknowledged_at = $15::timestamptz, closed_by = $16, closed_at = $17::timestamptz,
-             closed_reason = $18, hint_text = $19
-           WHERE id = $1::uuid AND state = $2 AND kind = $3 AND lab_route = $4 AND step_id = $5
+             closed_reason = $18, hint_text = $19, helped = $21
+           WHERE id = $1::uuid AND state = $2 AND kind = $3 AND lab_route = $4 AND step_id = $5 AND helped IS NOT DISTINCT FROM $20::boolean
            RETURNING id::text AS id`,
           [
             next.id,
@@ -116,7 +126,9 @@ export function postgresAssistanceStore(sql: SqlClient): AssistanceStore {
             next.closed?.by ?? null,
             next.closed?.at ?? null,
             next.closed?.reason ?? null,
-            next.hintText
+            next.hintText,
+            prior.helped ?? null,
+            next.helped ?? null
           ]
         )
       );

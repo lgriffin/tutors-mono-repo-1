@@ -6,3 +6,4 @@ export * from "./live-warehouse.ts";
 export * from "./live-reporter.ts";
 export * from "./learning-contexts.ts";
 export * from "./learning-contracts.ts";
+export * from "./help-desk.ts";

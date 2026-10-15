@@ -8,7 +8,8 @@ Feature: The help queue
   and is never stored; a lecturer request escalates after 5 minutes and is urgent after 10; a
   request still live 4 hours after it was raised withdraws itself (decision D6). These Rules drive
   the Assistance use cases over the in-memory adapters; the queue's routes and feed are
-  shared/help-request-server.feature, and the queue view in Tutors Live comes later.
+  shared/help-request-server.feature, and the queue view in Tutors Live is
+  instructor/help-queue-view.feature.
 
   Background:
     Given "ellen" teaches the course "cs101"

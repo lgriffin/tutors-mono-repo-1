@@ -10,6 +10,8 @@
   import WidthToggle from "../WidthToggle.svelte";
   import NotesButton from "./NotesButton.svelte";
   import NotesPanel from "./NotesPanel.svelte";
+  import HelpButton from "./HelpButton.svelte";
+  import HelpNotice from "./HelpNotice.svelte";
   let { lab }: { lab: LiveLab } = $props();
   const previous = $derived(lab.prevStep());
   const next = $derived(lab.nextStep());
@@ -49,7 +51,8 @@
     <nav aria-label={t("shell.steps")} bind:this={mobileSteps}><ul>{@html sanitizeHtml(lab.navbarHtml ?? "")}</ul></nav>
   </details>
   <div class="reading-panel">
-    <div class="reading-meta"><span class="ui-eyebrow">{lab.lab.title}</span><span class="reading-tools">{t("shell.steps")} {lab.index + 1} / {lab.steps.length}<NotesButton {stepId} /><WidthToggle /></span></div>
+    <div class="reading-meta"><span class="ui-eyebrow">{lab.lab.title}</span><span class="reading-tools">{t("shell.steps")} {lab.index + 1} / {lab.steps.length}<HelpButton courseId={lab.course.courseId} labRoute={lab.url} {stepId} /><NotesButton {stepId} /><WidthToggle /></span></div>
+    <HelpNotice />
     <article class="prose dark:prose-invert prose-pre:overflow-x-auto" use:mermaidify={lab.content} use:copyCode>
       {#key currentCodeTheme.value}<div id="lab-panel">{@html sanitizeHtml(lab.content ?? "")}</div>{/key}
     </article>
@@ -67,7 +70,7 @@
   .lab-content :global(.notes-panel) { flex: 0 0 auto; }
   .mobile-steps :global(a[data-noted])::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-inline-start: var(--space-2); border-radius: 999px; background: var(--ui-brand); vertical-align: middle; }
   .reading-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); font-size: var(--font-meta); color: var(--ui-muted); margin-bottom: var(--space-6); }
-  .reading-tools { display: flex; align-items: center; gap: var(--space-3); }
+  .reading-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
   .step-pager { display: flex; justify-content: space-between; gap: var(--space-4); border-top: 1px solid var(--ui-border); margin-top: var(--space-8); padding-top: var(--space-6); }
   /* Each pager button is the direction over the step's title: previous reads from the left, next from the right. */
   .step-pager a { flex-direction: column; align-items: flex-start; gap: 2px; max-width: 48%; text-align: start; }

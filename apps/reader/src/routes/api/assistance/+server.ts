@@ -8,8 +8,8 @@ import { readJson } from "#lib/server/api/http.ts";
 import { allowedOriginHeaders, answer } from "#lib/server/api/cors.ts";
 
 /**
- * /api/assistance: help requests on lab steps. A signed-in student asks, asks again, withdraws or
- * marks one solved; an educator of the course acknowledges, answers a hint or resolves. Every
+ * /api/assistance: help requests on lab steps. A signed-in student asks, asks again, withdraws,
+ * marks one solved or says whether it helped (Rule 0398); an educator of the course acknowledges, answers a hint or resolves. Every
  * change is written here as the session's actor and then told to the course's educators over the
  * help queue's feed (Rules 0390, 0391). Tutors Live's course page reads the queue from another
  * origin, which PRIVATE_API_ALLOWED_ORIGINS lists, with the lecturer's session.
@@ -58,7 +58,9 @@ export const POST: RequestHandler = async ({ request, url, locals, fetch }) => {
           ? await help.answerHint(post.id, caller, post.hintText)
           : post.action === "resolve"
             ? await help.resolve(post.id, caller)
-            : await help.withdraw(post.id, caller);
+            : post.action === "rate"
+              ? await help.rate(post.id, caller, post.helped)
+              : await help.withdraw(post.id, caller);
   if (!result.ok) {
     const refusal = HELP_REFUSALS[result.reason];
     return answer(refusal.status, { message: refusal.message, reason: result.reason }, cors);

@@ -6,10 +6,13 @@
  */
 import {
   askAgain,
+  awaitsRating,
+  EXPIRE_AFTER_MS,
   isHelpKind,
   isLive,
   openRequest,
   queueOrder,
+  rateHelp as rate,
   shouldEscalate,
   shouldExpire,
   transition,
@@ -156,14 +159,44 @@ export const withdrawHelp = (deps: AssistanceDeps) => {
 };
 
 /**
- * The student's own live request in the course, or null, read from stored rows: a student's reader
- * never streams the course's queue (Rule 0392). A request that has waited 4 hours is withdrawn on
- * the way, as the queue does.
+ * The student who asked says whether the help helped, once the request is resolved (Rule 0398).
+ * The answer is kept on the request; the queue does not hear of it, as the request has left it.
+ */
+export function rateHelp({ store }: Pick<AssistanceDeps, "store">) {
+  return async (id: string, caller: HelpCaller, helped: boolean): Promise<HelpResult> => {
+    if (typeof helped !== "boolean") return { ok: false, reason: "invalid" };
+    let current: HelpRequest | null;
+    try {
+      current = await store.get(id);
+    } catch {
+      return { ok: false, reason: "unavailable" };
+    }
+    if (!current) return { ok: false, reason: "not-found" };
+    const rated = rate(current, { login: caller.login, educator: false }, helped);
+    if (!rated.ok) return rated;
+    const kept = await store.replace(rated.request, current).catch(() => null);
+    if (kept === null) return { ok: false, reason: "unavailable" };
+    if (!kept) return { ok: false, reason: "conflict" };
+    return rated;
+  };
+}
+
+/**
+ * The student's own request in the course, or null, read from stored rows: a student's reader never
+ * streams the course's queue (Rule 0392). That is their live request; or, once none is live, their
+ * latest one if it was resolved in the last 4 hours, so the reader can show a lecturer's hint on the
+ * step (Rule 0397) and ask whether it helped (Rule 0398). A request that has waited 4 hours is
+ * withdrawn on the way, as the queue does.
  */
 export function myHelpRequest({ store, feed, clock }: Pick<AssistanceDeps, "store" | "feed" | "clock">) {
   return async (courseId: string, login: string): Promise<HelpRequest | null> => {
     const live = await expireStale({ store, feed, clock }, await store.live(courseId));
-    return live.find((r) => r.learnerId === login) ?? null;
+    const mine = live.find((r) => r.learnerId === login);
+    if (mine) return mine;
+    const latest = await store.latest(courseId, login);
+    if (!latest || latest.state !== "resolved" || !latest.closed) return null;
+    const recent = clock.nowMs() - Date.parse(latest.closed.at) < EXPIRE_AFTER_MS;
+    return recent && (awaitsRating(latest) || latest.hintText) ? latest : null;
   };
 }
 

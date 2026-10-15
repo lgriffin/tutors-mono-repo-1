@@ -17,9 +17,12 @@ export interface AssistanceStore {
   get(id: string): Promise<HelpRequest | null>;
   /** The course's open and acknowledged requests, in no particular order. */
   live(courseId: string): Promise<HelpRequest[]>;
+  /** The learner's most recently raised request in the course, in any state, or null. */
+  latest(courseId: string, learnerId: string): Promise<HelpRequest | null>;
   /**
    * Replaces every field of a request with `next` only while the stored request still has `prior`'s
-   * state, kind and step; resolves false, writing nothing, when it is missing or has changed since.
+   * state, kind, step and rating; resolves false, writing nothing, when it is missing or has changed
+   * since.
    */
   replace(next: HelpRequest, prior: HelpRequest): Promise<boolean>;
 }
