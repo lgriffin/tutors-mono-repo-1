@@ -64,7 +64,9 @@ function withQuery(path: string, query: Record<string, string | null | undefined
  * the reader itself calls its own routes, so it leaves `base` empty.
  */
 export function createDataApi(fetchFn: FetchFn = (input, init) => globalThis.fetch(input, init), base = "") {
-  const origin = base.replace(/\/+$/, "");
+  let end = base.length;
+  while (end > 0 && base[end - 1] === "/") end--;
+  const origin = base.slice(0, end);
   const call: FetchFn = (path, init) => fetchFn(`${origin}${path}`, init);
   /** The JSON body of a successful GET, or null. */
   async function getJson<T>(path: string): Promise<T | null> {

@@ -16,7 +16,7 @@ export type LiveEnv = { PUBLIC_ANON_MODE?: string; PUBLIC_SUPABASE_URL?: string;
 /** The reader's data API, or null in anonymous mode. */
 export function liveDataApi(env: LiveEnv): DataApi | null {
   if (env.PUBLIC_ANON_MODE?.trim().toUpperCase() === "TRUE") return null;
-  return createDataApi(undefined, (env.PUBLIC_READER_URL?.trim() || "https://tutors.dev").replace(/\/+$/, ""));
+  return createDataApi(undefined, env.PUBLIC_READER_URL?.trim() || "https://tutors.dev");
 }
 
 export function composeLive(env: LiveEnv): Adapters {
