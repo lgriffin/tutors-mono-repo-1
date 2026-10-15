@@ -39,6 +39,13 @@ function parse(data: string): HubMessage | null {
   }
 }
 
+/** Without a regular expression, which would backtrack on a long run of slashes. */
+function withoutTrailingSlashes(base: string): string {
+  let end = base.length;
+  while (end > 0 && base[end - 1] === "/") end--;
+  return base.slice(0, end);
+}
+
 /** A server render has no EventSource: the link stays joining and nothing is delivered. */
 function openEventSource(url: string): EventSourceLike {
   if (typeof EventSource === "undefined") return { onopen: null, onmessage: null, onerror: null, close: () => {} };
@@ -48,8 +55,8 @@ function openEventSource(url: string): EventSourceLike {
 export function sseRealtimeAdapter(options: SseAdapterOptions = {}): RealtimeAdapter {
   const clientId = options.clientId ?? globalThis.crypto.randomUUID();
   const open = options.eventSource ?? openEventSource;
-  const streamBase = (options.streamBase ?? "").replace(/\/+$/, "");
-  const publishBase = (options.publishBase ?? "").replace(/\/+$/, "");
+  const streamBase = withoutTrailingSlashes(options.streamBase ?? "");
+  const publishBase = withoutTrailingSlashes(options.publishBase ?? "");
 
   const post = async (topic: string, event: string, payload: unknown) => {
     const send = options.fetch ?? fetch;
