@@ -12,7 +12,7 @@ import * as check from "#lib/server/api/validate.ts";
  * student is the session's, never the body's; other origins only from PRIVATE_API_ALLOWED_ORIGINS.
  */
 
-export const MAX_ERROR_REPORT_BYTES = 16 * 1024;
+const MAX_ERROR_REPORT_BYTES = 16 * 1024;
 const MAX_ENTRIES = 20;
 const REPORTS_PER_MINUTE = 30;
 const APPS = ["tutors-reader", "tutors-catalogue", "tutors-live", "tutors-time"];
