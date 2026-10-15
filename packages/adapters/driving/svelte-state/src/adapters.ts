@@ -21,7 +21,8 @@ import type {
   ProfilePort,
   ScormRecords,
   WorkspaceStore,
-  SnippetStore
+  SnippetStore,
+  WhiteboardStore
 } from "@tutors/application/ports";
 import {
   InMemoryAccessStore,
@@ -34,6 +35,7 @@ import {
   InMemoryPresence,
   InMemoryProfile,
   InMemoryScormRecords,
+  InMemoryWhiteboardStore,
   InMemoryWorkspaceStore,
   PassThroughRenderer,
   RecordingLiveEventReporter,
@@ -70,11 +72,8 @@ export type Adapters = {
   playgroundSnapshots: PlaygroundSnapshots;
   /** A lecturer watching a playground as it is typed. */
   playgroundLive: PlaygroundLive;
-  /**
-   * The whiteboard's own persistence client, until it has a port of its own. Typed as unknown
-   * here so this package names no vendor; the whiteboard component casts it.
-   */
-  whiteboardClient: unknown;
+  /** Where whiteboard scenes are kept: the reader's data API once signed in, memory otherwise. */
+  whiteboard: WhiteboardStore;
 };
 
 const systemClock: Clock = { now: () => new Date(), nowMs: () => Date.now() };
@@ -103,7 +102,7 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     // Nobody is signed in, so there is nobody to hand work in as.
     playgroundSnapshots: new InMemoryPlaygroundSnapshots({ enabled: false }),
     playgroundLive: new InMemoryPlaygroundLive(),
-    whiteboardClient: undefined,
+    whiteboard: new InMemoryWhiteboardStore(),
     ...overrides
   };
 }

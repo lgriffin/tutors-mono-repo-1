@@ -12,6 +12,7 @@ export { playgroundLiveService, LIVE_SHARE_THROTTLE_MS, type PlaygroundLiveServi
 // Lecturer broadcasts and snippet pings (issues #78 and #155)
 export { noticeService } from "./services/notices.ts";
 export { snippetService, type ShareOutcome } from "./services/snippets.ts";
+export { whiteboardService } from "./services/whiteboard.svelte.ts";
 
 // Type exports
 export type { LoUser, LoEvent, TutorsConnectLatestRow } from "./types.svelte.ts";

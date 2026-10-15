@@ -127,7 +127,7 @@ Two layers guarantee the 48h cap:
 
 | Env var | Where | Purpose |
 |---------|-------|---------|
-| `PRIVATE_SUPABASE_SERVICE_KEY` | reader, time | Service-role key for the insert and the authorised read (never exposed to the browser). Leave empty to run without the feature. |
+| `PRIVATE_SUPABASE_SERVICE_ROLE_KEY` | reader, time | Service-role key for the insert and the authorised read (never exposed to the browser). Leave empty to run without the feature. |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | cleanup job | What `scripts/purge-course-gists.ts` reads (GitHub Actions secrets). |
 | `PRIVATE_AUTH_GITHUB_ID` / `PRIVATE_AUTH_GITHUB_SECRET` | reader, time | GitHub OAuth App credentials; the time app's callback URL must be registered too. |
 | `PRIVATE_AUTH_SECRET` | reader, time | Better Auth session secret (32+ chars). |
@@ -138,7 +138,7 @@ All four apps read the single `.env` at the repository root; `.env.example` list
 
 ## Data model
 
-See `supabase/migrations/20260905_create_course_gists.sql`. One table:
+See `supabase/migrations/20261018000000_create_course_gists.sql`. One table:
 
 - **`course_gists`**: course id, student login/name, `filename`, `content`, optional title and learning-object labels, `created_at`, `expires_at`. RLS on, no policies.
 

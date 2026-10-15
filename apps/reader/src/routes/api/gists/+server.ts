@@ -32,7 +32,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   const store = serviceSnippetStore();
   if (!store) {
-    log.error("Snippet sharing is not configured: PRIVATE_SUPABASE_SERVICE_KEY is not set");
+    log.error("Snippet sharing is not configured: PRIVATE_SUPABASE_SERVICE_ROLE_KEY is not set");
     return json({ message: "Snippet sharing is not configured on the server" }, { status: 500 });
   }
 

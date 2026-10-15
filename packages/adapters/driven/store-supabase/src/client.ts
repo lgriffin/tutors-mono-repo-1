@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+export type { SupabaseClient };
+
 /**
  * The one Supabase client this adapter uses. It is created by the composition root, which
  * decides from the environment whether there is a Supabase at all (there is none in anonymous
@@ -24,6 +26,19 @@ export function createSupabaseClient(url: string | undefined, key: string | unde
   return createClient(url, key, Object.keys(options).length ? options : undefined);
 }
 
+/**
+ * The server's client with the service_role key, which bypasses row-level security: the reader's
+ * data API writes with it, for the session it verified. It keeps no session of its own. Undefined
+ * when the URL or key is missing.
+ */
+export function createSupabaseServiceClient(url: string | undefined, serviceKey: string | undefined, fetchFn?: typeof fetch): SupabaseClient | undefined {
+  if (!url || !serviceKey) return undefined;
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    ...(fetchFn ? { global: { fetch: fetchFn } } : {})
+  });
+}
+
 /** Install the client (and the URL and key, for the one request that must bypass it) for every function in this adapter. */
 export function configureSupabase(client: SupabaseClient | undefined, settings?: SupabaseConfig): void {
   supabase = client;
@@ -32,4 +47,16 @@ export function configureSupabase(client: SupabaseClient | undefined, settings?:
 
 export function supabaseConfig(): SupabaseConfig | undefined {
   return config;
+}
+
+/** A failed read or write, with what was being done: the server's routes turn it into a 500. */
+export class StoreError extends Error {
+  constructor(what: string, error: { message?: string } | null) {
+    super(`${what}: ${error?.message ?? "unknown error"}`);
+    this.name = "StoreError";
+  }
+}
+
+export function fail(what: string, error: { message?: string } | null): never {
+  throw new StoreError(what, error);
 }

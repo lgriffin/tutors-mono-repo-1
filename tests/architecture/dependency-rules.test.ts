@@ -76,7 +76,8 @@ describe("architecture rules (runway tier A)", () => {
       ["no-app-to-app", "apps/reader/src/lib/borrowed.ts", "apps/catalogue/src/lib/page.ts"],
       ["no-cross-workspace-relative-import", "apps/reader/src/lib/borrowed.ts", "apps/catalogue/src/lib/page.ts"],
       ["no-cross-workspace-relative-import", "packages/adapters/driving/svelte-state/src/community/relative.ts", "packages/domain/src/index.ts"],
-      ["no-cross-package-cycle", "packages/adapters/driving/svelte-state/src/connect/index.ts", "packages/adapters/driving/themes/src/index.ts"]
+      ["no-cross-package-cycle", "packages/adapters/driving/svelte-state/src/connect/index.ts", "packages/adapters/driving/themes/src/index.ts"],
+      ["no-database-client-in-browser-code", "apps/reader/src/lib/direct-db.ts", "external/@supabase/supabase-js.ts"]
     ])("%s catches %s -> %s", (rule, from, to) => {
       expect(violations).toContain(`${rule}: ${from} -> ${to}`);
     });
@@ -94,7 +95,8 @@ describe("architecture rules (runway tier A)", () => {
         "packages/adapters/driving/ui-primitives/src/index.ts",
         "packages/adapters/driving/ui-components/src/tree/Node.ts",
         "packages/adapters/driving/ui-components/src/tree/Children.ts",
-        "apps/catalogue/src/lib/page.ts"
+        "apps/catalogue/src/lib/page.ts",
+        "apps/reader/src/lib/server/db.ts"
       ];
       const falsePositives = violations.filter((line) => cleanSources.some((source) => line.includes(`: ${source} -> `)));
       expect(falsePositives).toEqual([]);

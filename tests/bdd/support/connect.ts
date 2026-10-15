@@ -10,6 +10,7 @@ import { composeReader } from "../../../apps/reader/src/lib/compose.ts";
 import { currentCourse, currentLo, tutorsId } from "../../../packages/adapters/driving/svelte-state/src/index.svelte.ts";
 import { materialiseCourse } from "../../support/arbitraries/course-tree.ts";
 import { labShape, shape } from "./course.ts";
+import { installReaderFetch, resetReaderApi, serveCourseJson, setReaderSession } from "./reader-api.ts";
 import { browserStorage, publicEnv, recorder, settle } from "./supabase-recorder.ts";
 import { adapters } from "../../../packages/adapters/driving/svelte-state/src/adapters.ts";
 import type { LoRecord } from "../../../packages/adapters/driving/svelte-state/src/community/types.svelte.ts";
@@ -68,12 +69,14 @@ export function freshBrowser(): void {
   presenceService.stopPresenceListener();
   void (adapters().presence as Partial<SupabasePresence>).gateway?.reset();
   recorder.reset();
+  resetReaderApi();
   recordingFunctions.missing = false;
   const storage = browserStorage();
   vi.stubGlobal("localStorage", storage);
   vi.stubGlobal("window", { localStorage: storage });
   vi.stubGlobal("document", { hidden: false });
   vi.stubGlobal("fetch", readerFetch);
+  installReaderFetch();
   readerServer.posts = [];
 
   tutorsId.value = null;
@@ -113,6 +116,7 @@ export function publishedCourse(courseId: string, labCount = 2, properties: Reco
   Object.assign(raw.properties, properties);
   const course = structuredClone(raw) as unknown as Course;
   if (enrollment) course.enrollment = enrollment;
+  serveCourseJson(courseId, enrollment ? { ...raw, enrollment } : raw);
   decorateCourseTree(course, courseId, `${courseId}.netlify.app`);
   return course;
 }
@@ -123,6 +127,7 @@ export function labsOf(course: Course): Lo[] {
 
 /** What the reader's root layout does once the identity adapter reports a session. */
 export async function signIn(user: TutorsId): Promise<void> {
+  setReaderSession(user);
   await tutorsConnectService.reconnect(user);
   await settle();
 }
@@ -146,6 +151,7 @@ export async function openLo(course: Course, lo: Lo): Promise<void> {
 /** A different student, in their own browser, signs in and opens a lab of `course`. */
 export async function studentOpensLab(name: string, course: Course, lab = 0): Promise<void> {
   tutorsId.value = null;
+  setReaderSession(null);
   currentCourse.value = null;
   await signIn(githubUser(name));
   await openLo(course, labsOf(course)[lab]);
@@ -176,8 +182,8 @@ export function loEventArrives(channel: string, name: string, course: Course, lo
 }
 
 /**
- * Another student's latest activity as the database holds it: the row `sendLoEvent` upserts into
- * `tutors-connect-latest` from their browser, stamped `minutesAgo` before the reader's clock.
+ * Another student's latest activity as the database holds it: the row the reader's server upserts
+ * into `tutors-connect-latest` for them (POST /api/presence), stamped `minutesAgo` before the reader's clock.
  */
 export function storedActivity(name: string, course: Course, lo: Lo, minutesAgo: number): void {
   const user = githubUser(name);
@@ -208,7 +214,7 @@ export function onlineListLoads(): number {
   return recorder.tableCalls.filter((call) => call.table === "tutors-connect-latest" && call.op === "select").length;
 }
 
-/** The learning events the reader stored for Tutors Live for `name`, in order: its upserts into tutors-connect-latest. */
+/** The learning events the reader stored for Tutors Live for `name`, in order: the server's upserts into tutors-connect-latest. */
 export function liveActivityStored(name: string): LoRecord[] {
   return recorder
     .upserts("tutors-connect-latest")

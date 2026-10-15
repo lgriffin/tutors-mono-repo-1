@@ -40,6 +40,12 @@ export type SupabasePresenceOptions = {
    * composition passes its own.
    */
   report?: (event: PresenceEvent) => void;
+  /**
+   * How the learner's latest snapshot reaches `tutors-connect-latest`. The browser's composition
+   * passes the data API's POST /api/presence (the server writes for the session's login, Rule
+   * 0072); without one the snapshot is not stored. The browser writes no table itself.
+   */
+  store?: (event: PresenceEvent) => Promise<void>;
   /** The gateway to subscribe through; one per tab by default, built on this client. */
   gateway?: RealtimeGateway;
 };
@@ -82,12 +88,10 @@ export function supabasePresence(client: SupabaseClient, now: () => Date = () =>
   async function storeLatest(event: PresenceEvent): Promise<void> {
     const courseId = event.courseId?.trim();
     const studentId = event.user?.id?.trim();
-    if (!courseId || !studentId) return;
-    const { error } = await client.from("tutors-connect-latest").upsert(
-      { course_id: courseId, student_id: studentId, payload: event, received_at: now().toISOString() },
-      { onConflict: "course_id,student_id" }
-    );
-    if (error) {
+    if (!courseId || !studentId || !options.store) return;
+    try {
+      await options.store(event);
+    } catch (error) {
       log.error("upsertTutorsConnectLatestLo failed:", error);
     }
   }

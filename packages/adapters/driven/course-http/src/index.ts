@@ -1,6 +1,7 @@
 /**
- * Reads a published course's tutors.json over HTTP: the application's CourseSource port. Also the
- * browser's side of the SnippetStore port: a shared snippet goes to the reader's server over HTTP.
+ * Reads a published course's tutors.json over HTTP: the application's CourseSource port, and the
+ * server's CourseFactsSource (course-facts.ts). Also the browser's side of the SnippetStore port:
+ * a shared snippet goes to the reader's server over HTTP.
  */
 import {
   CourseNotFoundError,
@@ -100,3 +101,5 @@ export function httpSnippetStore(fetchFn: typeof fetch = (...args) => globalThis
     }
   };
 }
+
+export { httpCourseFacts, courseJsonUrl, redirectTarget, type HttpCourseFactsOptions } from "./course-facts.ts";

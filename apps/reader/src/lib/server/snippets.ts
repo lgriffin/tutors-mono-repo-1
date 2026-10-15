@@ -14,7 +14,7 @@ import { httpCourseSource } from "@tutors/course-http";
 
 /** The store the share route writes to; null when the deployment has no service key. */
 export function serviceSnippetStore(): SnippetStore | null {
-  const client = createSupabaseClient(publicEnv.PUBLIC_SUPABASE_URL, env.PRIVATE_SUPABASE_SERVICE_KEY);
+  const client = createSupabaseClient(publicEnv.PUBLIC_SUPABASE_URL, env.PRIVATE_SUPABASE_SERVICE_ROLE_KEY);
   return client ? supabaseSnippetStore(client) : null;
 }
 

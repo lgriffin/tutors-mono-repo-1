@@ -3,8 +3,9 @@
  * keeps its state in plain collections and behaves as the contract suites say a real adapter must.
  */
 import type { Course, Lo } from "@tutors/domain/course";
-import type { ContentLock } from "@tutors/domain/access";
-import type { LearningEvent, CalendarEntry, LearningRecord, TutorsConnectUser } from "@tutors/domain/learning";
+import type { ContentLock, CourseFacts } from "@tutors/domain/access";
+import { whiteboardRoomId } from "@tutors/domain/course";
+import type { LearningEvent, CalendarEntry, LearningRecord, TutorsConnectUser, TutorsTimeRows } from "@tutors/domain/learning";
 import type { CourseVisit, PresenceEvent, Sentiment, StoredPresence } from "@tutors/domain/presence";
 import { CourseNotFoundError, type CourseLocation, type CourseSource } from "../ports/course-source.ts";
 import type { CourseEmitter } from "../ports/course-emitter.ts";
@@ -24,6 +25,8 @@ import type { ScormRecord, ScormRecords } from "../ports/scorm-records.ts";
 import { SNAPSHOT_OUTPUT_LIMIT, type PlaygroundSnapshot, type PlaygroundSnapshots } from "../ports/playground-snapshots.ts";
 import type { PlaygroundLive, PlaygroundLiveState, PlaygroundShare } from "../ports/playground-live.ts";
 import type { Workspace } from "@tutors/domain/course/playground";
+import type { CourseFactsSource, CourseLookup } from "../ports/course-facts.ts";
+import type { WhiteboardRoom, WhiteboardScene, WhiteboardStore } from "../ports/whiteboard-store.ts";
 import type { Actor } from "@tutors/domain/access";
 import type { NewSnippet, SharedSnippet, SnippetStore } from "../ports/snippet-store.ts";
 import type { CourseNotice, CourseNoticeType, CourseNotices } from "../ports/course-notices.ts";
@@ -113,6 +116,52 @@ export class InMemoryLearningRecords implements LearningRecords {
   async learners(courseId: string): Promise<TutorsConnectUser[]> {
     const ids = new Set(this.records.filter((r) => r.course_id === courseId).map((r) => r.student_id));
     return this.users.filter((u) => ids.has(u.github_id));
+  }
+  async timeRows(courseId: string, start?: string | null, end?: string | null): Promise<TutorsTimeRows> {
+    const calendar = await this.calendarEntries(courseId, start, end);
+    const learningRecords = await this.learningRecords(courseId);
+    const ids = new Set<string>([...calendar.map((r) => r.studentid), ...learningRecords.map((r) => r.student_id)]);
+    return {
+      courseId,
+      role: "educator",
+      course: null,
+      calendar: calendar as unknown as Record<string, unknown>[],
+      learningRecords: learningRecords as unknown as Record<string, unknown>[],
+      users: this.users.filter((u) => ids.has(u.github_id)).map(({ email: _email, ...user }) => user),
+      assignments: []
+    };
+  }
+}
+
+/** Answers from the courses it was given; a course named in `unreachable` cannot be asked. */
+export class InMemoryCourseFacts implements CourseFactsSource {
+  readonly lookups: string[] = [];
+  readonly unreachable = new Set<string>();
+  constructor(private readonly courses: Record<string, CourseFacts> = {}) {}
+  publish(facts: CourseFacts): void {
+    this.courses[facts.courseId] = facts;
+  }
+  remove(courseId: string): void {
+    delete this.courses[courseId];
+  }
+  async lookup(courseId: string): Promise<CourseLookup> {
+    this.lookups.push(courseId);
+    if (this.unreachable.has(courseId)) return { kind: "unavailable" };
+    const facts = this.courses[courseId];
+    return facts ? { kind: "found", facts } : { kind: "missing" };
+  }
+}
+
+/** Whiteboard scenes per room, in memory. */
+export class InMemoryWhiteboardStore implements WhiteboardStore {
+  readonly scenes = new Map<string, WhiteboardScene>();
+  async load(room: WhiteboardRoom, owner: string | null): Promise<WhiteboardScene | null> {
+    return this.scenes.get(whiteboardRoomId(room.courseId, room.route, room.shared ? null : owner)) ?? null;
+  }
+  async save(room: WhiteboardRoom, owner: string | null, elements: unknown[]): Promise<boolean> {
+    if (!room.shared && !owner) return false;
+    this.scenes.set(whiteboardRoomId(room.courseId, room.route, room.shared ? null : owner), { elements, appState: {}, files: {} });
+    return true;
   }
 }
 

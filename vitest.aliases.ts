@@ -45,6 +45,7 @@ export const workspaceAliases: Record<string, string> = {
   "@tutors/realtime": resolve(root, "packages/jsr/realtime/src/index.ts"),
   "@tutors/realtime-supabase": resolve(root, "packages/adapters/driven/realtime-supabase/src/index.ts"),
   "@tutors/course-http": resolve(root, "packages/adapters/driven/course-http/src/index.ts"),
+  "@tutors/data-api": resolve(root, "packages/adapters/driven/data-api/src/index.ts"),
   "@tutors/profile-localstorage": resolve(root, "packages/adapters/driven/profile-localstorage/src/index.ts"),
   "@tutors/bus-inprocess": resolve(root, "packages/adapters/driven/bus-inprocess/src/index.ts"),
   "@tutors/moodle": resolve(root, "packages/adapters/driven/moodle/src/index.ts"),

@@ -13,12 +13,13 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@codemirror/lang-javascript": "^6.2.5",
     "@opentelemetry/api": "1.9.1",
     "@prometheus-io/client": "^0.16.1",
     "@tutors/application": "workspace:*",
     "@tutors/bus-inprocess": "workspace:*",
     "@tutors/course-http": "workspace:*",
+    "@tutors/data-api": "workspace:*",
+    "@tutors/domain": "workspace:*",
     "@tutors/live-events-http": "workspace:*",
     "@tutors/profile-localstorage": "workspace:*",
     "@tutors/realtime-supabase": "workspace:*",

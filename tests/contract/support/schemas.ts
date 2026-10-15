@@ -210,7 +210,7 @@ export const CourseBroadcastSchema = z.object({
 // Ephemeral snippet sharing (issue #155)
 // ---------------------------------------------------------------------------
 
-/** One row of the `course_gists` table (supabase/migrations/20260905_create_course_gists.sql). */
+/** One row of the `course_gists` table (supabase/migrations/20261018000000_create_course_gists.sql). */
 export const CourseGistSchema = z.object({
   id: z.string().uuid(),
   created_at: z.string(),
@@ -255,6 +255,3 @@ export type WhiteboardSceneInit = z.infer<typeof WhiteboardSceneInitSchema>;
 export type WhiteboardSceneUpdate = z.infer<typeof WhiteboardSceneUpdateSchema>;
 export type WhiteboardSceneSnapshot = z.infer<typeof WhiteboardSceneSnapshotSchema>;
 export type WhiteboardCursorUpdate = z.infer<typeof WhiteboardCursorUpdateSchema>;
-export type CourseBroadcast = z.infer<typeof CourseBroadcastSchema>;
-export type CourseGist = z.infer<typeof CourseGistSchema>;
-export type GistCreatedEvent = z.infer<typeof GistCreatedEventSchema>;

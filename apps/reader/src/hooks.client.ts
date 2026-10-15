@@ -6,15 +6,13 @@ import { createSupabaseErrorTransport } from "@tutors/store-supabase";
 import { configureAdapters } from "@tutors/svelte-state/adapters";
 import { createIdentityClient } from "@tutors/identity-better-auth/client";
 import { setCourseNotFoundHandler, setCourseUnreachableHandler } from "@tutors/svelte-state/course";
+import { readerTimeSource, setTutorsTimeSource } from "@tutors/tutors-time-lib";
 import { composeReader } from "#lib/compose.ts";
-
-(globalThis as any).__TUTORS_TIME_SUPABASE_INIT__ = {
-  url: env.PUBLIC_SUPABASE_URL,
-  key: env.PUBLIC_SUPABASE_ANON_KEY
-};
 
 // The composition root: every port gets its adapter here, before anything reads one.
 configureAdapters(composeReader(env, { identityClient: createIdentityClient() }));
+// The time page reads its rows from this reader's own data API (same origin), never from the database.
+setTutorsTimeSource(readerTimeSource(""));
 
 // A course that does not exist is a 404 page, not an unexpected error (a 500). A browser cannot tell
 // an unknown course site from being offline, so an unreachable host is a 404 page as well.

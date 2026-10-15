@@ -105,6 +105,8 @@
     "^jsr:"
   ],
   "ignoreDependencies": [
+    "katex",
+    "pyodide",
     "tailwindcss",
     "@tailwindcss/forms",
     "@tailwindcss/typography",

@@ -3,13 +3,11 @@ import * as env from "$app/env/public";
 import log, { addTransport, setAppName } from "@tutors/logger";
 import { createSupabaseErrorTransport } from "@tutors/store-supabase";
 import { composeTime } from "./lib/compose.ts";
-
-(globalThis as any).__TUTORS_TIME_SUPABASE_INIT__ = {
-  url: env.PUBLIC_SUPABASE_URL,
-  key: env.PUBLIC_SUPABASE_ANON_KEY
-};
+import { useReaderTimeSource } from "#lib/time-source.ts";
 
 composeTime(env);
+// The rows come from the reader's data API (PUBLIC_READER_URL); this app holds no database key for them.
+useReaderTimeSource();
 
 setAppName("tutors-time");
 addTransport(createSupabaseErrorTransport("tutors-time"));

@@ -178,7 +178,7 @@ endpoint decides the `educator_courses` claim itself, by reading the course's ow
 `tutors.json` and checking `enrollment.educators` — a page cannot assert it. Without the
 secret the endpoint answers 501 and every feature below simply does not appear.
 
-`playground_snapshots` (`supabase/migrations/20260910_create_playground_snapshots.sql`) is
+`playground_snapshots` (`supabase/migrations/20261018000200_create_playground_snapshots.sql`) is
 the first Tutors table whose rows have an owner, and the first whose row-level security
 means anything: students reach `student_id = auth.jwt() ->> 'sub'`, educators get a
 select-only policy over `educator_courses`, and the anon role appears in no policy at all.

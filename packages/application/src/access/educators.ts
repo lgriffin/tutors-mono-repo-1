@@ -1,3 +1,12 @@
+/**
+ * The educator check of the snippet feature (reader `POST /api/gists`, `POST /api/notices`, the
+ * time app's snippets page). It deliberately stays apart from `createAuthorization`
+ * (authorization.ts): that one is the data API's server module over `CourseFactsSource`, which
+ * reads only allow-listed public hosts, caches with a stale fallback and answers roles and
+ * permissions; this one resolves a course the way the browser does (`courseJsonUrl` from the
+ * domain: localhost and self-hosted courses included) over the plain `CourseSource`, so the time
+ * app can gate its dashboard without the reader's host allow-list, and answers why it refused.
+ */
 import { isEducatorOf, type Enrolment } from "@tutors/domain/access";
 import type { CourseSource, FetchLike } from "../ports/course-source.ts";
 import { courseJsonUrl } from "@tutors/domain/course";

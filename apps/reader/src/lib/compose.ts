@@ -1,9 +1,12 @@
 /**
  * The reader's composition root: which adapter sits behind each port, decided from the
  * environment and nowhere else. `PUBLIC_ANON_MODE=TRUE` composes a reader that records nothing,
- * shows nobody present and offers no sign-in; otherwise Supabase holds the learner's record and
- * presence, and Better Auth the session. Both hooks files call this once, so the server and the
- * browser run the same wiring; tests call it with the environment they want.
+ * shows nobody present and offers no sign-in; otherwise the learner's record, presence snapshot,
+ * locks and whiteboard scenes travel through the reader's own data API (@tutors/data-api; the
+ * server writes them with its service key, guides/SERVER-WRITES.md), Supabase holds only the public
+ * reads (the catalogue, the locks, the latest presence) and the Realtime channels, and Better Auth
+ * the session. Both hooks files call this once, so the server and the browser run the same
+ * wiring; tests call it with the environment they want.
  */
 import type { IdentityClient } from "@tutors/application/ports";
 import { anonymousAdapters, type Adapters } from "@tutors/svelte-state/adapters";
@@ -19,14 +22,18 @@ import {
   configureSupabase,
   createSupabaseClient,
   supabaseAccessStore,
-  supabaseLearningEventSink,
   supabasePlaygroundSnapshots,
-  supabaseProfile,
-  supabaseScormRecords,
-  updateCourseList
+  supabaseScormRecords
 } from "@tutors/store-supabase";
 import { realtimeClientOptions, supabaseCourseNotices, supabasePlaygroundLive, supabasePresence } from "@tutors/realtime-supabase";
-import { initSupabase } from "@tutors/tutors-time-lib";
+import {
+  readerApiAccessStore,
+  readerApiCourseVisit,
+  readerApiLearningEventSink,
+  readerApiPresenceStore,
+  readerApiProfile,
+  readerApiWhiteboardStore
+} from "@tutors/data-api";
 import log, { withRequestId } from "@tutors/logger";
 
 export type ReaderEnv = {
@@ -71,7 +78,6 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
   const url = env.PUBLIC_SUPABASE_URL;
   const key = env.PUBLIC_SUPABASE_ANON_KEY;
   // On the server, calls made while serving a request carry its x-request-id; in the browser this is plain fetch.
-  initSupabase(url ?? "", key ?? "");
   const client = createSupabaseClient(url, key, withRequestId(), realtimeClientOptions());
   configureSupabase(client, client ? { url: url!, key: key! } : undefined);
   if (!client) {
@@ -79,20 +85,23 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     return { ...anonymousAdapters(shared), anonymous: false };
   }
 
-  // The catalogue counts every course visit; it listens rather than being called from the reader.
+  // The catalogue counts every course visit; it listens rather than being called from the reader,
+  // and the count is written by the server (POST /api/courses/visit) from the published course.
+  const reportVisit = readerApiCourseVisit();
   publisher.subscribe((event) => {
-    if (event.type === "course-visit") void updateCourseList(event.course, clock.now());
+    if (event.type === "course-visit") void reportVisit(event.course, clock.now());
   });
 
-  const presence = supabasePresence(client, clock.now);
+  // The presence snapshot is stored by the server (POST /api/presence); the channel itself stays in the browser.
+  const presence = supabasePresence(client, clock.now, { store: readerApiPresenceStore() });
   return {
     ...anonymousAdapters(shared),
     anonymous: false,
-    learningEvents: supabaseLearningEventSink(),
+    learningEvents: readerApiLearningEventSink(),
     presence,
-    profile: { local: localStorageProfile(), signedIn: supabaseProfile() },
-    accessStore: supabaseAccessStore(),
-    whiteboardClient: client,
+    profile: { local: localStorageProfile(), signedIn: readerApiProfile() },
+    accessStore: readerApiAccessStore(supabaseAccessStore().locks),
+    whiteboard: readerApiWhiteboardStore(),
     scormRecords: supabaseScormRecords(),
     // Snapshots have an owner, so they are written as the signed-in student with a token the
     // reader mints at /api/runtime-token (PRIVATE_SUPABASE_JWT_SECRET); without it, nothing is handed in.

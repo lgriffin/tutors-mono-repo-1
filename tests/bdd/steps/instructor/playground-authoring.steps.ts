@@ -22,7 +22,7 @@ vi.mock("@tutors/logger", () => ({ default: { error: vi.fn(), debug: vi.fn(), in
 
 const feature = await loadFeature("tests/bdd/features/instructor/playground-authoring.feature");
 
-const MIGRATION = path.join(process.cwd(), "supabase/migrations/20260910_create_playground_snapshots.sql");
+const MIGRATION = path.join(process.cwd(), "supabase/migrations/20261018000200_create_playground_snapshots.sql");
 
 function write(file: string, contents: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });

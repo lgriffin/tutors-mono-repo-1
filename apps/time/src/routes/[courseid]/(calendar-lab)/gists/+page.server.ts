@@ -22,7 +22,7 @@ export const load: PageServerLoad = async (event): Promise<SnippetsPage> => {
 
   const store = serviceSnippetStore();
   if (!store) {
-    log.error("Snippet sharing is not configured: PRIVATE_SUPABASE_SERVICE_KEY is not set");
+    log.error("Snippet sharing is not configured: PRIVATE_SUPABASE_SERVICE_ROLE_KEY is not set");
     return { authorised: true, error: "Snippet sharing is not configured", rows: [] };
   }
   try {

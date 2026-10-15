@@ -6,3 +6,4 @@ export type { Actor } from "./actor.ts";
 export * from "./roles.ts";
 export * from "./locks.ts";
 export * from "./whitelist.ts";
+export * from "./course-facts.ts";

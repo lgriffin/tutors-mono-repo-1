@@ -32,7 +32,7 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
 if (!SUPABASE_URL || !SERVICE_KEY) {
   err(
-    "FATAL: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are both required (see .env.example for PRIVATE_SUPABASE_SERVICE_KEY)"
+    "FATAL: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are both required (see .env.example for PRIVATE_SUPABASE_SERVICE_ROLE_KEY)"
   );
   process.exit(2);
 }

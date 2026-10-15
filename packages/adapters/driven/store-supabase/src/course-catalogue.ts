@@ -1,47 +1,17 @@
 /**
- * @service AllCourseAccess
- * Service for tracking and managing course access statistics across all users
+ * The catalogue's record of each published course (`tutors-connect-courses`): how often it was
+ * visited and the card the catalogue shows. Written by the reader's server (POST /api/courses/visit)
+ * with the title, credits and privacy it read from the published course, never from the browser.
  */
+import { fail, type SupabaseClient } from "./client.ts";
 
-import type { Course } from "@tutors/domain/course";
-import { courseVisitOf, isCatalogueCourseId, type CourseVisit } from "@tutors/domain/presence";
-import log from "@tutors/logger";
-import { supabase } from "./client.ts";
-
-/**
- * Updates the course access statistics in the database
- * Increments visit count and updates last visit timestamp
- * @param course - The course being accessed
- */
-export async function updateCourseList(course: Course, now: Date = new Date()): Promise<void> {
-  if (!supabase || !isCatalogueCourseId(course.courseId)) return;
-  const { data, error } = await supabase.from("tutors-connect-courses").select("visit_count").eq("course_id", course.courseId).single();
-
-  if (error && error.code !== "PGRST116") {
-    log.error("Error fetching row:", error);
-    return;
-  }
-
-  const newVisits = data ? data.visit_count + 1 : 1;
-
-  // Upsert the row with the updated count and date
-  const { error: upsertError } = await supabase.from("tutors-connect-courses").upsert(
-    {
-      course_id: course.courseId,
-      visited_at: now,
-      visit_count: newVisits,
-      course_record: getCourseRecord(course, now)
-    },
-    { onConflict: "course_id" }
-  );
-
-  if (upsertError) {
-    log.error("Error upserting row:", upsertError);
-  }
-}
-
-/** The catalogue's record of a course: its visit entry, without a visit count, plus whether it is private. */
-function getCourseRecord(course: Course, now: Date): CourseVisit {
-  const { visits: _visits, ...visit } = courseVisitOf(course, now);
-  return { ...visit, private: course.isPrivate };
+/** Counts a visit to `courseId` and stores `record` as its card. */
+export async function recordCourseVisit(db: SupabaseClient, courseId: string, record: Record<string, unknown>, now: Date = new Date()): Promise<void> {
+  const { data, error } = await db.from("tutors-connect-courses").select("visit_count").eq("course_id", courseId).maybeSingle();
+  if (error) fail("tutors-connect-courses read", error);
+  const visits = ((data as { visit_count?: number } | null)?.visit_count ?? 0) + 1;
+  const { error: upsertError } = await db
+    .from("tutors-connect-courses")
+    .upsert({ course_id: courseId, visited_at: now.toISOString(), visit_count: visits, course_record: record }, { onConflict: "course_id" });
+  if (upsertError) fail("tutors-connect-courses upsert", upsertError);
 }

@@ -270,6 +270,9 @@ export function setShowHide(lo: Lo, status: boolean);
 // (from ../../domain/src/course/utils/lo-utils.ts)
 export function sortLos(los: Array<Lo>) : Lo[];
 
+// (from ../../domain/src/course/whiteboard-room.ts)
+export function whiteboardRoomId(courseId: string, route: string, owner: string | null) : string;
+
 
 // --- consts ---
 
@@ -305,7 +308,7 @@ export const simpleTypes;
 |------|-------|
 | class | 1 |
 | const | 8 |
-| function | 37 |
+| function | 38 |
 | interface | 1 |
 | type | 45 |
-| **Total** | **92** |
+| **Total** | **93** |

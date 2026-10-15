@@ -45,6 +45,7 @@ exports[`Public API Surface — @tutors/tutors-model-lib > should export utility
   "searchHits",
   "setShowHide",
   "sortLos",
+  "whiteboardRoomId",
 ]
 `;
 
@@ -96,5 +97,6 @@ exports[`Public API Surface — @tutors/tutors-model-lib > should maintain stabl
   "setShowHide",
   "simpleTypes",
   "sortLos",
+  "whiteboardRoomId",
 ]
 `;

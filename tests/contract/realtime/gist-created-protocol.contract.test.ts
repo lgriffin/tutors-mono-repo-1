@@ -3,7 +3,7 @@ import { GistCreatedEventSchema } from "../support/schemas";
 import { validateAgainstSchema } from "../support/validators";
 import { publishCourseNotice, noticeTopic, noticeEvent, isCourseNotice } from "../../../packages/adapters/driven/realtime-supabase/src/index.ts";
 import { snippetSharedNotice } from "../../../packages/application/src/index.ts";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@tutors/store-supabase";
 
 /**
  * Protocol contract for the `gist-created` real-time event (issue #155:

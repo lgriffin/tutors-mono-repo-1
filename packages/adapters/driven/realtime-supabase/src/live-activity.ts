@@ -3,7 +3,7 @@ import type { PresenceEvent } from "@tutors/domain/presence";
 import { topics, type RealtimeAdapter, type Topic } from "@tutors/realtime";
 import log from "@tutors/logger";
 import { supabaseRealtimeAdapter } from "./gateway.ts";
-import { claimLivePublish, type LiveBudgetTier } from "./budget.ts";
+import type { LiveBudgetTier } from "./budget.ts";
 
 /**
  * The reader's server side of Tutors Live (POST /api/live/activity). The browser sends each learning
@@ -16,6 +16,23 @@ import { claimLivePublish, type LiveBudgetTier } from "./budget.ts";
  */
 
 export const MAX_LIVE_ACTIVITY_BYTES = 4096;
+
+/**
+ * Asks the database which Realtime topics a course's learning event may be published to, and charges
+ * them to the day's Live budget. Called by the reader's server only.
+ * @returns the tier and topics, or null when the claim failed (the caller publishes nothing)
+ */
+export async function claimLivePublish(client: SupabaseClient, courseId: string): Promise<{ tier: LiveBudgetTier; topics: string[] } | null> {
+  const { data, error } = await client.rpc("realtime_claim_live_publish", { p_course_id: courseId });
+  if (error) {
+    log.warn("realtime_claim_live_publish failed:", error);
+    return null;
+  }
+  const claim = data as { tier?: LiveBudgetTier; topics?: unknown } | null;
+  if (!claim?.tier || !Array.isArray(claim.topics)) return null;
+  return { tier: claim.tier, topics: claim.topics.filter((topic): topic is string => typeof topic === "string") };
+}
+
 const MAX_ID = 200;
 const MAX_USER_ID = 100;
 const MAX_TEXT = 1000;

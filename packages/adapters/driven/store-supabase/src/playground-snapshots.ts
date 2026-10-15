@@ -4,7 +4,7 @@
  *
  * A snapshot is written with an authenticated client rather than the anon one the rest of this adapter
  * uses. The rows have an owner and the policies on the table are written against the token's claims
- * (supabase/migrations/20260910_create_playground_snapshots.sql), so the token is not decoration:
+ * (supabase/migrations/20261018000200_create_playground_snapshots.sql), so the token is not decoration:
  * without it every request is rejected. The reader mints it from the signed-in session
  * (GET /api/runtime-token); a deployment with no JWT secret answers 501 and the feature is simply
  * not available there.

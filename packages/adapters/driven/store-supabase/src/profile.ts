@@ -1,203 +1,105 @@
 /**
  * What Supabase keeps about a signed-in learner: their record in `tutors-connect-users`
  * (name, avatar, sentiment, whether they share presence) and their course-visit history in
- * `tutors-connect-profiles`. `supabaseProfile` is the application's ProfilePort over both.
+ * `tutors-connect-profiles`. The reader's server writes both for the login its session verified;
+ * `supabaseProfile` is the application's ProfilePort over them.
  */
-import type { TutorsId } from "@tutors/domain/course";
-import { COURSE_SENTIMENT_IDS } from "@tutors/domain/course";
 import { parseSentiment, parseSharing, onlineStatusFor, type CourseVisit } from "@tutors/domain/presence";
 import type { LearnerProfile, ProfilePort } from "@tutors/application/ports";
-import log from "@tutors/logger";
-import { supabase } from "./client.ts";
+import { fail, supabase, type SupabaseClient } from "./client.ts";
 
-/**
- * Creates or updates a student record in the database
- * @async
- * @param student - Student data to store
- */
-export async function addOrUpdateStudent(student: TutorsId) {
-  if (!student || !supabase) return;
-
-  try {
-    let fullName = student.name;
-
-    // If name is null or empty, fetch from GitHub API
-    if (!fullName && student.login) {
-      try {
-        const response = await fetch(`https://api.github.com/users/${student.login}`);
-        if (response.ok) {
-          const githubUser = await response.json();
-          fullName = githubUser.name || student.login;
-        } else {
-          // Fallback to login if API call fails
-          fullName = student.login;
-        }
-      } catch (fetchError) {
-        log.error("Failed to fetch GitHub user:", fetchError);
-        // Fallback to login if API call fails
-        fullName = student.login;
-      }
-    }
-
-    const row: {
-      github_id: string;
-      avatar_url: string;
-      full_name: string;
-      email: string;
-      date_last_accessed: string;
-      sentiment: string;
-      online_status?: string;
-    } = {
-      github_id: student.login,
-      avatar_url: student.image,
-      full_name: fullName,
-      email: student.email,
-      date_last_accessed: new Date().toISOString(),
-      sentiment: student.sentiment
-    };
-    if (student.share === "true") {
-      row.online_status = "online";
-    } else if (student.share === "false") {
-      row.online_status = "offline";
-    }
-
-    const { error } = await supabase!.from("tutors-connect-users").upsert(row);
-
-    if (error) {
-      log.error("Upsert failed:", error);
-      throw error;
-    }
-  } catch (error) {
-    log.error("An error occurred in addOrUpdateUserProfile:", error);
-    throw error;
-  }
+/** The columns of a learner's row a user may set about themselves. */
+export interface UserStatus {
+  sentiment: string | null;
+  online_status: string | null;
 }
 
-function normalizeStoredSentiment(raw: string | null | undefined): string | null {
-  if (raw == null || !String(raw).trim()) return null;
-  const s = String(raw).trim();
-  return (COURSE_SENTIMENT_IDS as readonly string[]).includes(s) ? s : null;
+/** Who the session says the learner is: the row's name, email and avatar come from here, never from the request. */
+export interface SessionUser {
+  login: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
 }
 
-/**
- * Fetches sentiment for a row in tutors-connect-users.
- * @param githubId - Student GitHub login (primary key for the row)
- * @returns Stored sentiment if present and valid per {@link COURSE_SENTIMENT_IDS}, otherwise null (includes no row).
- */
-export async function getTutorsConnectUserSentiment(githubId: string): Promise<string | null> {
-  if (!supabase || !githubId) return null;
-
-  const { data, error } = await supabase!.from("tutors-connect-users").select("sentiment").eq("github_id", githubId).maybeSingle();
-
-  if (error) {
-    log.error("getTutorsConnectUserSentiment failed:", error);
-    throw error;
-  }
-  if (!data) return null;
-  return normalizeStoredSentiment((data as { sentiment: string | null }).sentiment);
+export async function upsertUser(db: SupabaseClient, user: SessionUser, status: Partial<UserStatus>): Promise<void> {
+  const row: Record<string, string | null> = {
+    github_id: user.login,
+    avatar_url: user.image,
+    full_name: user.name?.trim() || user.login,
+    email: user.email,
+    date_last_accessed: new Date().toISOString()
+  };
+  if (status.sentiment) row.sentiment = status.sentiment;
+  if (status.online_status) row.online_status = status.online_status;
+  const { error } = await db.from("tutors-connect-users").upsert(row);
+  if (error) fail("tutors-connect-users upsert", error);
 }
 
-/**
- * Updates sentiment (and last-accessed) for a row in tutors-connect-users.
- * @param githubId - Student GitHub login (primary key for the row)
- * @param sentiment - Current mood string
- */
-export async function updateTutorsConnectUserSentiment(githubId: string, sentiment: string) {
-  if (!supabase || !githubId) return;
-
-  const { error } = await supabase
-    .from("tutors-connect-users")
-    .update({
-      sentiment,
-      date_last_accessed: new Date().toISOString()
-    })
-    .eq("github_id", githubId);
-
-  if (error) {
-    log.error("updateTutorsConnectUserSentiment failed:", error);
-    throw error;
-  }
+export async function getUserStatus(db: SupabaseClient, login: string): Promise<UserStatus> {
+  const { data, error } = await db.from("tutors-connect-users").select("sentiment, online_status").eq("github_id", login).maybeSingle();
+  if (error) fail("tutors-connect-users read", error);
+  const row = data as UserStatus | null;
+  return { sentiment: row?.sentiment ?? null, online_status: row?.online_status ?? null };
 }
 
-/**
- * Fetches online_status for a row in tutors-connect-users (mirrors Share Presence / {@link updateTutorsConnectUserOnlineStatus}).
- * @param githubId - Student GitHub login (primary key for the row)
- * @returns Stored online_status if present, otherwise null (includes no row).
- */
-export async function getTutorsConnectUserOnlineStatus(githubId: string): Promise<string | null> {
-  if (!supabase || !githubId) return null;
-
-  const { data, error } = await supabase!.from("tutors-connect-users").select("online_status").eq("github_id", githubId).maybeSingle();
-
-  if (error) {
-    log.error("getTutorsConnectShare failed:", error);
-    throw error;
-  }
-  if (!data) return null;
-  const raw = (data as { online_status: string | null }).online_status;
-  if (raw == null || !String(raw).trim()) return null;
-  return String(raw).trim();
-}
-
-/**
- * Sets online_status on tutors-connect-users (mirrors share: visible / sharing = online).
- */
-export async function updateTutorsConnectUserOnlineStatus(githubId: string, onlineStatus: "online" | "offline") {
-  if (!supabase || !githubId) return;
-
-  const { error } = await supabase
-    .from("tutors-connect-users")
-    .update({
-      online_status: onlineStatus,
-      date_last_accessed: new Date().toISOString()
-    })
-    .eq("github_id", githubId);
-
-  if (error) {
-    log.error("updateTutorsConnectUserOnlineStatus failed:", error);
-    throw error;
-  }
+export async function updateUserStatus(db: SupabaseClient, login: string, status: Partial<UserStatus>): Promise<void> {
+  const change: Record<string, string> = { date_last_accessed: new Date().toISOString() };
+  if (status.sentiment) change.sentiment = status.sentiment;
+  if (status.online_status) change.online_status = status.online_status;
+  const { error } = await db.from("tutors-connect-users").update(change).eq("github_id", login);
+  if (error) fail("tutors-connect-users update", error);
 }
 
 /** The course-visit history stored for a learner, or [] when there is none. */
-export async function getStoredCourseVisits(tutorId: string): Promise<CourseVisit[]> {
-  if (!supabase || !tutorId) return [];
-  const { data: profile } = await supabase.from("tutors-connect-profiles").select("profile").eq("tutorId", tutorId);
-  if (profile && profile.length > 0) {
-    return profile[0].profile as unknown as CourseVisit[];
-  }
-  return [];
+export async function getProfile(db: SupabaseClient, login: string): Promise<CourseVisit[]> {
+  const { data, error } = await db.from("tutors-connect-profiles").select("profile").eq("tutorId", login).maybeSingle();
+  if (error) fail("tutors-connect-profiles read", error);
+  const profile = (data as { profile?: unknown } | null)?.profile;
+  return Array.isArray(profile) ? (profile as CourseVisit[]) : [];
 }
 
-export async function saveStoredCourseVisits(tutorId: string, visits: CourseVisit[]): Promise<void> {
-  if (!supabase || !tutorId) return;
-  const { error } = await supabase.from("tutors-connect-profiles").upsert({ tutorId, profile: visits });
-  if (error) {
-    log.error("Failed to save profile:", error);
-  }
+export async function saveProfile(db: SupabaseClient, login: string, visits: unknown[]): Promise<void> {
+  const { error } = await db.from("tutors-connect-profiles").upsert({ tutorId: login, profile: visits });
+  if (error) fail("tutors-connect-profiles upsert", error);
 }
 
-export function supabaseProfile(): ProfilePort {
+/** The ProfilePort over the functions above, for `client` (the composed client by default). Reads are empty and writes no-ops without one. */
+export function supabaseProfile(client?: SupabaseClient): ProfilePort {
+  const db = () => client ?? supabase;
   return {
-    getCourseVisits: (learnerId) => getStoredCourseVisits(learnerId),
-    saveCourseVisits: (learnerId, visits) => saveStoredCourseVisits(learnerId, visits),
+    async getCourseVisits(learnerId) {
+      const c = db();
+      return c && learnerId ? getProfile(c, learnerId) : [];
+    },
+    async saveCourseVisits(learnerId, visits) {
+      const c = db();
+      if (c && learnerId) await saveProfile(c, learnerId, visits);
+    },
     async upsertLearner(profile: LearnerProfile) {
-      await addOrUpdateStudent({
-        login: profile.login,
-        name: profile.name ?? "",
-        email: profile.email ?? "",
-        image: profile.image ?? "",
-        sentiment: profile.sentiment ?? undefined,
-        share: profile.sharing === null ? undefined : String(profile.sharing)
-      } as TutorsId);
+      const c = db();
+      if (!c || !profile.login) return;
+      await upsertUser(
+        c,
+        { login: profile.login, name: profile.name, email: profile.email, image: profile.image },
+        { sentiment: profile.sentiment, online_status: profile.sharing === null ? null : onlineStatusFor(profile.sharing) }
+      );
     },
     async getSentiment(learnerId) {
-      return parseSentiment(await getTutorsConnectUserSentiment(learnerId));
+      const c = db();
+      return c && learnerId ? parseSentiment((await getUserStatus(c, learnerId)).sentiment) : null;
     },
-    setSentiment: (learnerId, sentiment) => updateTutorsConnectUserSentiment(learnerId, sentiment),
+    async setSentiment(learnerId, sentiment) {
+      const c = db();
+      if (c && learnerId) await updateUserStatus(c, learnerId, { sentiment });
+    },
     async getSharing(learnerId) {
-      return parseSharing(await getTutorsConnectUserOnlineStatus(learnerId));
+      const c = db();
+      return c && learnerId ? parseSharing((await getUserStatus(c, learnerId)).online_status) : null;
     },
-    setSharing: (learnerId, sharing) => updateTutorsConnectUserOnlineStatus(learnerId, onlineStatusFor(sharing))
+    async setSharing(learnerId, sharing) {
+      const c = db();
+      if (c && learnerId) await updateUserStatus(c, learnerId, { online_status: onlineStatusFor(sharing) });
+    }
   };
 }

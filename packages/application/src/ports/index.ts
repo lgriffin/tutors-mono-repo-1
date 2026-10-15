@@ -25,3 +25,5 @@ export * from "./live-bus.ts";
 export * from "./live-presence-store.ts";
 export * from "./live-warehouse.ts";
 export * from "./live-event-reporter.ts";
+export * from "./course-facts.ts";
+export * from "./whiteboard-store.ts";
