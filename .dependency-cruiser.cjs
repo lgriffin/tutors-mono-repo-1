@@ -8,6 +8,7 @@
 //   adapters     packages/adapters/driven/<name>    one technology each, behind a port
 //                packages/adapters/driving/<name>   Svelte state, UI, themes, i18n, a11y, tour
 //   apps         apps/<name>                        composition roots: compose(env) picks the adapters
+//   services     services/<name>                    long-running processes with a composition root of their own
 //
 // packages/platform/* (logger, metrics) are plumbing any adapter or app may use; packages/jsr/*
 // are the published packages: facades over the rings (model, time, types, identity) and the
@@ -26,8 +27,11 @@ const DRIVING = "^packages/adapters/driving/";
 const PLATFORM = "^packages/platform/";
 const FACADES = "^packages/jsr/(model|time|types|identity)/";
 
-/** A workspace root: apps/x, packages/jsr/x, packages/platform/x, packages/adapters/driven/x, packages/adapters/driving/x, packages/domain or packages/application. */
-const WORKSPACE = "^((?:apps|packages/jsr|packages/platform|packages/adapters/driven|packages/adapters/driving)/[^/]+|packages/domain|packages/application)/";
+/** A workspace root: apps/x, services/x, packages/jsr/x, packages/platform/x, packages/adapters/driven/x, packages/adapters/driving/x, packages/domain or packages/application. */
+const WORKSPACE = "^((?:apps|services|packages/jsr|packages/platform|packages/adapters/driven|packages/adapters/driving)/[^/]+|packages/domain|packages/application)/";
+
+/** A deployable unit: an app or a service. Each has its own composition root and imports no other. */
+const DEPLOYABLE = "^(apps|services)/";
 
 /**
  * Each vendor and the one driven adapter allowed to import it. Everything else talks to the
@@ -36,7 +40,9 @@ const WORKSPACE = "^((?:apps|packages/jsr|packages/platform|packages/adapters/dr
 const VENDORS = [
   { name: "supabase", match: "(^|/)@supabase/", adapter: "^packages/adapters/driven/(store-supabase|realtime-supabase)/" },
   { name: "markdown", match: "(^|/)(markdown-it|katex|shiki|mermaid|@marp-team)(/|$)", adapter: "^packages/adapters/driven/render-markdown/" },
-  { name: "better-auth", match: "(^|/)(@better-auth/|better-auth(/|$))", adapter: "^packages/adapters/driven/identity-better-auth/" }
+  { name: "better-auth", match: "(^|/)(@better-auth/|better-auth(/|$))", adapter: "^packages/adapters/driven/identity-better-auth/" },
+  { name: "redis", match: "(^|/)(redis|@redis/[^/]+)(/|$)", adapter: "^packages/adapters/driven/live-redis/" },
+  { name: "pg", match: "(^|/)(pg|pg-[^/]+)(/|$)", adapter: "^packages/adapters/driven/live-postgres/" }
 ];
 
 /** The authoring toolchain (generator and CLIs) is published on its own and is not an adapter of the reader; its extraction is a separate phase. */
@@ -101,10 +107,10 @@ module.exports = {
     },
     {
       name: "adapters-import-no-app",
-      comment: "Apps are the composition roots; nothing below them imports an app.",
+      comment: "Apps and services are the composition roots; nothing below them imports one.",
       severity: "error",
       from: { path: "^packages/" },
-      to: { path: "^apps/" }
+      to: { path: DEPLOYABLE }
     },
     ...uiLayerRules,
     {
@@ -168,10 +174,10 @@ module.exports = {
     },
     {
       name: "no-app-to-app",
-      comment: "Apps are deployed separately; share code through a package instead of importing another app.",
+      comment: "Apps and services are deployed separately; share code through a package instead of importing another deployable.",
       severity: "error",
-      from: { path: "^apps/([^/]+)/" },
-      to: { path: "^apps/", pathNot: "^apps/$1/" }
+      from: { path: "^((?:apps|services)/[^/]+)/" },
+      to: { path: DEPLOYABLE, pathNot: "^$1/" }
     },
     {
       name: "no-cross-workspace-relative-import",

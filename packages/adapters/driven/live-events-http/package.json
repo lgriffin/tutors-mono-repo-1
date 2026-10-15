@@ -1,0 +1,15 @@
+{
+  "name": "@tutors/live-events-http",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "The reader's LiveEventReporter: batches live events and posts them to the live app's ingest endpoint with fetch and sendBeacon",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tutors/application": "workspace:*",
+    "@tutors/domain": "workspace:*"
+  }
+}

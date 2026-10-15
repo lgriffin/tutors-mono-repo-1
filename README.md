@@ -48,14 +48,14 @@ Each app composes its adapters in `src/lib/compose.ts`, the only place that read
 |---|---|---|---|
 | `apps/reader` | `tutors-reader` | The course reader (the app behind tutors.dev) | 5173 |
 | `apps/catalogue` | `tutors-catalogue` | Course catalogue | 5175 |
-| `apps/live` | `tutors-live` | Live classroom / presence | 5174 |
+| `apps/live` | `tutors-live` | Live dashboard: presence, stats and heat maps, and the `/api/live/*` read API | 5174 |
 | `apps/time` | `tutors-time` | Student activity and time-tracking dashboard | 5176 |
 
 ### Rings
 
 | Directory | Package | What it is |
 |---|---|---|
-| `packages/domain` | `@tutors/domain` | The domain: course tree, learning records, presence, access and quiz rules. Plain TypeScript, imports nothing. Subpaths: `/course`, `/learning`, `/presence`, `/access`, `/quiz` |
+| `packages/domain` | `@tutors/domain` | The domain: course tree, learning records, presence, access and quiz rules. Plain TypeScript, imports nothing. Subpaths: `/course`, `/learning`, `/presence`, `/access`, `/quiz`, `/live` (Tutors Live's events, metrics, heat maps and observation rules) |
 | `packages/application` | `@tutors/application` | Ports (`/ports`: what the application needs from outside, as interfaces) and the use cases over them; `/testing` holds in-memory adapters and the contract suite every adapter of a port must pass |
 
 ### Driven adapters (`packages/adapters/driven/`)
@@ -73,6 +73,9 @@ Each wraps one technology behind a port and imports no other adapter.
 | `identity-better-auth` | `@tutors/identity-better-auth` | SessionPort and IdentityClient over Better Auth (`/server` and `/client` entry points) |
 | `moodle` | `@tutors/moodle` | AssignmentSource over Moodle web services |
 | `clock` | `@tutors/clock` | Clock (frozen by `HARNESS_NOW` for the release harness) and the `/version` endpoint |
+| `live-redis` | `@tutors/live-redis` | LiveBus over Redis Streams and LivePresenceStore over Valkey sorted sets (Tutors Live) |
+| `live-postgres` | `@tutors/live-postgres` | LiveWarehouse over TimescaleDB, with the schema (Tutors Live) |
+| `live-events-http` | `@tutors/live-events-http` | LiveEventReporter: the reader's batched posts to the live app's ingest endpoint |
 
 ### Driving adapters (`packages/adapters/driving/`)
 
@@ -113,6 +116,14 @@ These carry a `deno.json` and are run and published with Deno; some also carry a
 | `packages/jsr/tutors` | `@tutors/tutors` | The generator that turns a course folder into `tutors.json` |
 | `packages/jsr/tutors-lite` | `@tutors/tutors-lite` | Static HTML course generator |
 | `packages/jsr/create` | `@tutors/tutors-create` | Course scaffolder (CLI and reader wizard) |
+
+### Services
+
+Long-running processes that are not SvelteKit apps. They are pnpm workspaces under `services/`, compose their adapters in their own `src/compose.ts` and are deployed as their own images.
+
+| Directory | Package | What it is |
+|---|---|---|
+| `services/live-ingest` | `@tutors/live-ingest` | Consumes `tutors.live.*` from the message bus into Valkey and TimescaleDB through the live-redis and live-postgres adapters. See [services/live-ingest/README.md](services/live-ingest/README.md) |
 
 ## Getting Started
 

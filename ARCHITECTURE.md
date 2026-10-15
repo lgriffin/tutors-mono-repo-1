@@ -123,12 +123,13 @@ Each app is a SvelteKit application built into a Node 22 container image on quay
 
 ```mermaid
 flowchart TB
-  subgraph apps["Apps  ·  apps/*  ·  composition roots"]
+  subgraph apps["Apps and services  ·  apps/*, services/*  ·  composition roots"]
     direction LR
     readerApp["reader<br/>src/lib/compose.ts"]
     catalogueApp["catalogue<br/>src/lib/compose.ts"]
-    liveApp["live<br/>src/lib/compose.ts"]
+    liveApp["live<br/>src/lib/compose.ts<br/>src/lib/server/pipeline.ts"]
     timeApp["time<br/>src/lib/compose.ts"]
+    ingestService["live-ingest<br/>src/compose.ts"]
   end
 
   subgraph adapters["Adapters  ·  packages/adapters"]
@@ -148,17 +149,20 @@ flowchart TB
       identity["identity-better-auth"]
       moodle["moodle"]
       clock["clock"]
+      liveRedis["live-redis"]
+      livePostgres["live-postgres"]
+      liveHttp["live-events-http"]
     end
   end
 
   subgraph application["Application  ·  packages/application  ·  @tutors/application"]
     ports["ports/  (interfaces)"]
-    useCases["course · learning · presence · access  (use cases)"]
+    useCases["course · learning · presence · access · live  (use cases)"]
     testing["testing/  in-memory adapters + contract suites"]
   end
 
   subgraph domain["Domain  ·  packages/domain  ·  @tutors/domain"]
-    domainModules["course · learning · presence · access · quiz"]
+    domainModules["course · learning · presence · access · quiz · live"]
   end
 
   apps --> adapters
@@ -176,11 +180,12 @@ flowchart TB
 
 | Ring | Directory | Package | May import | Owns |
 |---|---|---|---|---|
-| Domain | `packages/domain` | `@tutors/domain` (`/course`, `/learning`, `/presence`, `/access`, `/quiz`) | Nothing outside itself | The course tree and its vocabulary, learning events and records, presence rules and the roster, admission, roles and locks, quiz parsing and scoring |
-| Application | `packages/application` | `@tutors/application` (`/ports`, `/testing`) | The domain | The twelve ports, the use cases, the in-memory adapters and the contract suite each adapter of a port must pass |
+| Domain | `packages/domain` | `@tutors/domain` (`/course`, `/learning`, `/presence`, `/access`, `/quiz`, `/live`) | Nothing outside itself | The course tree and its vocabulary, learning events and records, presence rules and the roster, admission, roles and locks, quiz parsing and scoring, and Tutors Live's event contract, session token, presence window and the arithmetic behind its stats, heat maps, activity tables and observation cards |
+| Application | `packages/application` | `@tutors/application` (`/ports`, `/testing`) | The domain | The sixteen ports, the use cases, the in-memory adapters and the contract suite each adapter of a port must pass |
 | Driven adapters | `packages/adapters/driven/*` | `@tutors/<name>` | Ports, domain, one technology, `@tutors/logger` | One technology each, behind a port |
 | Driving adapters | `packages/adapters/driving/*` | `@tutors/<name>` | Ports, domain, `svelte-state`, `@tutors/logger` | The Svelte state (the only home of runes), the UI, themes, i18n, a11y, tours, consent |
-| Apps | `apps/*` | `tutors-reader`, `tutors-catalogue`, `tutors-live`, `tutors-time` | Everything; never another app | Composition, routes, server hooks, environment |
+| Apps | `apps/*` | `tutors-reader`, `tutors-catalogue`, `tutors-live`, `tutors-time` | Everything; never another app or service | Composition, routes, server hooks, environment |
+| Services | `services/*` | `@tutors/live-ingest` | Everything; never an app or another service | Long-running processes that are not SvelteKit apps, each with its own composition root (`src/compose.ts`) and image: today the Tutors Live ingest consumer, which runs the `createIngestor` use case against the Redis bus, Valkey and TimescaleDB adapters |
 | Platform | `packages/platform/*` | `@tutors/logger`, `@tutors/metrics`, `@tutors/app-config` | Nothing in the rings | Logging, metrics, build configuration; used by every ring that runs on a server |
 | JSR | `packages/jsr/*` | `@tutors/tutors-model-lib`, `@tutors/tutors-time-lib`, `@tutors/tutors-types`, `@tutors/identity`, `@tutors/tutors-gen-lib`, `@tutors/tutors`, `@tutors/tutors-lite`, `@tutors/tutors-create` | The facades import the rings; the authoring toolchain is self-contained | Published packages: facades over the domain for one major, and the authoring toolchain |
 
@@ -313,6 +318,24 @@ classDiagram
     +courseContents(courseId, options?)
     +assignmentSubmissions(assignmentIds, options?)
   }
+  class LiveBus {
+    +publish(events) Promise~void~
+    +subscribe(handler) Promise~unsubscribe~
+  }
+  class LivePresenceStore {
+    +touch(event) Promise~void~
+    +now(at?) Promise~NowSnapshot~
+  }
+  class LiveWarehouse {
+    +append(events) / upsertSession(row) / purgeUid(uid)
+    +hourly(range) / hourlySessions(range) / sessions(range)
+    +courses(range) / topLos(range, limit)
+  }
+  class LiveEventReporter {
+    +courseOpened(course) / loViewed(course, lo, loType) / serviceUsed(course, service)
+    +identify(uid?) / start(course, lo) stop
+    +flush() / flushBeacon()
+  }
 ```
 
 | Port | What the application needs | Driven adapters | In-memory adapter | Contract suite |
@@ -330,8 +353,16 @@ classDiagram
 | `EventPublisher` | Tell the rest of the application something happened | `bus-inprocess` | `RecordingPublisher` | `eventPublisherContract` |
 | `Clock` | The instant, so time can be frozen | `clock` | `FixedClock` | — |
 | `AssignmentSource` | Assignments and submissions from the VLE | `moodle` | `InMemoryAssignmentSource` | — |
+| `LiveBus` | Carry `tutors.live.*` events from the ingest endpoint to whatever consumes them | `live-redis` (Redis Streams) | `inMemoryLiveBus` | — |
+| `LivePresenceStore` | Who is reading this minute: the dashboard's Now layer | `live-redis` (Valkey sorted sets) | `inMemoryPresenceStore` | — |
+| `LiveWarehouse` | Raw live events and sessions in, hourly rollups and session rows out; `ActivityRead` is its read half, `ActivityWrite` its write half | `live-postgres` (TimescaleDB) | `inMemoryWarehouse` | — |
+| `ActivityRead` | The rollups the read model computes stats, heat maps, activity and observations from | `live-postgres` | `inMemoryWarehouse` | — |
+| `ActivityWrite` | What the ingest use case appends | `live-postgres` | `inMemoryWarehouse` | — |
+| `LiveEventReporter` | Tell Tutors Live what this reader session is doing, with a rotating token and no login | `live-events-http` | `RecordingLiveEventReporter` | — |
 
 Application events (`AppEvent`) are `learning` (a learner's page load or tick), `presence` (a sharing learner moved) and `course-visit` (a learner opened a course; the catalogue counts it). They are how one part of the product reacts to another without importing it.
+
+Tutors Live's events (`LiveEvent`, `@tutors/domain/live`) are a separate contract: anonymous, carried over the `LiveBus` rather than the in-process publisher, and counted whether or not anyone is signed in. The use cases over them are `acceptLiveEvents` (validate a posted batch and publish it), `createIngestor` (bus to presence store and warehouse, closing idle sessions) and the read model (`statsFor`, `heatmapFor`, `activityFor`, `observationsFor`, `coursesFor`), all in `@tutors/application`. The design is in [`docs/LIVE-PIPELINE.md`](docs/LIVE-PIPELINE.md).
 
 ---
 
@@ -350,6 +381,9 @@ Application events (`AppEvent`) are `learning` (a learner's page load or tick), 
 | `@tutors/identity-better-auth` | `better-auth` | `SessionPort` (`/server`), `IdentityClient` (`/client`) | `createIdentityHandle` |
 | `@tutors/moodle` | Moodle web services over `fetch` | `AssignmentSource` | — |
 | `@tutors/clock` | `HARNESS_NOW` | `Clock` | The `/version` endpoint |
+| `@tutors/live-redis` | `redis` (node-redis, which also speaks to Valkey), loaded lazily behind `connectRedis` | `LiveBus` (`redisLiveBus`, Redis Streams), `LivePresenceStore` (`valkeyPresenceStore`, sorted sets) | `LIVE_STREAM`, the `RedisClient` slice a fake implements |
+| `@tutors/live-postgres` | `pg` (TimescaleDB), loaded lazily behind `connectPostgres` | `LiveWarehouse` (`postgresWarehouse`) | `LIVE_SCHEMA_SQL`, the `SqlClient` slice a fake implements |
+| `@tutors/live-events-http` | `fetch`, `navigator.sendBeacon`, `localStorage` | `LiveEventReporter` (`httpLiveEventReporter`) | `browserStorage` |
 
 ### Driving adapters (`packages/adapters/driving/`)
 
@@ -379,8 +413,9 @@ flowchart LR
 
 | App | Root | Composes |
 |---|---|---|
-| reader | `apps/reader/src/lib/compose.ts` `composeReader(env, { identityClient })` | Clock, `markdownRenderer`, `httpCourseSource()`, `localStorageProfile()`, `inProcessPublisher()`, and in a signed-in deployment the Supabase sink, presence, profile and access store; subscribes the catalogue's `updateCourseList` to `course-visit` events |
-| live | `apps/live/src/lib/compose.ts` `composeLive(env)` | Clock and `supabasePresence(client)`; Live only listens |
+| reader | `apps/reader/src/lib/compose.ts` `composeReader(env, { identityClient })` | Clock, `markdownRenderer`, `httpCourseSource()`, `localStorageProfile()`, `inProcessPublisher()`, `httpLiveEventReporter(PUBLIC_LIVE_EVENTS_URL)` in every mode (disabled when the variable is unset, and on the server), and in a signed-in deployment the Supabase sink, presence, profile and access store; subscribes the catalogue's `updateCourseList` to `course-visit` events |
+| live | `apps/live/src/lib/compose.ts` `composeLive(env)`; on the server also `apps/live/src/lib/server/pipeline.ts` `composeLivePipeline(liveConfigFromEnv(env))` | Clock and `supabasePresence(client)` for the older presence view; from `LIVE_*`, the in-memory bus, presence store and warehouse by default or `redisLiveBus`, `valkeyPresenceStore` and `postgresWarehouse`, plus the in-process `createIngestor` on the memory bus. Live listens and reads; the only thing it publishes is the batch a reader posted to `/api/live/events` |
+| live-ingest | `services/live-ingest/src/compose.ts` `composeIngest(ingestConfigFromEnv(env))` | The same `LIVE_*` choices for the service that consumes the Redis bus into Valkey and TimescaleDB |
 | catalogue | `apps/catalogue/src/lib/compose.ts` `composeCatalogue(env)` | The Supabase client behind the catalogue reads |
 | time | `apps/time/src/lib/compose.ts` `composeTime(env)` | The Supabase client for the health check and error transport, and the time library's client; `moodleAssignmentSource` is composed on the server from private environment |
 
@@ -583,9 +618,13 @@ Ownership here means: which package is allowed to know a thing, and therefore wh
 | What a learning event is and how a day is cut | `@tutors/domain/learning` (`pageLoadEvent`, `tickEvent`, `localYyyyMmDd`) | Compute a day or an event shape |
 | Who counts as present and for how long | `@tutors/domain/presence` (`ROSTER_REFRESH_MS`, `keepOnRoster`, `presentLearners`) | Decide roster membership |
 | Who may enter a course and what is locked | `@tutors/domain/access` and `courseAdmission` | Check a whitelist or a lock inline |
+| What a live event is, what a session and a visitor mean, the presence window, and how rollup rows become stats, heat maps and observations | `@tutors/domain/live` (`parseLiveEvents`, `currentSid`, `snapshotOf`, `headlineStats`, `serviceHourHeatmap`, `observe`, `activityReport`) | Compute a live number in a route, a Svelte component or an adapter |
 | What the application needs from the world | `@tutors/application/ports` | Add a method a technology happens to offer; a port grows only when a use case needs it |
 | The order of operations in a feature | `@tutors/application` use cases | Sequence port calls in a Svelte service or a route |
 | The Supabase client and every table it touches | `@tutors/store-supabase`, `@tutors/realtime-supabase` | Import `@supabase/supabase-js` (baseline exception: `packages/jsr/time`) |
+| The Redis/Valkey client and the keys and stream it touches | `@tutors/live-redis` | Import `redis` |
+| The TimescaleDB client, the `live_*` tables and their schema | `@tutors/live-postgres` | Import `pg`; query a `live_*` table |
+| Which adapters a service runs with | `services/*/src/compose.ts` | Read `LIVE_*` elsewhere than a composition root |
 | Markdown, syntax highlighting, maths, Marp, Mermaid | `@tutors/render-markdown` | Import `markdown-it`, `shiki`, `katex`, `mermaid`, `@marp-team/*` (baseline exception: `svelte-state/src/markdown`, moving) |
 | Better Auth, the session cookie, the actor | `@tutors/identity-better-auth` | Import `better-auth`; read the session another way |
 | Runes and the reader's shared state | `@tutors/svelte-state` | Hold `$state` in a `.ts` module of another package |
@@ -595,7 +634,7 @@ Ownership here means: which package is allowed to know a thing, and therefore wh
 | The published API of the JSR packages | `etc/*.api.md` (API surface reports) | Change an export without the report changing with it |
 | What a release intends to change | `release/claims.yaml`, judged by the release harness | Ship an observable difference no claim covers |
 
-Boundaries between the apps: an app never imports another app (`no-app-to-app`). What two apps share lives in a package.
+Boundaries between the deployables: an app never imports another app or a service, and a service imports no app (`no-app-to-app`). What two deployables share lives in a package; the live app and the ingest service share the use cases and the adapters, and each composes them for itself.
 
 ---
 
@@ -621,20 +660,34 @@ Every Supabase table and channel has exactly one adapter that reads or writes it
 
 Migrations are expand-only and live under `supabase/migrations/`; `pnpm check:migrations` holds the rule. A migration ships before or after the code that uses it, never in the same deploy as a contraction.
 
+### 11.1 The Tutors Live store
+
+Tutors Live keeps nothing in Supabase. Its stores are behind the `LiveBus`, `LivePresenceStore` and `LiveWarehouse` ports, default to memory, and are owned the same way: one adapter each.
+
+| Store | Adapter | Port | Written by | Read by |
+|---|---|---|---|---|
+| Redis stream `tutors.live.events` | `live-redis` | `LiveBus` | The live app's `/api/live/events`, on behalf of a reader that posted a validated batch; browsers publish nothing themselves | `services/live-ingest` (the ingest use case), the live app's `/api/live/stream` |
+| Valkey keys `live:sessions:<course>`, `live:course:<course>:current`, `live:services:now` | `live-redis` | `LivePresenceStore` | The ingest use case, at full timestamp precision; every member expires with the presence window | The live app's `/api/live/now`, `/api/live/stream` and `/api/live/activity` |
+| `live_events` (TimescaleDB hypertable; timestamps coarsened to the minute; 90-day retention) | `live-postgres` | `LiveWarehouse` (`ActivityWrite`) | The ingest use case | `live_hourly`, `live_hourly_sessions`, the `topLos` drill-down |
+| `live_hourly` (continuous aggregate), `live_hourly_sessions` (view) | `live-postgres` | `ActivityRead` | TimescaleDB, from `live_events` | The read model: stats, heat maps, activity, observations |
+| `live_sessions` (one row per completed session) | `live-postgres` | `LiveWarehouse` | The ingest use case, when a session ends or the sweeper closes it; opt-out nulls `uid` | The read model: session counts, durations, visitors |
+
+The schema is `LIVE_SCHEMA_SQL` in `@tutors/live-postgres`, applied idempotently on every start of a process that composes the Postgres warehouse. It lives in the adapter rather than under `supabase/migrations/` because it is not a Supabase database.
+
 ---
 
 ## 12. Dependency rules
 
-All in [`.dependency-cruiser.cjs`](.dependency-cruiser.cjs), run by `tests/architecture/dependency-rules.test.ts` over a negative fixture workspace (every rule must catch its planted violation) and over the repository (no violation beyond the baseline). `pnpm architecture-report` draws the graph.
+All in [`.dependency-cruiser.cjs`](.dependency-cruiser.cjs), run by `tests/architecture/dependency-rules.test.ts` over a negative fixture workspace (every rule must catch its planted violation) and over the repository, `apps/`, `services/` and `packages/` (no violation beyond the baseline). `pnpm architecture-report` draws the graph.
 
 | Rule | Statement |
 |---|---|
 | `domain-self-contained` | `packages/domain` imports nothing outside itself |
 | `application-imports-domain-only` | `packages/application` imports only `packages/domain` and its own files |
-| `vendor-only-in-its-adapter` | `@supabase/*` only from store-supabase and realtime-supabase; markdown-it, katex, shiki, mermaid and `@marp-team/*` only from render-markdown; better-auth only from identity-better-auth. The authoring toolchain (`packages/jsr/gen`, `tutors`, `tutors-lite`, `create`) is exempt |
+| `vendor-only-in-its-adapter` | `@supabase/*` only from store-supabase and realtime-supabase; markdown-it, katex, shiki, mermaid and `@marp-team/*` only from render-markdown; better-auth only from identity-better-auth; `redis` only from live-redis; `pg` only from live-postgres. The authoring toolchain (`packages/jsr/gen`, `tutors`, `tutors-lite`, `create`) is exempt, and an app or service may compose a vendor directly |
 | `no-adapter-to-adapter` | A driven adapter imports no other adapter |
 | `svelte-state-imports-no-adapter` | `svelte-state` imports no adapter; it reads `adapters()` |
-| `adapters-import-no-app` | No package imports an app |
+| `adapters-import-no-app` | No package imports an app or a service |
 | `ui-layering` | `ui-primitives` → `ui-navigators` → `ui-components`; cross-cutting packages import no UI package |
 | `ui-primitives-no-data-features` | `ui-primitives` imports nothing from `svelte-state/community`, `/connect` or `/rbac` (a source scan catches type imports too) |
 | `platform-self-contained` | `packages/platform` imports nothing from apps or the rings |
@@ -644,7 +697,7 @@ All in [`.dependency-cruiser.cjs`](.dependency-cruiser.cjs), run by `tests/archi
 | `identity-contracts-self-contained` | `packages/jsr/identity` imports only the domain and the application |
 | `realtime-contracts-self-contained` | `packages/jsr/realtime` imports nothing outside itself |
 | `identity-no-server-in-browser` | Browser entry points cannot reach the identity adapter's server module |
-| `no-app-to-app` | An app imports no other app |
+| `no-app-to-app` | A deployable (an app or a service) imports no other deployable |
 | `no-cross-workspace-relative-import` | A package reaches another only by its package name |
 | `no-cross-package-cycle` | No cycle between packages |
 | `runes-only-in-svelte-state` | `$state`, `$derived`, `$effect` in a `.ts` module only under `svelte-state` (a source scan: a rune is not an import) |
@@ -685,7 +738,7 @@ The product's behaviour is specified the same way. The features that govern each
 |---|---|
 | Course loading, navigation, course JSON and its history | `course/course-loading`, `course/course-navigation`, `course/course-json-history`, `generator/course-json`, `course/llm-exports` |
 | Learning records and progress | `student/learning-progress`, `instructor/analytics-calendar`, `instructor/analytics-lab`, `time/lab-analytics` |
-| Presence and live views | `student/live-presence`, `live/presence-tracking`, `shared/realtime-usage`, `shared/realtime-gateway`, `shared/live-activity-budget`, `instructor/student-engagement` |
+| Presence and live views | `student/live-presence`, `live/presence-tracking`, `live/live-activity`, `shared/realtime-usage`, `shared/realtime-gateway`, `shared/live-activity-budget`, `instructor/student-engagement` |
 | Sign-in, sessions and admission | `shared/authentication`, `shared/sign-in-session`, `instructor/whitelist-management`, `ui/content-locks` |
 | Catalogue and discovery | `student/course-discovery`, `ui/catalogue` |
 | Reading, search, labs, quizzes, resources | `ui/reading`, `ui/search`, `student/search-content`, `student/lab-interaction`, `ui/learning-activities`, `ui/resource-cards`, `ui/course-tools` |
@@ -713,6 +766,7 @@ The product's behaviour is specified the same way. The features that govern each
 | This document as the authority | `tests/bdd/steps/developer/hexagonal-architecture.steps.ts` | Rules 0347 to 0352 read the workspace, the ports, the cruiser config, the adapters' table names and this file |
 | Every adapter of a port | `tests/unit/application/port-contracts.test.ts`, `tests/contract/supabase/*` | The contract suites in `@tutors/application/testing` run against the in-memory adapters, the localStorage profile, the in-process bus and the recorded Supabase client |
 | The use cases | `tests/unit/application/*` | Driven with in-memory adapters and `FixedClock` |
+| Tutors Live's pipeline | `tests/unit/live/*`, `tests/bdd/steps/live/live-activity.steps.ts` | The domain arithmetic on seeded rows; the ingest and read use cases on the in-memory bus, presence store and warehouse; the Valkey store through a fake `RedisClient`; the HTTP reporter through a stubbed `fetch`; the live app's endpoint as a function over a `Request` |
 | The services over the ports | `tests/unit/community/*`, `tests/unit/connect/*`, `tests/unit/course/*` | `configureAdapters(anonymousAdapters({ ...spies }))` |
 | The product through its composition root | `tests/bdd/steps/**` | `composeReader(...)` against a recording Supabase client and a stubbed identity client |
 | Coverage, mutation and API surface ratchets | `tests/suite-health/coverage-floors.json`, `tests/mutation/*.json`, `etc/*.api.md` | Floors per ring scope (`packages/domain/src/**`, `packages/application/src/**`, `packages/adapters/driven/**`) that only rise |
@@ -742,7 +796,8 @@ The facades exist so that published courses and tools built on them keep working
 
 - **Images**: one per app, built from the Node 22 runtime image (no package manager in the runtime layer, Rule 0220), pushed to quay.io/tutors-sdk with a cosign signature and an SBOM.
 - **Kubernetes**: `deploy/k8s/base`, `components`, `variants` and one overlay per app under `deploy/k8s/overlays/`; `deploy/k8s/next` reuses production images for the next hosts. `pnpm check:k8s` and the platform-conformance tests hold the restricted-SCC, arbitrary-UID and read-only-root policies.
-- **Environment**: `PUBLIC_ANON_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY` are read by the composition roots; `PRIVATE_AUTH_SECRET`, `PRIVATE_AUTH_GITHUB_ID`, `PRIVATE_AUTH_GITHUB_SECRET` by the reader's identity handle; `MOODLE_WS_URL` and its token by the time app's server; `HARNESS_NOW` freezes the clock for the release harness.
+- **Environment**: `PUBLIC_ANON_MODE`, `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY` are read by the composition roots; `PUBLIC_LIVE_EVENTS_URL` by the reader's (unset, the reader reports nothing to Tutors Live); `LIVE_BUS`, `LIVE_HOT_STORE`, `LIVE_WAREHOUSE`, `LIVE_REDIS_URL`, `LIVE_DATABASE_URL`, `LIVE_RETENTION_DAYS`, `LIVE_INGEST_IN_PROCESS` and `LIVE_TERMS` by the live app's server root and the ingest service's (all unset, the live app runs the whole pipeline in memory); `PRIVATE_AUTH_SECRET`, `PRIVATE_AUTH_GITHUB_ID`, `PRIVATE_AUTH_GITHUB_SECRET` by the reader's identity handle; `MOODLE_WS_URL` and its token by the time app's server; `HARNESS_NOW` freezes the clock for the release harness.
+- **Services**: `services/live-ingest` builds its own image (`services/live-ingest/Dockerfile`, bundled with esbuild, `pg` and `redis` as the only runtime dependencies) and runs under the `live-pipeline` profile of `compose.yaml` beside Valkey and TimescaleDB; it serves `/healthz`, `/healthz/live` and `/metrics` on `PORT`.
 - **Observability**: every server line is one JSON object with a request id (`@tutors/logger`), `/metrics` is Prometheus (`@tutors/metrics`), `/version` and `/healthz` are served by every app; the error transport writes to `app_errors`.
 - **Release**: `release/claims.yaml`, `deployed.json`, `openvex.json`, `slo.yaml` and `SOP.md` are what the [release harness](https://github.com/tutors-sdk/tutors-release-harness) reads when it compares production with a release candidate. Main is the release candidate; students only see a release.
 
@@ -758,6 +813,7 @@ The facades exist so that published courses and tools built on them keep working
 | Use a technology in a new way | Change its adapter | Import the vendor somewhere else (the vendor rule will refuse) |
 | Add a table or channel | Give it an owner adapter and a port, add the migration (expand-only), add its row to section 11 | Query it from two packages |
 | Add a package | Decide its ring (section 4), `packages/adapters/driven|driving/<name>` or `packages/platform/<name>`, add it to the workspace, to section 4 or 7 here, to the vitest aliases if tests import it, and to knip | A package that imports another adapter |
+| Add a long-running process | `services/<name>` with its own `src/compose.ts`, Dockerfile and `compose.yaml` entry; add it to the workspace and to section 4 here | A worker that imports an app, or an app that imports the worker |
 | Change how an app is wired | `apps/<app>/src/lib/compose.ts` | A conditional on `PUBLIC_ANON_MODE` anywhere else |
 | Fix a baseline debt | Make the change, delete the line from `known-violations.txt` | Add a line |
 | Change a published API | Change the code, run `pnpm api-report`, commit `etc/*.api.md` | Hand-edit the report |

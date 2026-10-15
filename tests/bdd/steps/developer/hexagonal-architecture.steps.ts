@@ -39,7 +39,7 @@ const FIXTURE_ALIASES = {
 // Both cruises are slow (the repository's takes seconds), so each runs once, while the feature loads.
 const [fixtureViolations, repoViolations] = await Promise.all([
   checkArchitecture(["apps", "packages"], { baseDir: FIXTURE, alias: FIXTURE_ALIASES }),
-  checkArchitecture(["apps", "packages"])
+  checkArchitecture(["apps", "services", "packages"])
 ]);
 const overFixture = async () => fixtureViolations;
 const overRepo = async () => repoViolations;
@@ -62,9 +62,9 @@ const sources = (dir: string, match: RegExp): string[] =>
 const ARCHITECTURE = "ARCHITECTURE.md";
 const architectureDoc = () => readFileSync(resolve(REPO_ROOT, ARCHITECTURE), "utf8");
 
-/** Every package.json name under apps/ and packages/, node_modules excluded. */
+/** Every package.json name under apps/, services/ and packages/, node_modules excluded. */
 function workspacePackageNames(): string[] {
-  const manifests = [...sources(resolve(REPO_ROOT, "apps"), /^package\.json$/), ...sources(resolve(REPO_ROOT, "packages"), /^package\.json$/)];
+  const manifests = ["apps", "services", "packages"].flatMap((dir) => sources(resolve(REPO_ROOT, dir), /^package\.json$/));
   return manifests.map((file) => (JSON.parse(readFileSync(file, "utf8")) as { name?: string }).name).filter((name): name is string => !!name).sort();
 }
 
@@ -78,7 +78,7 @@ function portInterfaces(): string[] {
 
 function forbiddenRuleNames(): string[] {
   const config = readFileSync(resolve(REPO_ROOT, ".dependency-cruiser.cjs"), "utf8");
-  return [...new Set([...config.matchAll(/name: "([a-z-]+)"/g)].map((m) => m[1]))].filter((name) => !["supabase", "markdown", "better-auth"].includes(name)).sort();
+  return [...new Set([...config.matchAll(/name: "([a-z-]+)"/g)].map((m) => m[1]))].filter((name) => !["supabase", "markdown", "better-auth", "redis", "pg"].includes(name)).sort();
 }
 
 /** Every `.from("table")` the adapters, the time library and the apps make. */

@@ -12,6 +12,7 @@ import type {
   EventPublisher,
   IdentityClient,
   LearningEventSink,
+  LiveEventReporter,
   PresencePort,
   ProfilePort
 } from "@tutors/application/ports";
@@ -22,6 +23,7 @@ import {
   InMemoryPresence,
   InMemoryProfile,
   PassThroughRenderer,
+  RecordingLiveEventReporter,
   RecordingPublisher
 } from "@tutors/application/testing";
 
@@ -37,6 +39,8 @@ export type Adapters = {
   profile: { local: ProfilePort; signedIn: ProfilePort | null };
   accessStore: AccessStore;
   publisher: EventPublisher;
+  /** Tutors Live's view of this session: anonymous events, counted whether or not anyone is signed in. */
+  liveEvents: LiveEventReporter;
   identityClient: IdentityClient | null;
   /**
    * The whiteboard's own persistence client, until it has a port of its own. Typed as unknown
@@ -60,6 +64,8 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     profile: { local: profile, signedIn: null },
     accessStore: new InMemoryAccessStore(systemClock),
     publisher: new RecordingPublisher(),
+    // Disabled, like a reporter with no endpoint: a reader nobody pointed at Tutors Live reports nothing.
+    liveEvents: new RecordingLiveEventReporter(false),
     identityClient: null,
     whiteboardClient: undefined,
     ...overrides
