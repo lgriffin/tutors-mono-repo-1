@@ -26,16 +26,6 @@
   let hints = $state<Record<string, string>>({});
 
   const kindLabel = (kind: HelpKind) => t(`help.kind.${kind}` as MessageKey);
-  /** A malformed escape in a stored route shows as written rather than breaking the queue. */
-  function decoded(text: string): string {
-    try {
-      return decodeURIComponent(text);
-    } catch {
-      return text;
-    }
-  }
-  const lastSegment = (route: string) => decoded(route.split("/").filter(Boolean).pop() ?? route);
-  const stepLabel = (id: string) => decoded(id);
   function waited(ms: number): string {
     const s = Math.floor(ms / 1000);
     const h = Math.floor(s / 3600);
@@ -79,7 +69,7 @@
             <span class="help-presence" data-online={row.online} role="img" aria-label={row.online ? t("help.online") : t("help.offline")}></span>
             <span class="help-name">{r.learnerName || r.learnerId}</span>
           </div>
-          <div class="help-where" title={`${r.ref.labRoute}/${r.ref.stepId}`}>{lastSegment(r.ref.labRoute)} · {stepLabel(r.ref.stepId)}</div>
+          <div class="help-where" title={`${r.ref.labRoute}/${r.ref.stepId}`}>{row.where.lab} · {row.where.step}</div>
           <div class="help-kind">
             {kindLabel(r.kind)}
             {#if row.escalation !== "none"}<span class="help-flag" data-escalation={row.escalation}>{t(row.escalation === "urgent" ? "help.urgent" : "help.escalated")}</span>{/if}

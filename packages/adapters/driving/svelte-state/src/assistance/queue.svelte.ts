@@ -10,6 +10,7 @@
  * queue on screen and says when it was last read (Rule 0393).
  */
 import { isLive, queueOrder, shouldEscalate, waitingMs, type Escalation, type HelpRequest } from "@tutors/domain/assistance";
+import type { StepRef } from "@tutors/domain/learning";
 import type { HelpDeskRefusal, HelpDeskResult, Unsubscribe } from "@tutors/application/ports";
 import { adapters } from "../adapters.ts";
 import { rune } from "../index.svelte.ts";
@@ -18,8 +19,24 @@ import { rune } from "../index.svelte.ts";
 export const QUEUE_REFRESH_MS = 60_000;
 const TICK_MS = 1_000;
 
+/** Where a request was asked from, as the queue names it: the lab's last route segment and the step. */
+export type QueuePlace = { lab: string; step: string };
+
 /** One row of the queue as a lecturer sees it now. */
-export type QueueRow = { request: HelpRequest; waitingMs: number; escalation: Escalation; online: boolean };
+export type QueueRow = { request: HelpRequest; waitingMs: number; escalation: Escalation; online: boolean; where: QueuePlace };
+
+/** Decoded for reading; a malformed escape shows as stored rather than breaking the queue (Rule 0563). */
+function decoded(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
+export function placeOf(ref: StepRef): QueuePlace {
+  return { lab: decoded(ref.labRoute.split("/").filter(Boolean).pop() ?? ref.labRoute), step: decoded(ref.stepId) };
+}
 
 function createHelpQueueService() {
   const courseId = rune<string | null>(null);
@@ -141,7 +158,7 @@ function createHelpQueueService() {
       return requests.value
         .filter(isLive)
         .sort(queueOrder)
-        .map((request) => ({ request, waitingMs: waitingMs(request, at), escalation: shouldEscalate(request, at), online: online(request.learnerId) }));
+        .map((request) => ({ request, waitingMs: waitingMs(request, at), escalation: shouldEscalate(request, at), online: online(request.learnerId), where: placeOf(request.ref) }));
     },
 
     /** The lecturer says they are on the way. */

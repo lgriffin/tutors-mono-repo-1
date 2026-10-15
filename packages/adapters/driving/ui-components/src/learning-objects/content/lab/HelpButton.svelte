@@ -53,6 +53,11 @@
     }
   }
 
+  // The kind menu belongs to the request it was opened for: closing the request closes it.
+  $effect(() => {
+    if (!live) open = false;
+  });
+
   async function ask(kind: HelpKind) {
     open = false;
     await helpService.ask(kind);
@@ -76,8 +81,8 @@
       <button type="button" class="ui-button help-small help-toggle" aria-expanded={open} aria-controls="help-menu" aria-haspopup="true" disabled={helpService.sending.value} onclick={toggle}>
         {t("help.change")}
       </button>
-      <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => helpService.solved()}>{t("help.solved")}</button>
-      <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => helpService.withdraw()}>{t("help.withdraw")}</button>
+      <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => ((open = false), helpService.solved())}>{t("help.solved")}</button>
+      <button type="button" class="ui-button help-small" disabled={helpService.sending.value} onclick={() => ((open = false), helpService.withdraw())}>{t("help.withdraw")}</button>
     {:else}
       <button type="button" class="ui-button help-small help-toggle" aria-expanded={open} aria-controls="help-menu" aria-haspopup="true" disabled={helpService.sending.value} onclick={toggle}>
         {t("help.button")}

@@ -44,7 +44,8 @@ function createHelpService() {
   }
 
   function keepPolling(): void {
-    const live = request.value !== null && isLive(request.value);
+    // Only while the student is on a lab: an action that answers after they left starts no poll.
+    const live = step.value !== null && request.value !== null && isLive(request.value);
     if (live && !poll) poll = setInterval(() => void refresh(), HELP_POLL_MS);
     if (!live) stopPolling();
   }
@@ -101,6 +102,7 @@ function createHelpService() {
      * course; the poll keeps it fresh); signed out or anonymous, the control is hidden (Rule 0399).
      */
     async arrive(ref: StepRef, signedIn: boolean): Promise<void> {
+      const returning = step.value === null;
       step.value = ref;
       const offered = signedIn && !adapters().anonymous;
       if (!offered) {
@@ -111,8 +113,9 @@ function createHelpService() {
       }
       available.value = true;
       if (courseRead === ref.courseId) {
-        // Back on a lab of the same course: reading resumes where leave() stopped it.
-        keepPolling();
+        // Back on a lab of the same course after leaving: the request may have moved on meanwhile (Rule 0562).
+        if (returning) await refresh();
+        else keepPolling();
         return;
       }
       courseRead = ref.courseId;
@@ -188,6 +191,12 @@ function createHelpService() {
       const ref = step.value;
       if (!shown || !ref || shown.closed?.reason !== "hint" || !shown.hintText || !sameStep(shown.ref, ref)) return null;
       return hintsClosed.value.includes(shown.id) ? null : shown.hintText;
+    },
+
+    /** True once the student's answer to "did it help?" was kept in this session, however it was sent. */
+    thanked(): boolean {
+      const shown = request.value;
+      return !!shown && shown.helped !== null && settled.value.includes(shown.id);
     },
 
     /** True while a resolved request waits for the student to say whether it helped, and they have not closed the question (Rule 0398). */

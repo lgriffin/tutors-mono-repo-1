@@ -65,3 +65,16 @@ Feature: The help queue in Tutors Live
       And 10 more seconds pass
       And "carol" asks for help as "lecturer" on the step "01" of the lab "/lab/cs101/lab-01"
       Then the queue shall list "carol", "alice", "bob" in that order
+
+  @rule-0563 @ears-unwanted
+  Rule: If a request's stored lab or step is not valid URL-encoded text, then tutors shall show it in the help queue as stored.
+
+    Scenario: A malformed step shows as stored
+      Given the help queue is streamed
+      When "alice" asks for help as "stuck" on the step "50%off" of the lab "/lab/cs101/100%"
+      Then the queue's row shall name the lab "100%" and the step "50%off"
+
+    Scenario: An encoded step shows decoded
+      Given the help queue is streamed
+      When "alice" asks for help as "stuck" on the step "step%2002" of the lab "/lab/cs101/lab%2001"
+      Then the queue's row shall name the lab "lab 01" and the step "step 02"

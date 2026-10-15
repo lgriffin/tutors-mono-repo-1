@@ -1,5 +1,5 @@
 /**
- * The help queue in Tutors Live (Rules 0393, 0395, 0396): helpQueueService over the in-memory help
+ * The help queue in Tutors Live (Rules 0393, 0395, 0396, 0563): helpQueueService over the in-memory help
  * desk and feed, a fixed clock and fake timers.
  */
 import "../../support/svelte-runes-shim.ts";
@@ -125,6 +125,20 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       Then("the queue shall list {string}, {string}, {string} in that order", (_ctx, a: string, b: string, c: string) => {
         expect(rows().map((r) => r.request.learnerId)).toEqual([a, b, c]);
       });
+    });
+  });
+
+  Rule("If a request's stored lab or step is not valid URL-encoded text, then tutors shall show it in the help queue as stored.", ({ RuleScenario }) => {
+    const names = (_ctx: unknown, lab: string, step: string) => expect(latestRow().where).toEqual({ lab, step });
+    RuleScenario("A malformed step shows as stored", ({ Given, When, Then }) => {
+      Given("the help queue is streamed", () => open(true));
+      When("{string} asks for help as {string} on the step {string} of the lab {string}", asks);
+      Then("the queue's row shall name the lab {string} and the step {string}", names);
+    });
+    RuleScenario("An encoded step shows decoded", ({ Given, When, Then }) => {
+      Given("the help queue is streamed", () => open(true));
+      When("{string} asks for help as {string} on the step {string} of the lab {string}", asks);
+      Then("the queue's row shall name the lab {string} and the step {string}", names);
     });
   });
 });

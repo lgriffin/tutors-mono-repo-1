@@ -217,12 +217,45 @@ describe("helpService: the student's help control", () => {
     helpService.leave();
     await vi.advanceTimersByTimeAsync(HELP_POLL_MS * 3);
     expect(desk.calls.mine).toBe(reads + 1);
-    await helpService.arrive(REF, true);
-    await vi.advanceTimersByTimeAsync(HELP_POLL_MS);
+    await helpService.arrive(REF, true); // coming back reads the request at once (Rule 0562)
     expect(desk.calls.mine).toBe(reads + 2);
+    await helpService.arrive(OTHER_STEP, true); // moving between steps does not
+    await vi.advanceTimersByTimeAsync(HELP_POLL_MS);
+    expect(desk.calls.mine).toBe(reads + 3);
     await helpService.withdraw();
     await vi.advanceTimersByTimeAsync(HELP_POLL_MS * 2);
-    expect(desk.calls.mine).toBe(reads + 2);
+    expect(desk.calls.mine).toBe(reads + 3);
+  });
+
+  it("starts no poll when an ask answers after the student left the lab", async () => {
+    vi.useFakeTimers();
+    const held = new HeldDesk(desk);
+    use(held);
+    const arrived = helpService.arrive(REF, true);
+    held.release();
+    await arrived;
+    const asked = helpService.ask("stuck");
+    helpService.leave();
+    held.release();
+    expect(await asked).toBe(true);
+    expect(helpService.request.value?.state).toBe("open");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("thanks the student once their rating is kept, however it was sent", async () => {
+    await helpService.arrive(REF, true);
+    expect(helpService.thanked()).toBe(false);
+    await helpService.ask("stuck");
+    await helpService.solved();
+    helpService.dismiss();
+    expect(helpService.thanked()).toBe(false);
+    helpService.reset();
+    await helpService.arrive(REF, true);
+    use(refusing(desk, "rate", "unavailable"));
+    await helpService.rate(false);
+    expect(helpService.thanked()).toBe(false);
+    await helpService.retry();
+    expect(helpService.thanked()).toBe(true);
   });
 
   it("shows a lecturer's hint on the step it was asked from until the student closes it (Rule 0397)", async () => {

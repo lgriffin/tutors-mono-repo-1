@@ -56,6 +56,47 @@ Feature: Asking for help from a lab step
       Then the reader shall not ask again
       And the request shall record no answer
 
+  @rule-0561 @ears-unwanted
+  Rule: If a student's help action is not kept, then tutors shall tell the student it was not sent and send that same action again when the student retries.
+
+    Scenario: A withdrawal that was not kept is sent again as a withdrawal
+      Given "alice" is signed in and asked for help as "stuck"
+      And the help desk does not keep the next action of "alice"
+      When "alice" withdraws the request
+      Then the reader shall tell "alice" it was not sent
+      When "alice" retries
+      Then the request shall be "withdrawn"
+      And "alice" shall have asked for help once
+
+    Scenario: A rating that was not kept is asked until it is kept
+      Given "alice" is signed in and asked for help as "stuck"
+      And "alice" marks the request solved
+      And the help desk does not keep the next action of "alice"
+      When "alice" answers that it helped
+      Then the reader shall tell "alice" it was not sent
+      And the reader shall still ask whether the help helped
+      When "alice" retries
+      Then the request shall record that it helped
+
+  @rule-0562 @ears-ubiquitous
+  Rule: Tutors shall show a student their help request as read after their latest action or arrival on a lab step, and read it again only while they are on a lab.
+
+    Scenario: A read that started before a withdrawal does not bring the request back
+      Given "alice" is signed in and asked for help as "stuck"
+      And the reader starts reading the request of "alice"
+      When "alice" withdraws the request
+      And the older read answers
+      Then the reader shall show the request as "withdrawn"
+
+    Scenario: Leaving the lab stops reading, and coming back reads the request again
+      Given "alice" is signed in and asked for help as "stuck"
+      When "alice" leaves the lab
+      And 90 seconds pass on the lab
+      Then the reader shall not have read the request since "alice" left
+      When "ellen" acknowledges the request
+      And "alice" comes back to the lab
+      Then the reader shall show the request as "acknowledged"
+
   @rule-0399 @ears-ubiquitous
   Rule: Tutors shall hide the help control in anonymous mode and for visitors who are not signed in, and keep the lab usable without it.
 
