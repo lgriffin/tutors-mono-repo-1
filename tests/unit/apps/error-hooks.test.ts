@@ -9,7 +9,7 @@ vi.mock("@tutors/logger", () => ({
   setAppName: vi.fn(), addTransport: vi.fn(), createRequestLogger: vi.fn(),
   installProcessLogging: vi.fn(), logServiceStart: vi.fn(), withRequestId: vi.fn()
 }));
-vi.mock("../../../packages/adapters/driven/store-supabase/src/error-transport.ts", () => ({ createSupabaseErrorTransport: vi.fn() }));
+vi.mock("../../../packages/adapters/driven/data-api/src/errors.ts", () => ({ dataApiErrorTransport: vi.fn(), MAX_ERROR_BATCH: 20 }));
 vi.mock("@tutors/tutors-time-lib", () => ({ readerTimeSource: vi.fn(), setTutorsTimeSource: vi.fn(), withoutTrailingSlashes: (u: string) => u, TutorsTimeSourceError: class extends Error {} }));
 vi.mock("../../../packages/adapters/driving/svelte-state/src/course/index.ts", () => ({ setCourseNotFoundHandler: vi.fn(), setCourseUnreachableHandler: vi.fn() }));
 vi.mock("../../../packages/adapters/driving/i18n/src/index.ts", () => ({ initLocaleFromCookie: vi.fn() }));

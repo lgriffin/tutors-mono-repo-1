@@ -1,15 +1,19 @@
-/** The catalogue's composition root: the Supabase store the catalogue is read from, or nothing. */
-import { configureSupabase, createSupabaseClient } from "@tutors/store-supabase";
-import log, { withRequestId } from "@tutors/logger";
+/**
+ * The catalogue's composition root: the reader's data API (at PUBLIC_READER_URL) the catalogue is
+ * read from, or nothing in anonymous mode. The catalogue holds no database key and creates no
+ * database client (Rule 0471).
+ */
+import { createDataApi, type DataApi, type FetchFn } from "@tutors/data-api";
 
-export type CatalogueEnv = { PUBLIC_ANON_MODE?: string; PUBLIC_SUPABASE_URL?: string; PUBLIC_SUPABASE_ANON_KEY?: string };
+export type CatalogueEnv = { PUBLIC_ANON_MODE?: string; PUBLIC_READER_URL?: string };
 
-export function composeCatalogue(env: CatalogueEnv): void {
-  const url = env.PUBLIC_SUPABASE_URL;
-  const key = env.PUBLIC_SUPABASE_ANON_KEY;
-  const client = env.PUBLIC_ANON_MODE?.trim().toUpperCase() === "TRUE" ? undefined : createSupabaseClient(url, key, withRequestId());
-  configureSupabase(client, client ? { url: url!, key: key! } : undefined);
-  if (!client && env.PUBLIC_ANON_MODE?.trim().toUpperCase() !== "TRUE") {
-    log.warn("Supabase is not configured (PUBLIC_SUPABASE_URL / PUBLIC_SUPABASE_ANON_KEY missing); running without it");
-  }
+/** The reader whose data API serves the catalogue; tutors.dev when unset (createDataApi drops trailing slashes). */
+function readerUrl(env: CatalogueEnv): string {
+  return env.PUBLIC_READER_URL?.trim() || "https://tutors.dev";
+}
+
+/** The data API over `fetchFn` (a load's own fetch on the server), or null in anonymous mode. */
+export function composeCatalogue(env: CatalogueEnv, fetchFn?: FetchFn): DataApi | null {
+  if (env.PUBLIC_ANON_MODE?.trim().toUpperCase() === "TRUE") return null;
+  return createDataApi(fetchFn, readerUrl(env));
 }

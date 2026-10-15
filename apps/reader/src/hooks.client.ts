@@ -2,7 +2,7 @@ import { error } from "@sveltejs/kit";
 import type { HandleClientError } from "@sveltejs/kit/hooks";
 import * as env from "$app/env/public";
 import log, { addTransport, setAppName } from "@tutors/logger";
-import { createSupabaseErrorTransport } from "@tutors/store-supabase";
+import { dataApiErrorTransport } from "@tutors/data-api";
 import { configureAdapters } from "@tutors/svelte-state/adapters";
 import { createIdentityClient } from "@tutors/identity-better-auth/client";
 import { setCourseNotFoundHandler, setCourseUnreachableHandler } from "@tutors/svelte-state/course";
@@ -20,7 +20,8 @@ setCourseNotFoundHandler((notFound) => error(404, `Course ${notFound.courseId} n
 setCourseUnreachableHandler(() => error(404, "Course not found"));
 
 setAppName("tutors-reader");
-addTransport(createSupabaseErrorTransport("tutors-reader"));
+// Warnings and errors go to the reader's own POST /api/errors (Rule 0472).
+addTransport(dataApiErrorTransport("tutors-reader"));
 
 window.addEventListener("unhandledrejection", (event) => {
   log.error("Unhandled promise rejection", {

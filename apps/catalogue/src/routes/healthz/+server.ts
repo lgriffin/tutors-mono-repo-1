@@ -1,22 +1,20 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-import { checkSupabase, getRecentErrorCounts } from "@tutors/store-supabase";
 import { now } from "@tutors/clock";
 
-export const GET: RequestHandler = async () => {
-  const [supabaseCheck, errorCounts] = await Promise.all([checkSupabase(), getRecentErrorCounts()]);
-
-  const overallStatus = supabaseCheck.status === "ok" || supabaseCheck.status === "skipped" ? "ok" : "degraded";
-
-  return json({
-    status: overallStatus,
+/**
+ * The catalogue holds no database key: it reads through the reader's data API (Rule 0471), so there
+ * is no database to check here and the error counts are the reader's /healthz.
+ */
+export const GET: RequestHandler = async () =>
+  json({
+    status: "ok",
     timestamp: now().toISOString(),
     app: "tutors-catalogue",
     checks: {
-      supabase: supabaseCheck
+      supabase: { status: "skipped", latencyMs: 0, message: "reads through the reader's data API" }
     },
     errors: {
-      last60min: errorCounts
+      last60min: []
     }
   });
-};

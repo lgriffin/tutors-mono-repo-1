@@ -11,12 +11,12 @@ vi.mock("../../../packages/platform/logger/src/index.ts", () => ({
   }
 }));
 
-import { catalogueService, configureSupabase } from "../../../packages/adapters/driven/store-supabase/src/index.ts";
+import { supabaseCatalogue } from "../../../packages/adapters/driven/store-supabase/src/index.ts";
 import log from "../../../packages/platform/logger/src/index.ts";
 
-// The composition root's job: the store adapter is given the stand-in client.
+// The reader server's composition root's job: the store adapter is given the (stand-in) service client.
 const mockClient = new MockSupabaseClient();
-configureSupabase(mockClient as never);
+const catalogueService = supabaseCatalogue(mockClient as never);
 
 function makeCatalogueEntry(overrides: Record<string, unknown> = {}) {
   return {

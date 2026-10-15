@@ -11,8 +11,12 @@ import {
   readerApiAccessStore,
   readerApiCourseVisit,
   readerApiLearningEventSink,
+  readerApiLiveWatch,
+  readerApiPlaygroundSnapshots,
+  readerApiPresenceRoster,
   readerApiPresenceStore,
   readerApiProfile,
+  readerApiScormRecords,
   readerApiWhiteboardStore
 } from "@tutors/data-api";
 import log from "@tutors/logger";
@@ -180,30 +184,108 @@ describe("readerApiProfile", () => {
 });
 
 describe("readerApiAccessStore", () => {
-  it("reads locks through the public read it is given, and changes them through the server", async () => {
-    const { api, calls } = server({ "DELETE /api/locks": { status: 403 } });
-    const locks = vi.fn(async () => []);
-    const store = readerApiAccessStore(locks, api);
+  it("reads locks and changes them through the server", async () => {
+    const { api, calls } = server({ "GET /api/locks": { body: { locks: [{ loRoute: "/lab/1" }] } }, "DELETE /api/locks": { status: 403 } });
+    const store = readerApiAccessStore(api);
 
-    expect(await store.locks("cs101")).toEqual([]);
+    expect(await store.locks("cs101")).toEqual([{ loRoute: "/lab/1" }]);
     expect(await store.setLock("cs101", "/lab/1", true, "ignored")).toBe(true);
     expect(await store.removeLock("cs101", "/lab/1")).toBe(false);
-    expect(calls.map((call) => [call.method, call.body])).toEqual([
-      ["PUT", { courseId: "cs101", loRoute: "/lab/1", locked: true }],
-      ["DELETE", { courseId: "cs101", loRoute: "/lab/1" }]
+    expect(calls.map((call) => [call.method, call.path, call.body])).toEqual([
+      ["GET", "/api/locks?courseId=cs101", undefined],
+      ["PUT", "/api/locks", { courseId: "cs101", loRoute: "/lab/1", locked: true }],
+      ["DELETE", "/api/locks", { courseId: "cs101", loRoute: "/lab/1" }]
     ]);
   });
 
   it("changes nothing without a course and a route, or when the server cannot be reached", async () => {
     const { api, calls } = server();
-    const store = readerApiAccessStore(async () => [], api);
+    const store = readerApiAccessStore(api);
+    expect(await store.locks("")).toEqual([]);
     expect(await store.setLock("", "/lab/1", true, "x")).toBe(false);
     expect(await store.removeLock("cs101", "")).toBe(false);
     expect(calls).toEqual([]);
 
-    const offline = readerApiAccessStore(async () => [], createDataApi(() => Promise.reject(new TypeError("offline"))));
+    const offline = readerApiAccessStore(createDataApi(() => Promise.reject(new TypeError("offline"))));
+    expect(await offline.locks("cs101")).toEqual([]);
     expect(await offline.setLock("cs101", "/lab/1", true, "x")).toBe(false);
     expect(await offline.removeLock("cs101", "/lab/1")).toBe(false);
+  });
+});
+
+describe("readerApiScormRecords", () => {
+  const attempt = { courseId: "cs101", learnerId: "ada", loId: "/scorm/cs101/quiz", version: "2004" as const, cmi: { "cmi.location": "p3" }, summary: { completionStatus: "completed", successStatus: "passed", totalTime: 90, location: "p3" } };
+
+  it("loads the session's saved state and saves an attempt without naming the learner", async () => {
+    const { api, calls } = server({ "GET /api/scorm": { body: { cmi: { "cmi.location": "p3" } } } });
+    const records = readerApiScormRecords(api);
+
+    expect(await records.load("cs101", "ada", "/scorm/cs101/quiz")).toEqual({ "cmi.location": "p3" });
+    await records.save(attempt);
+
+    const { learnerId: _learnerId, ...sent } = attempt;
+    expect(calls.map((call) => [call.method, call.path, call.body])).toEqual([
+      ["GET", "/api/scorm?courseId=cs101&loId=%2Fscorm%2Fcs101%2Fquiz", undefined],
+      ["PUT", "/api/scorm", sent]
+    ]);
+  });
+
+  it("asks nothing without a course, a learner and a learning object, and starts from nothing when the server has no state", async () => {
+    const { api, calls } = server({ "GET /api/scorm": { status: 503 } });
+    const records = readerApiScormRecords(api);
+    expect(await records.load("", "ada", "lo")).toEqual({});
+    expect(await records.load("cs101", "", "lo")).toEqual({});
+    expect(await records.load("cs101", "ada", "")).toEqual({});
+    await records.save({ ...attempt, learnerId: "" });
+    expect(calls).toEqual([]);
+
+    expect(await records.load("cs101", "ada", "lo")).toEqual({});
+  });
+
+  it("logs a refused save, but not a signed-out or unconfigured one", async () => {
+    for (const status of [500, 401, 503]) {
+      vi.mocked(log.error).mockClear();
+      const { api } = server({ "PUT /api/scorm": { status } });
+      await readerApiScormRecords(api).save(attempt);
+      expect(vi.mocked(log.error).mock.calls.length).toBe(status === 500 ? 1 : 0);
+    }
+  });
+});
+
+describe("readerApiPlaygroundSnapshots without a course or exercise", () => {
+  it("answers nothing and asks the server nothing", async () => {
+    const { api, calls } = server();
+    const snapshots = readerApiPlaygroundSnapshots(api);
+    const work = { studentId: "ada", studentName: "Ada", courseId: "", loId: "lo", runtime: "python", entry: "main.py", files: [], lastOutput: "", lastOk: null };
+
+    expect(await snapshots.available("")).toBe(false);
+    expect(await snapshots.reviews("")).toBe(false);
+    expect(await snapshots.save(work)).toBe(false);
+    expect(await snapshots.save({ ...work, courseId: "cs101", loId: "" })).toBe(false);
+    expect(await snapshots.get("cs101", "lo", "")).toBeNull();
+    expect(await snapshots.list("cs101", "")).toEqual([]);
+    await snapshots.remove("", "lo");
+    expect(calls).toEqual([]);
+  });
+});
+
+describe("the realtime adapter's roster and watch options", () => {
+  it("read the stored roster and report a watcher through the server, answering null when the server cannot", async () => {
+    const { api, calls } = server({
+      "GET /api/presence/roster": { body: { rows: [{ payload: { courseId: "cs101" } }] } },
+      "POST /api/live/watch": { body: { tier: "paused" } }
+    });
+
+    expect(await readerApiPresenceRoster(api)("cs101", "2026-09-17T09:58:00.000Z")).toEqual([{ payload: { courseId: "cs101" } }]);
+    expect(await readerApiLiveWatch(api)("course-activity:cs101", "tab-1")).toBe("paused");
+    expect(calls.map((call) => [call.method, call.path.split("?")[0], call.body])).toEqual([
+      ["GET", "/api/presence/roster", undefined],
+      ["POST", "/api/live/watch", { topic: "course-activity:cs101", watcher: "tab-1" }]
+    ]);
+
+    const down = server({ "GET /api/presence/roster": { status: 503 }, "POST /api/live/watch": { status: 503 } }).api;
+    expect(await readerApiPresenceRoster(down)(undefined, "2026-09-17T09:58:00.000Z")).toBeNull();
+    expect(await readerApiLiveWatch(down)("platform-activity", "tab-1")).toBeNull();
   });
 });
 

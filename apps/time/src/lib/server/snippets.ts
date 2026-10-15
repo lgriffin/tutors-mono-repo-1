@@ -14,12 +14,17 @@ import * as publicEnv from "$app/env/public";
 import type { RequestEvent } from "@sveltejs/kit";
 import { courseEducators, isCourseEducator, type EducatorCheck } from "@tutors/application";
 import type { SnippetStore } from "@tutors/application/ports";
-import { createSupabaseClient, supabaseSnippetStore } from "@tutors/store-supabase";
+import { createSupabaseServiceClient, supabaseSnippetStore, type SupabaseClient } from "@tutors/store-supabase";
 import { httpCourseSource } from "@tutors/course-http";
+
+/** The server's service client (the snippet store, the health check), or undefined when the deployment has no service key. */
+export function serviceClient(): SupabaseClient | undefined {
+  return createSupabaseServiceClient(publicEnv.PUBLIC_SUPABASE_URL, env.PRIVATE_SUPABASE_SERVICE_ROLE_KEY);
+}
 
 /** The store the dashboard reads from, or null when the deployment has no service key. */
 export function serviceSnippetStore(): SnippetStore | null {
-  const client = createSupabaseClient(publicEnv.PUBLIC_SUPABASE_URL, env.PRIVATE_SUPABASE_SERVICE_ROLE_KEY);
+  const client = serviceClient();
   return client ? supabaseSnippetStore(client) : null;
 }
 

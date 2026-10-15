@@ -2,15 +2,16 @@
  * The reader server's side of snippet sharing and lecturer broadcasts, composed from private
  * environment the way the time app composes Moodle: the Supabase store bound to the service-role
  * key (the `course_gists` table is closed to the anon role), the realtime publisher over the
- * composed client, and the educator check that reads a course's published enrollment.
+ * service client, and the educator check that reads a course's published enrollment.
  */
 import * as env from "$app/env/private";
 import * as publicEnv from "$app/env/public";
 import { courseEducators, isCourseEducator, createBroadcastLimiter, type EducatorCheck } from "@tutors/application";
 import type { CourseNotices, SnippetStore } from "@tutors/application/ports";
-import { createSupabaseClient, supabase, supabaseSnippetStore } from "@tutors/store-supabase";
+import { createSupabaseClient, supabaseSnippetStore } from "@tutors/store-supabase";
 import { publishCourseNotice } from "@tutors/realtime-supabase";
 import { httpCourseSource } from "@tutors/course-http";
+import { readerServer } from "./api/adapters.ts";
 
 /** The store the share route writes to; null when the deployment has no service key. */
 export function serviceSnippetStore(): SnippetStore | null {
@@ -18,9 +19,9 @@ export function serviceSnippetStore(): SnippetStore | null {
   return client ? supabaseSnippetStore(client) : null;
 }
 
-/** Posting publishes over the composed client at once; the server watches nothing. */
+/** Posting publishes over the server's service client at once (none: nothing is published); the server watches nothing. */
 export const serverNotices: CourseNotices = {
-  post: (notice) => publishCourseNotice(supabase, notice),
+  post: (notice) => publishCourseNotice(readerServer().data?.db, notice),
   watch: () => () => {}
 };
 

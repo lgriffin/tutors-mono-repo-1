@@ -27,10 +27,11 @@ patches:
       - op: replace
         path: /data/TUTORS_ORIGIN
         value: "https://reader.tutors.dev"
-      # The time dashboard reads /api/time with the reader's session cookie.
+      # The time dashboard reads /api/time with the reader's session cookie; the catalogue,
+      # live and time apps post error reports (and Live its watcher reports) to the data API.
       - op: add
         path: /data/PRIVATE_API_ALLOWED_ORIGINS
-        value: "https://time.tutors.dev"
+        value: "https://time.tutors.dev,https://catalogue.tutors.dev,https://live.tutors.dev"
       # Logins that are educators of every course, and extra course hosts; usually empty.
       - op: add
         path: /data/PRIVATE_TUTORS_ADMINS

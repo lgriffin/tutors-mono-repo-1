@@ -1,6 +1,6 @@
 <script lang="ts">
   import { LoRecord, presenceService, type TutorsConnectLatestRow } from "@tutors/svelte-state/community";
-  import { getTutorsConnectLatestLosByCourseId } from "@tutors/store-supabase";
+  import { adapters } from "@tutors/svelte-state/adapters";
   import { isReceivedAtInLocalMonth, isReceivedAtInLocalWeek, isReceivedAtInLocalYear, isReceivedAtOnLocalDay } from "@tutors/domain/learning";
   import ConnectLatestLosCards from "@tutors/ui-components/time/ConnectLatestLosCards.svelte";
   import { Tabs } from "@skeletonlabs/skeleton-svelte";
@@ -49,9 +49,13 @@
     presenceService.startPresenceListener(courseid);
     connectRows = [];
     let active = true;
-    void getTutorsConnectLatestLosByCourseId(courseid).then((rows) => {
-      if (active) connectRows = rows;
-    });
+    // The stored roster since the start of the year (the furthest tab back), through the reader's data API.
+    const sinceIso = new Date(new Date().getFullYear(), 0, 1).toISOString();
+    void adapters()
+      .presence.recent(courseid, sinceIso)
+      .then((rows) => {
+        if (active) connectRows = (rows ?? []) as TutorsConnectLatestRow[];
+      });
     return () => {
       active = false;
       presenceService.stopPresenceListener();

@@ -5,21 +5,31 @@
  * private environment by `lib/server/api/adapters.ts`; tests compose it with the environment they
  * want. Without a service key (or in anonymous mode) there is no data: the routes answer 503.
  */
-import type { AccessStore, LearningEventSink, LearningRecords, ProfilePort, WhiteboardStore } from "@tutors/application/ports";
+import type { AccessStore, LearningEventSink, LearningRecords, ProfilePort, ScormRecords, WhiteboardStore } from "@tutors/application/ports";
 import { createAuthorization, listFromEnv, type Authorization } from "@tutors/application";
 import { clock } from "@tutors/clock";
 import { httpCourseFacts } from "@tutors/course-http";
 import {
   createSupabaseServiceClient,
+  insertAppErrors,
+  readRoster,
   recordCourseVisit,
   supabaseAccessStore,
+  supabaseCatalogue,
   supabaseLearningEventSink,
   supabaseLearningRecords,
+  supabasePlaygroundSnapshotRows,
   supabaseProfile,
+  supabaseScormRecords,
   supabaseWhiteboardStore,
   upsertLatest,
+  type AppErrorRow,
+  type CatalogueService,
+  type PlaygroundSnapshotRows,
   type SupabaseClient
 } from "@tutors/store-supabase";
+import { watchLiveTopic, type LiveBudgetTier } from "@tutors/realtime-supabase";
+import type { TutorsConnectLatestRow } from "@tutors/domain/learning";
 import log, { withRequestId } from "@tutors/logger";
 
 export type ReaderServerEnv = {
@@ -44,6 +54,18 @@ export type ReaderServerData = {
   storePresence(login: string, courseId: string, payload: unknown): Promise<void>;
   /** A visit to a published course, for the catalogue. */
   recordCourseVisit(courseId: string, record: Record<string, unknown>): Promise<void>;
+  /** The public catalogue and the student count (GET /api/catalogue). */
+  catalogue: CatalogueService;
+  /** The stored presence snapshots (GET /api/presence/roster); null when the read failed. */
+  roster(courseId: string | null, sinceIso: string | null): Promise<TutorsConnectLatestRow[] | null>;
+  /** SCORM run-time state, for the session's login (GET and PUT /api/scorm). */
+  scorm: ScormRecords;
+  /** Playground hand-ins; the route decides whose (GET, PUT and DELETE /api/playground). */
+  playground: PlaygroundSnapshotRows;
+  /** The error log (POST /api/errors). */
+  recordErrors(rows: AppErrorRow[]): Promise<void>;
+  /** A Tutors Live tab watching a Realtime topic (POST /api/live/watch); the day's tier, or null. */
+  watchLive(topic: string, watcher: string): Promise<LiveBudgetTier | null>;
 };
 
 export type ReaderServer = {
@@ -91,7 +113,13 @@ export function composeReaderServer(env: ReaderServerEnv, options: { fetch?: typ
       accessStore: supabaseAccessStore(db),
       whiteboard: supabaseWhiteboardStore(db),
       storePresence: (login, courseId, payload) => upsertLatest(db, login, courseId, payload, clock.now()),
-      recordCourseVisit: (courseId, record) => recordCourseVisit(db, courseId, record, clock.now())
+      recordCourseVisit: (courseId, record) => recordCourseVisit(db, courseId, record, clock.now()),
+      catalogue: supabaseCatalogue(db),
+      roster: (courseId, sinceIso) => readRoster(db, courseId, sinceIso),
+      scorm: supabaseScormRecords(db),
+      playground: supabasePlaygroundSnapshotRows(db),
+      recordErrors: (rows) => insertAppErrors(db, rows),
+      watchLive: (topic, watcher) => watchLiveTopic(db, topic, watcher)
     }
   };
 }

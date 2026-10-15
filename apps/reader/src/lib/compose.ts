@@ -2,10 +2,10 @@
  * The reader's composition root: which adapter sits behind each port, decided from the
  * environment and nowhere else. `PUBLIC_ANON_MODE=TRUE` composes a reader that records nothing,
  * shows nobody present and offers no sign-in; otherwise the learner's record, presence snapshot,
- * locks and whiteboard scenes travel through the reader's own data API (@tutors/data-api; the
- * server writes them with its service key, guides/SERVER-WRITES.md), Supabase holds only the public
- * reads (the catalogue, the locks, the latest presence) and the Realtime channels, and Better Auth
- * the session. Both hooks files call this once, so the server and the browser run the same
+ * locks, whiteboard scenes, SCORM state and playground hand-ins travel through the reader's own
+ * data API (@tutors/data-api; the server reads and writes them with its service key,
+ * guides/SERVER-WRITES.md), the browser's Supabase client carries only the Realtime channels, and
+ * Better Auth the session. Both hooks files call this once, so the server and the browser run the same
  * wiring; tests call it with the environment they want.
  */
 import type { IdentityClient } from "@tutors/application/ports";
@@ -18,20 +18,18 @@ import { inProcessPublisher } from "@tutors/bus-inprocess";
 import { wasmCodeRuntime } from "@tutors/runtime-wasm";
 import { indexedDbWorkspaceStore } from "@tutors/workspace-indexeddb";
 import { httpLiveEventReporter } from "@tutors/live-events-http";
-import {
-  configureSupabase,
-  createSupabaseClient,
-  supabaseAccessStore,
-  supabasePlaygroundSnapshots,
-  supabaseScormRecords
-} from "@tutors/store-supabase";
+import { createSupabaseClient } from "@tutors/store-supabase";
 import { realtimeClientOptions, supabaseCourseNotices, supabasePlaygroundLive, supabasePresence } from "@tutors/realtime-supabase";
 import {
   readerApiAccessStore,
   readerApiCourseVisit,
   readerApiLearningEventSink,
+  readerApiPlaygroundSnapshots,
+  readerApiLiveWatch,
+  readerApiPresenceRoster,
   readerApiPresenceStore,
   readerApiProfile,
+  readerApiScormRecords,
   readerApiWhiteboardStore
 } from "@tutors/data-api";
 import log, { withRequestId } from "@tutors/logger";
@@ -70,16 +68,13 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     identityClient: options.identityClient ?? null
   };
 
-  if (isAnonymous(env)) {
-    configureSupabase(undefined);
-    return anonymousAdapters(shared);
-  }
+  if (isAnonymous(env)) return anonymousAdapters(shared);
 
   const url = env.PUBLIC_SUPABASE_URL;
   const key = env.PUBLIC_SUPABASE_ANON_KEY;
-  // On the server, calls made while serving a request carry its x-request-id; in the browser this is plain fetch.
+  // The Realtime gateway's client, and nothing else: it reads and writes no table (Rule 0471). On the
+  // server, calls made while serving a request carry its x-request-id; in the browser this is plain fetch.
   const client = createSupabaseClient(url, key, withRequestId(), realtimeClientOptions());
-  configureSupabase(client, client ? { url: url!, key: key! } : undefined);
   if (!client) {
     log.warn("Supabase is not configured (PUBLIC_SUPABASE_URL / PUBLIC_SUPABASE_ANON_KEY missing); running without it");
     return { ...anonymousAdapters(shared), anonymous: false };
@@ -93,19 +88,22 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
   });
 
   // The presence snapshot is stored by the server (POST /api/presence); the channel itself stays in the browser.
-  const presence = supabasePresence(client, clock.now, { store: readerApiPresenceStore() });
+  const presence = supabasePresence(client, clock.now, {
+    store: readerApiPresenceStore(),
+    roster: readerApiPresenceRoster(),
+    watch: readerApiLiveWatch()
+  });
   return {
     ...anonymousAdapters(shared),
     anonymous: false,
     learningEvents: readerApiLearningEventSink(),
     presence,
     profile: { local: localStorageProfile(), signedIn: readerApiProfile() },
-    accessStore: readerApiAccessStore(supabaseAccessStore().locks),
+    accessStore: readerApiAccessStore(),
     whiteboard: readerApiWhiteboardStore(),
-    scormRecords: supabaseScormRecords(),
-    // Snapshots have an owner, so they are written as the signed-in student with a token the
-    // reader mints at /api/runtime-token (PRIVATE_SUPABASE_JWT_SECRET); without it, nothing is handed in.
-    playgroundSnapshots: supabasePlaygroundSnapshots({ url: url!, key: key! }),
+    scormRecords: readerApiScormRecords(),
+    // Snapshots have an owner: the server keeps them under the session's login and decides who may read them (Rule 0475).
+    playgroundSnapshots: readerApiPlaygroundSnapshots(),
     // TODO(budget): the live share is browser-published through the gateway; see realtime-supabase/src/playground-live.ts.
     playgroundLive: supabasePlaygroundLive(presence.gateway),
     // A shared snippet goes to the reader's server, which keeps it with its service key; notices

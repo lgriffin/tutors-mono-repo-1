@@ -57,4 +57,3 @@ vendor-only-in-its-adapter: packages/adapters/driving/svelte-state/src/markdown/
 # The time library keeps its own Supabase client for the analytics views until the
 # LearningRecords port replaces it (phase 5 of the ADR); the published facade stays
 # importable from Deno meanwhile.
-vendor-only-in-its-adapter: packages/jsr/time/src/services/supabase.ts -> @supabase/supabase-js/dist/index.d.mts

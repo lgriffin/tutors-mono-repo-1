@@ -36,10 +36,10 @@ Feature: Course Discovery
       And the reader shall display the topics in the order "Hardware, Networks, Software"
 
   @rule-0370 @ears-unwanted
-  Rule: If Supabase is not configured, then the catalogue shall show an empty catalogue and a student count of 0 without logging an error.
+  Rule: If the reader's server has no database configured, then the catalogue shall show an empty catalogue and a student count of 0 without logging an error.
 
-    Scenario: Open the catalogue with no Supabase configured
-      Given Supabase is not configured
+    Scenario: Open the catalogue when the reader has no database
+      Given the reader's server has no service key
       When a student opens the catalogue
       Then the catalogue shall display no courses
       And the catalogue shall show a student count of 0

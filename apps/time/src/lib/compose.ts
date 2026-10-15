@@ -1,11 +1,12 @@
 /**
- * Tutors Time's composition root: the Supabase store for the error transport and health check,
- * and the course notices the snippet dashboard watches through the Realtime gateway. The time
- * rows themselves come from the reader's data API (lib/time-source.ts, Rules 0069, 0070), so no
- * learner table is read here. Moodle and the snippet store are composed on the server
- * (lib/server/api/moodle.ts, lib/server/snippets.ts) from private environment.
+ * Tutors Time's composition root: the course notices the snippet dashboard watches through the
+ * Realtime gateway, the only use of its Supabase client. The time rows come from the reader's data
+ * API (lib/time-source.ts, Rules 0069, 0070) and errors go to the reader's POST /api/errors, so no
+ * table is read or written from the browser (Rule 0471). Moodle, the snippet store and the health
+ * check are composed on the server (lib/server/api/moodle.ts, lib/server/snippets.ts) from private
+ * environment.
  */
-import { configureSupabase, createSupabaseClient } from "@tutors/store-supabase";
+import { createSupabaseClient } from "@tutors/store-supabase";
 import { realtimeClientOptions, supabaseCourseNotices } from "@tutors/realtime-supabase";
 import { anonymousAdapters, configureAdapters } from "@tutors/svelte-state/adapters";
 import log, { withRequestId } from "@tutors/logger";
@@ -17,7 +18,6 @@ export function composeTime(env: TimeEnv): void {
   const key = env.PUBLIC_SUPABASE_ANON_KEY;
   const anonymous = env.PUBLIC_ANON_MODE?.trim().toUpperCase() === "TRUE";
   const client = anonymous ? undefined : createSupabaseClient(url, key, withRequestId(), realtimeClientOptions());
-  configureSupabase(client, client ? { url: url!, key: key! } : undefined);
   if (!client && !anonymous) {
     log.warn("Supabase is not configured (PUBLIC_SUPABASE_URL / PUBLIC_SUPABASE_ANON_KEY missing); running without it");
   }

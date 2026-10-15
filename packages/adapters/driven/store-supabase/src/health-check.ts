@@ -1,4 +1,4 @@
-import { supabase } from "./client.ts";
+import type { SupabaseClient } from "./client.ts";
 
 interface CheckResult {
   status: "ok" | "error" | "skipped";
@@ -6,9 +6,10 @@ interface CheckResult {
   message?: string;
 }
 
-export async function checkSupabase(): Promise<CheckResult> {
+/** A head read of the catalogue over the server's client; "skipped" when the server has none (anonymous mode, or no service key). */
+export async function checkSupabase(supabase: SupabaseClient | null | undefined): Promise<CheckResult> {
   if (!supabase) {
-    return { status: "skipped", latencyMs: 0, message: "anon mode" };
+    return { status: "skipped", latencyMs: 0, message: "no database client on this server" };
   }
 
   const start = performance.now();
@@ -28,7 +29,8 @@ export async function checkSupabase(): Promise<CheckResult> {
   }
 }
 
-export async function getRecentErrorCounts(): Promise<{ app: string; level: string; count: number }[]> {
+/** Errors per app and level in the last hour (`get_error_counts`, run by the server's client only). */
+export async function getRecentErrorCounts(supabase: SupabaseClient | null | undefined): Promise<{ app: string; level: string; count: number }[]> {
   if (!supabase) return [];
 
   try {

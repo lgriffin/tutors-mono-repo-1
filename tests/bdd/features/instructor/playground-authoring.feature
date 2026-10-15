@@ -68,7 +68,7 @@ Feature: Playground Authoring and Review
 
     @active
     Scenario: Reviewing what students handed in
-      Given the reader signs a token naming the instructor an educator of the course
+      Given an educator of the course is signed in to the reader
       And "Ada Lovelace" handed in "main.py" that printed "Traceback: NameError" and failed
       When the instructor opens the exercise's submissions
       Then the instructor reviews the course
@@ -77,26 +77,25 @@ Feature: Playground Authoring and Review
 
     @inactive
     Scenario: A student sees no review panel
-      Given the reader signs a token for a student of the course
+      Given a student of the course is signed in to the reader
       When the instructor opens the exercise's submissions
       Then the reader does not treat the student as a reviewer
 
   @rule-0436 @ears-unwanted
-  Rule: If a page claims a student teaches a course, then the reader shall grant review from the claim the reader signed and from nothing else.
+  Rule: If a page claims a student teaches a course, then the reader shall grant review from the course's published educators, read by its server, and from nothing else.
 
     Scenario: A student cannot make themselves an instructor
-      Given the reader signs a token for a student of the course
+      Given a student of the course is signed in to the reader
       When the instructor opens the exercise's submissions
       Then the reader does not treat the student as a reviewer
+      And the reader answers 403 when the student asks for "Ada Lovelace"'s submission
       And the submissions table is closed to the anonymous role
-      And every policy on the submissions table reads the signed claims
-      And the educator policy lets an instructor read submissions and write none
 
   @rule-0437 @ears-unwanted
-  Rule: If the reader cannot mint a run-time token, then the reader shall offer no handing in while the exercise itself still runs.
+  Rule: If the reader's server has no database to keep hand-ins in, then the reader shall offer no handing in while the exercise itself still runs.
 
-    Scenario: A deployment with no Supabase secret
-      Given the reader has no secret to sign a run-time token with
+    Scenario: A deployment with no service key
+      Given the reader's server has no service key
       When the instructor opens the exercise's submissions
       Then handing in is not available
       And the submissions are empty

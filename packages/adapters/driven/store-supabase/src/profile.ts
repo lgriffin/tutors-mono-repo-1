@@ -6,7 +6,7 @@
  */
 import { parseSentiment, parseSharing, onlineStatusFor, type CourseVisit } from "@tutors/domain/presence";
 import type { LearnerProfile, ProfilePort } from "@tutors/application/ports";
-import { fail, supabase, type SupabaseClient } from "./client.ts";
+import { fail, type SupabaseClient } from "./client.ts";
 
 /** The columns of a learner's row a user may set about themselves. */
 export interface UserStatus {
@@ -64,9 +64,9 @@ export async function saveProfile(db: SupabaseClient, login: string, visits: unk
   if (error) fail("tutors-connect-profiles upsert", error);
 }
 
-/** The ProfilePort over the functions above, for `client` (the composed client by default). Reads are empty and writes no-ops without one. */
+/** The ProfilePort over the functions above, for `client` . Reads are empty and writes no-ops without one. */
 export function supabaseProfile(client?: SupabaseClient): ProfilePort {
-  const db = () => client ?? supabase;
+  const db = () => client;
   return {
     async getCourseVisits(learnerId) {
       const c = db();

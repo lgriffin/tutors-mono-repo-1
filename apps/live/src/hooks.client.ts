@@ -1,14 +1,16 @@
 import type { HandleClientError } from "@sveltejs/kit/hooks";
 import log, { addTransport, setAppName } from "@tutors/logger";
 import * as env from "$app/env/public";
-import { createSupabaseErrorTransport } from "@tutors/store-supabase";
+import { dataApiErrorTransport } from "@tutors/data-api";
 import { configureAdapters } from "@tutors/svelte-state/adapters";
-import { composeLive } from "./lib/compose.ts";
+import { composeLive, liveDataApi } from "./lib/compose.ts";
 
 configureAdapters(composeLive(env));
 
 setAppName("tutors-live");
-addTransport(createSupabaseErrorTransport("tutors-live"));
+// Warnings and errors go to the reader's POST /api/errors (Rule 0472).
+const api = liveDataApi(env);
+if (api) addTransport(dataApiErrorTransport("tutors-live", api));
 
 window.addEventListener("unhandledrejection", (event) => {
   log.error("Unhandled promise rejection", {

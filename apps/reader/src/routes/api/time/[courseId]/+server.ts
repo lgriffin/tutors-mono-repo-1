@@ -1,21 +1,13 @@
-import { json, type RequestHandler } from "@sveltejs/kit";
+import type { RequestHandler } from "@sveltejs/kit";
 import { AuthorizationUnavailableError, loadTimeRows } from "@tutors/application";
 import log from "@tutors/logger";
 import { sessionUser } from "#lib/server/api/http.ts";
-import { allowedOrigins, authorization } from "#lib/server/api/access.ts";
+import { authorization } from "#lib/server/api/access.ts";
+import { allowedOriginHeaders, answer } from "#lib/server/api/cors.ts";
 import { readerServer } from "#lib/server/api/adapters.ts";
 import * as check from "#lib/server/api/validate.ts";
 
-function corsHeaders(request: Request, url: URL): Record<string, string> | null {
-  const origin = request.headers.get("origin");
-  if (!origin || origin === url.origin) return {};
-  if (!allowedOrigins().includes(origin)) return null;
-  return { "access-control-allow-origin": origin, "access-control-allow-credentials": "true", vary: "Origin" };
-}
-
-function answer(status: number, body: unknown, headers: Record<string, string>): Response {
-  return json(body, { status, headers: { ...headers, "cache-control": "private, no-store" } });
-}
+const corsHeaders = (request: Request, url: URL) => allowedOriginHeaders(request, url, true);
 
 /**
  * A course's time data for Tutors Time, read with the viewer's reader session: in full for an

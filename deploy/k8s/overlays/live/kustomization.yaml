@@ -27,3 +27,8 @@ patches:
       - op: replace
         path: /data/TUTORS_ORIGIN
         value: "https://live.tutors.dev"
+      # Every read goes through the reader's data API; the reader lists this origin in
+      # PRIVATE_API_ALLOWED_ORIGINS so error reports and Live watcher reports pass.
+      - op: add
+        path: /data/PUBLIC_READER_URL
+        value: "https://tutors.dev"

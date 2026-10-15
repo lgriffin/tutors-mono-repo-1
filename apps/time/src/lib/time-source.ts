@@ -1,7 +1,8 @@
 import * as env from "$app/env/public";
 import { readerTimeSource, setTutorsTimeSource, TutorsTimeSourceError, withoutTrailingSlashes } from "@tutors/tutors-time-lib";
 
-function readerUrl(): string {
+/** The reader whose data API this app reads (PUBLIC_READER_URL); tutors.dev when unset. */
+export function readerUrl(): string {
   return withoutTrailingSlashes(env.PUBLIC_READER_URL?.trim() || "https://tutors.dev");
 }
 
