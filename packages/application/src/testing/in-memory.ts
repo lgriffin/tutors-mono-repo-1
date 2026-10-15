@@ -25,6 +25,8 @@ import { SNAPSHOT_OUTPUT_LIMIT, type PlaygroundSnapshot, type PlaygroundSnapshot
 import type { PlaygroundLive, PlaygroundLiveState, PlaygroundShare } from "../ports/playground-live.ts";
 import type { Workspace } from "@tutors/domain/course/playground";
 import type { Actor } from "@tutors/domain/access";
+import type { NewSnippet, SharedSnippet, SnippetStore } from "../ports/snippet-store.ts";
+import type { CourseNotice, CourseNoticeType, CourseNotices } from "../ports/course-notices.ts";
 
 /** A clock stopped at one instant; `advance` moves it. */
 export class FixedClock implements Clock {
@@ -443,5 +445,48 @@ export class ScriptedCodeRuntimePort implements CodeRuntimePort {
     const runtime = new ScriptedCodeRuntime(options).script(...this.answers);
     this.opened.push(runtime);
     return runtime;
+  }
+}
+
+/** Shared snippets in memory, stamped by the clock. */
+export class InMemorySnippetStore implements SnippetStore {
+  readonly rows: SharedSnippet[] = [];
+  private nextId = 1;
+  constructor(private readonly clock: Clock = new FixedClock()) {}
+  async add(snippet: NewSnippet): Promise<string> {
+    if (!snippet.courseId || !snippet.learnerId || !snippet.content) throw new Error("a snippet needs a course, a learner and a body");
+    const id = `snippet-${this.nextId++}`;
+    this.rows.push({ ...snippet, id, createdAt: this.clock.now().toISOString(), avatarUrl: null });
+    return id;
+  }
+  async active(courseId: string, nowIso: string): Promise<SharedSnippet[]> {
+    return this.rows
+      .filter((row) => row.courseId === courseId && row.expiresAt > nowIso)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+      .map((row) => ({ ...row }));
+  }
+  async countSince(courseId: string, learnerId: string, sinceIso: string): Promise<number | null> {
+    return this.rows.filter((row) => row.courseId === courseId && row.learnerId === learnerId && row.createdAt >= sinceIso).length;
+  }
+}
+
+/** Delivers course notices to listeners in the same process, and keeps what was posted. */
+export class InMemoryCourseNotices implements CourseNotices {
+  readonly posted: CourseNotice[] = [];
+  private readonly listeners = new Map<string, Set<(notice: CourseNotice) => void>>();
+  /** When false, posting is refused: the composition without a broker. */
+  constructor(private readonly configured = true) {}
+  async post(notice: CourseNotice): Promise<boolean> {
+    if (!this.configured || !notice.courseId) return false;
+    this.posted.push(notice);
+    for (const listener of this.listeners.get(`${notice.courseId}\t${notice.type}`) ?? []) listener(notice);
+    return true;
+  }
+  watch(courseId: string, type: CourseNoticeType, listener: (notice: CourseNotice) => void): Unsubscribe {
+    const key = `${courseId}\t${type}`;
+    const set = this.listeners.get(key) ?? new Set();
+    set.add(listener);
+    this.listeners.set(key, set);
+    return () => void set.delete(listener);
   }
 }

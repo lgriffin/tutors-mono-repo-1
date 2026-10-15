@@ -14,6 +14,8 @@ import type { ScormRecords } from "../ports/scorm-records.ts";
 import { SNAPSHOT_OUTPUT_LIMIT, type PlaygroundSnapshots } from "../ports/playground-snapshots.ts";
 import type { PlaygroundLive, PlaygroundLiveState } from "../ports/playground-live.ts";
 import type { CodeRuntime } from "../ports/code-runtime.ts";
+import type { SnippetStore } from "../ports/snippet-store.ts";
+import type { CourseNotice, CourseNotices } from "../ports/course-notices.ts";
 
 export type ContractCase = { name: string; run: () => Promise<void> };
 
@@ -433,6 +435,129 @@ export function codeRuntimeContract(make: Make<CodeRuntime>): ContractCase[] {
           refused = true;
         }
         assert(refused, "execute after dispose");
+      }
+    }
+  ];
+}
+
+const snippet = (courseId: string, learnerId: string, expiresAt: string, content = "TypeError: x is undefined") => ({
+  courseId,
+  learnerId,
+  learnerName: learnerId.toUpperCase(),
+  filename: "error.txt",
+  content,
+  title: null,
+  loRoute: null,
+  loTitle: null,
+  expiresAt
+});
+
+/**
+ * `now` is an instant between the snippets the cases add (they expire a day either side of it), so a
+ * real adapter can run the suite against rows stamped by its own clock.
+ */
+export function snippetStoreContract(make: Make<SnippetStore>, now = "2026-01-05T09:00:00.000Z"): ContractCase[] {
+  const before = new Date(Date.parse(now) - 24 * 60 * 60 * 1000).toISOString();
+  const after = new Date(Date.parse(now) + 24 * 60 * 60 * 1000).toISOString();
+  return [
+    {
+      name: "a course nobody shared with has no active snippets",
+      run: async () => {
+        const store = await make();
+        assertEqual(await store.active("cs101", now), [], "active");
+      }
+    },
+    {
+      name: "an added snippet is active for its course, with the fields it was given",
+      run: async () => {
+        const store = await make();
+        const id = await store.add(snippet("cs101", "alice", after));
+        assert(typeof id === "string" && id.length > 0, "id");
+        const rows = await store.active("cs101", now);
+        assertEqual(rows.map((r) => [r.id, r.learnerId, r.learnerName, r.filename, r.content, r.expiresAt]), [[id, "alice", "ALICE", "error.txt", "TypeError: x is undefined", after]], "rows");
+        assertEqual(await store.active("cs102", now), [], "another course");
+      }
+    },
+    {
+      name: "an expired snippet is not active",
+      run: async () => {
+        const store = await make();
+        await store.add(snippet("cs101", "alice", before, "old"));
+        await store.add(snippet("cs101", "bob", after, "new"));
+        assertEqual((await store.active("cs101", now)).map((r) => r.content), ["new"], "active");
+      }
+    },
+    {
+      name: "the count of a learner's recent snippets is per course and per learner",
+      run: async () => {
+        const store = await make();
+        await store.add(snippet("cs101", "alice", after));
+        await store.add(snippet("cs101", "alice", after));
+        await store.add(snippet("cs101", "bob", after));
+        await store.add(snippet("cs102", "alice", after));
+        assertEqual(await store.countSince("cs101", "alice", "2000-01-01T00:00:00.000Z"), 2, "alice in cs101");
+        assertEqual(await store.countSince("cs101", "carol", "2000-01-01T00:00:00.000Z"), 0, "nobody");
+      }
+    },
+    {
+      name: "a snippet without a course, a learner or a body is rejected",
+      run: async () => {
+        const store = await make();
+        let rejected = 0;
+        for (const bad of [snippet("", "alice", after), snippet("cs101", "", after), snippet("cs101", "alice", after, "")]) {
+          await store.add(bad).then(
+            () => {},
+            () => rejected++
+          );
+        }
+        assertEqual(rejected, 3, "rejected");
+        assertEqual(await store.active("cs101", now), [], "nothing kept");
+      }
+    }
+  ];
+}
+
+const ping = (courseId: string, id: string): CourseNotice => ({ type: "gist-created", id, courseId, sentAt: 1 });
+
+export function courseNoticesContract(make: Make<CourseNotices>): ContractCase[] {
+  return [
+    {
+      name: "a posted notice reaches a watcher of its course and type",
+      run: async () => {
+        const notices = await make();
+        const heard: CourseNotice[] = [];
+        notices.watch("cs101", "gist-created", (notice) => heard.push(notice));
+        assert(await notices.post(ping("cs101", "n1")), "posted");
+        assertEqual(heard, [ping("cs101", "n1")], "heard");
+      }
+    },
+    {
+      name: "a watcher of another course or another type hears nothing",
+      run: async () => {
+        const notices = await make();
+        const heard: CourseNotice[] = [];
+        notices.watch("cs102", "gist-created", (notice) => heard.push(notice));
+        notices.watch("cs101", "course:broadcast", (notice) => heard.push(notice));
+        await notices.post(ping("cs101", "n1"));
+        assertEqual(heard, [], "heard");
+      }
+    },
+    {
+      name: "a watcher that unsubscribed hears nothing more",
+      run: async () => {
+        const notices = await make();
+        const heard: CourseNotice[] = [];
+        const stop = notices.watch("cs101", "gist-created", (notice) => heard.push(notice));
+        stop();
+        await notices.post(ping("cs101", "n1"));
+        assertEqual(heard, [], "heard");
+      }
+    },
+    {
+      name: "a notice without a course is refused",
+      run: async () => {
+        const notices = await make();
+        assertEqual(await notices.post(ping("", "n1")), false, "refused");
       }
     }
   ];

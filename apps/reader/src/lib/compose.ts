@@ -9,7 +9,7 @@ import type { IdentityClient } from "@tutors/application/ports";
 import { anonymousAdapters, type Adapters } from "@tutors/svelte-state/adapters";
 import { clock } from "@tutors/clock";
 import { markdownRenderer } from "@tutors/render-markdown";
-import { httpCourseSource } from "@tutors/course-http";
+import { httpCourseSource, httpSnippetStore } from "@tutors/course-http";
 import { localStorageProfile } from "@tutors/profile-localstorage";
 import { inProcessPublisher } from "@tutors/bus-inprocess";
 import { wasmCodeRuntime } from "@tutors/runtime-wasm";
@@ -24,7 +24,7 @@ import {
   supabaseScormRecords,
   updateCourseList
 } from "@tutors/store-supabase";
-import { realtimeClientOptions, supabasePlaygroundLive, supabasePresence } from "@tutors/realtime-supabase";
+import { realtimeClientOptions, supabaseCourseNotices, supabasePlaygroundLive, supabasePresence } from "@tutors/realtime-supabase";
 import { initSupabase } from "@tutors/tutors-time-lib";
 import log, { withRequestId } from "@tutors/logger";
 
@@ -89,6 +89,10 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
     // reader mints at /api/runtime-token (PRIVATE_SUPABASE_JWT_SECRET); without it, nothing is handed in.
     playgroundSnapshots: supabasePlaygroundSnapshots({ url: url!, key: key! }),
     // TODO(budget): the live share is browser-published through the gateway; see realtime-supabase/src/playground-live.ts.
-    playgroundLive: supabasePlaygroundLive(presence.gateway)
+    playgroundLive: supabasePlaygroundLive(presence.gateway),
+    // A shared snippet goes to the reader's server, which keeps it with its service key; notices
+    // (a lecturer's broadcast, a snippet ping) are posted to the server too and watched through the gateway.
+    snippets: httpSnippetStore(),
+    notices: supabaseCourseNotices(client)
   };
 }

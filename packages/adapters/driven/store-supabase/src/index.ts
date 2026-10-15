@@ -1,6 +1,6 @@
 /**
  * The Supabase store adapter: every table Tutors reads and writes, behind the application's
- * ports (LearningEventSink, LearningRecords, ProfilePort, AccessStore, ScormRecords, PlaygroundSnapshots) plus the catalogue, the
+ * ports (LearningEventSink, LearningRecords, ProfilePort, AccessStore, SnippetStore, ScormRecords, PlaygroundSnapshots) plus the catalogue, the
  * error transport and the health check the apps use directly. @supabase/supabase-js is imported
  * here and in the realtime adapter, nowhere else.
  */
@@ -12,6 +12,7 @@ export * from "./profile.ts";
 export * from "./access-store.ts";
 export * from "./scorm-records.ts";
 export * from "./playground-snapshots.ts";
+export * from "./snippets.ts";
 export * from "./catalogue.ts";
 export * from "./course-catalogue.ts";
 export { createSupabaseErrorTransport } from "./error-transport.ts";

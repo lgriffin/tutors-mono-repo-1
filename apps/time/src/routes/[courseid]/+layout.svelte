@@ -15,7 +15,8 @@
     "classTime.labsByStep": "classTime.labsByStepSummary",
     "classTime.rawCalendar": "classTime.rawCalendarSummary",
     "classTime.learningRecords": "classTime.learningRecordsSummary",
-    "classTime.assignments": "classTime.assignmentsSummary"
+    "classTime.assignments": "classTime.assignmentsSummary",
+    "classTime.snippets": "classTime.snippetsSummary"
   };
 
   const courseId = $derived(page.params.courseid ?? "");

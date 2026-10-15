@@ -9,6 +9,7 @@ import type {
   Clock,
   CodeRuntimePort,
   ContentRenderer,
+  CourseNotices,
   CourseSource,
   EventPublisher,
   IdentityClient,
@@ -18,11 +19,14 @@ import type {
   PresencePort,
   ProfilePort,
   ScormRecords,
-  WorkspaceStore
+  WorkspaceStore,
+  SnippetStore
 } from "@tutors/application/ports";
 import {
   InMemoryAccessStore,
+  InMemoryCourseNotices,
   InMemoryCourseSource,
+  InMemorySnippetStore,
   InMemoryLearningEventSink,
   InMemoryPlaygroundLive,
   InMemoryPlaygroundSnapshots,
@@ -47,6 +51,10 @@ export type Adapters = {
   profile: { local: ProfilePort; signedIn: ProfilePort | null };
   accessStore: AccessStore;
   publisher: EventPublisher;
+  /** Where a learner's shared snippet goes (the reader's server, in the browser). */
+  snippets: SnippetStore;
+  /** Lecturer broadcasts and snippet pings, per course. */
+  notices: CourseNotices;
   identityClient: IdentityClient | null;
   /** Where student code runs (playgrounds, notebook cells). */
   codeRuntime: CodeRuntimePort;
@@ -80,6 +88,8 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     profile: { local: profile, signedIn: null },
     accessStore: new InMemoryAccessStore(systemClock),
     publisher: new RecordingPublisher(),
+    snippets: new InMemorySnippetStore(systemClock),
+    notices: new InMemoryCourseNotices(false),
     identityClient: null,
     codeRuntime: new ScriptedCodeRuntimePort(),
     workspaces: new InMemoryWorkspaceStore(),

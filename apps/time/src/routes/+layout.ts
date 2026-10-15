@@ -4,7 +4,7 @@ import type { MessageKey } from "@tutors/i18n";
 
 export const ssr = false;
 
-const VIEWS = ["calendar", "lab", "medians", "assignments"];
+const VIEWS = ["calendar", "lab", "medians", "assignments", "gists"];
 
 /** Derive a human-readable view type from the current pathname. */
 function getViewType(pathname: string): MessageKey | "" {
@@ -13,6 +13,7 @@ function getViewType(pathname: string): MessageKey | "" {
   if (segments.length === 2 && !VIEWS.includes(segments[1])) return "classTime.student"; // /courseid/studentid
   if (segments[1] === "medians") return "classTime.medians";
   if (segments[1] === "assignments") return "classTime.assignments";
+  if (segments[1] === "gists") return "classTime.snippets";
   // /courseid redirects to medians, so this is rarely seen
   if (segments.length === 1) return "classTime.medians";
   if (segments[1] === "calendar") {

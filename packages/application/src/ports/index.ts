@@ -19,3 +19,5 @@ export * from "./workspace-store.ts";
 export * from "./scorm-records.ts";
 export * from "./playground-snapshots.ts";
 export * from "./playground-live.ts";
+export * from "./snippet-store.ts";
+export * from "./course-notices.ts";

@@ -190,6 +190,57 @@ export const WhiteboardSetThemeSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Lecturer -> student broadcast (issue #78), published server-side on the
+// `broadcast:<courseId>` topic.
+// ---------------------------------------------------------------------------
+
+export const CourseBroadcastSchema = z.object({
+  type: z.literal("course:broadcast"),
+  id: z.string().min(1),
+  courseId: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  actionUrl: z.string().optional(),
+  actionLabel: z.string().optional(),
+  senderName: z.string().min(1),
+  sentAt: z.number(),
+});
+
+// ---------------------------------------------------------------------------
+// Ephemeral snippet sharing (issue #155)
+// ---------------------------------------------------------------------------
+
+/** One row of the `course_gists` table (supabase/migrations/20260905_create_course_gists.sql). */
+export const CourseGistSchema = z.object({
+  id: z.string().uuid(),
+  created_at: z.string(),
+  expires_at: z.string(),
+  course_id: z.string().min(1),
+  // GitHub login of the creator.
+  student_id: z.string().min(1),
+  student_name: z.string().nullish(),
+  filename: z.string().nullish(),
+  content: z.string().min(1),
+  title: z.string().nullish(),
+  lo_route: z.string().nullish(),
+  lo_title: z.string().nullish(),
+});
+
+/**
+ * The content-free ping on the `snippets:<courseId>` topic. Strict: the anon key can read this
+ * payload from any browser on the course, so the field list is a privacy boundary.
+ */
+export const GistCreatedEventSchema = z
+  .object({
+    type: z.literal("gist-created"),
+    /** Stable id; a tab shows each ping once. */
+    id: z.string().min(1),
+    courseId: z.string().min(1),
+    sentAt: z.number(),
+  })
+  .strict();
+
+// ---------------------------------------------------------------------------
 // Type exports
 // ---------------------------------------------------------------------------
 
@@ -204,3 +255,6 @@ export type WhiteboardSceneInit = z.infer<typeof WhiteboardSceneInitSchema>;
 export type WhiteboardSceneUpdate = z.infer<typeof WhiteboardSceneUpdateSchema>;
 export type WhiteboardSceneSnapshot = z.infer<typeof WhiteboardSceneSnapshotSchema>;
 export type WhiteboardCursorUpdate = z.infer<typeof WhiteboardCursorUpdateSchema>;
+export type CourseBroadcast = z.infer<typeof CourseBroadcastSchema>;
+export type CourseGist = z.infer<typeof CourseGistSchema>;
+export type GistCreatedEvent = z.infer<typeof GistCreatedEventSchema>;

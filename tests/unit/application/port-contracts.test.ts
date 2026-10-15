@@ -7,8 +7,10 @@ import { describe, it } from "vitest";
 import {
   accessStoreContract,
   codeRuntimeContract,
+  courseNoticesContract,
   eventPublisherContract,
   InMemoryAccessStore,
+  InMemoryCourseNotices,
   InMemoryLearningEventSink,
   InMemoryPlaygroundLive,
   InMemoryPlaygroundSnapshots,
@@ -16,6 +18,7 @@ import {
   InMemoryProfile,
   InMemoryScormRecords,
   InMemoryWorkspaceStore,
+  InMemorySnippetStore,
   learningEventSinkContract,
   playgroundLiveContract,
   playgroundSnapshotsContract,
@@ -25,6 +28,7 @@ import {
   ScriptedCodeRuntime,
   scormRecordsContract,
   workspaceStoreContract,
+  snippetStoreContract,
   type ContractCase
 } from "@tutors/application/testing";
 import { localStorageProfile, type KeyValueStorage } from "@tutors/profile-localstorage";
@@ -68,3 +72,5 @@ contract("ScormRecords: in memory", scormRecordsContract(() => new InMemoryScorm
 contract("PlaygroundSnapshots: in memory", playgroundSnapshotsContract(() => new InMemoryPlaygroundSnapshots({ enabled: true, reviews: ["cs101"] })));
 contract("PlaygroundLive: in memory", playgroundLiveContract(() => new InMemoryPlaygroundLive()));
 contract("CodeRuntime: scripted", codeRuntimeContract(() => new ScriptedCodeRuntime({ runtime: "python" }).script({ stdout: "1\n" })));
+contract("SnippetStore: in memory", snippetStoreContract(() => new InMemorySnippetStore()));
+contract("CourseNotices: in memory", courseNoticesContract(() => new InMemoryCourseNotices()));

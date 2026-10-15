@@ -177,6 +177,9 @@ export function convertMdToHtml(md: string, codeTheme: string) : string;
 // (from ../../adapters/driven/render-markdown/src/markdown-utils.ts)
 export function convertNoteToHtml(course: Course, note: Note, protocol: string);
 
+// (from ../../domain/src/course/utils/course-url.ts)
+export function courseJsonUrl(courseId: string) : string;
+
 // (from ../../domain/src/course/utils/course-utils.ts)
 export function createCompanions(course: Course);
 
@@ -302,7 +305,7 @@ export const simpleTypes;
 |------|-------|
 | class | 1 |
 | const | 8 |
-| function | 36 |
+| function | 37 |
 | interface | 1 |
 | type | 45 |
-| **Total** | **91** |
+| **Total** | **92** |

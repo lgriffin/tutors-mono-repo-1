@@ -43,6 +43,8 @@ export {
   toggleLabViewMode
 } from "@tutors/domain/learning";
 export { BaseCalendarModel, BaseLabModel } from "@tutors/domain/learning";
+// Where a course id's tutors.json is served; the time app's PIN and educator checks read it.
+export { courseJsonUrl } from "@tutors/domain/course";
 
 export { getSupabase, initSupabase } from "./services/supabase.ts";
 export { CourseTime } from "./services/course-time.ts";

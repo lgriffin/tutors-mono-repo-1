@@ -17,6 +17,7 @@ export const variables = defineEnvVars({
   PRIVATE_AUTH_GITHUB_SECRET: optionalString,
   PRIVATE_AUTH_SECRET: optionalString,
   PRIVATE_SUPABASE_JWT_SECRET: optionalString,
+  PRIVATE_SUPABASE_SERVICE_KEY: optionalString,
   MOODLE_WS_URL: optionalString,
   MOODLE_WS_TOKEN: optionalString,
   MOODLE_WS_REST_FORMAT: optionalString,

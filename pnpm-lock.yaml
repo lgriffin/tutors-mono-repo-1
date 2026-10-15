@@ -465,12 +465,24 @@ importers:
       '@tutors/application':
         specifier: workspace:*
         version: link:../../packages/application
+      '@tutors/course-http':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driven/course-http
+      '@tutors/identity-better-auth':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driven/identity-better-auth
       '@tutors/moodle':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/moodle
+      '@tutors/realtime-supabase':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driven/realtime-supabase
       '@tutors/store-supabase':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/store-supabase
+      '@tutors/svelte-state':
+        specifier: workspace:*
+        version: link:../../packages/adapters/driving/svelte-state
       isomorphic-dompurify:
         specifier: ^4.5.0
         version: 4.5.0(@noble/hashes@2.4.0)
@@ -508,6 +520,9 @@ importers:
       '@tutors/i18n':
         specifier: workspace:*
         version: link:../../packages/adapters/driving/i18n
+      '@tutors/identity':
+        specifier: workspace:*
+        version: link:../../packages/jsr/identity
       '@tutors/logger':
         specifier: workspace:*
         version: link:../../packages/platform/logger
@@ -901,6 +916,9 @@ importers:
       '@tutors/a11y':
         specifier: workspace:*
         version: link:../a11y
+      '@tutors/application':
+        specifier: workspace:*
+        version: link:../../../application
       '@tutors/i18n':
         specifier: workspace:*
         version: link:../i18n
