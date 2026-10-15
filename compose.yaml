@@ -79,6 +79,11 @@ services:
       PROTOCOL_HEADER: x-forwarded-proto
       HOST_HEADER: x-forwarded-host
       PUBLIC_ANON_MODE: ${PUBLIC_ANON_MODE:-TRUE}
+      # Unset, the store is Supabase. DATA_STORE=postgres uses the `store-postgres`
+      # profile's database over the compose network (not localhost, which is this container);
+      # COMPOSE_DATABASE_URL points it elsewhere.
+      DATA_STORE: ${DATA_STORE:-}
+      PRIVATE_DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgres://tutors:tutors@postgres:5432/tutors}
 
   catalogue:
     <<: *app
@@ -184,6 +189,33 @@ services:
       retries: 3
       start_period: 10s
 
+  # Plain Postgres for the reader's and time's student data, off by default:
+  #
+  #   docker compose --profile store-postgres up --build
+  #
+  # applies db/migrations on first start (db/compose-init.sh, recorded in
+  # schema_migrations). DATA_STORE=postgres points the reader and time at it over
+  # the compose network. From the host, port 5433; later migrations:
+  # PRIVATE_DATABASE_URL=postgres://tutors:tutors@localhost:5433/tutors pnpm db:migrate
+  postgres:
+    profiles: ["store-postgres"]
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${STORE_DB_USER:-tutors}
+      POSTGRES_PASSWORD: ${STORE_DB_PASSWORD:-tutors}
+      POSTGRES_DB: ${STORE_DB_NAME:-tutors}
+    ports:
+      - "${STORE_DB_PORT:-5433}:5432"
+    volumes:
+      - store-data:/var/lib/postgresql/data
+      - ./db/migrations:/migrations:ro
+      - ./db/compose-init.sh:/docker-entrypoint-initdb.d/compose-init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${STORE_DB_USER:-tutors} -d ${STORE_DB_NAME:-tutors}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   time:
     <<: *app
     image: ${TUTORS_IMAGE_PREFIX:-tutors/}time:${TUTORS_TAG:-local}
@@ -196,6 +228,12 @@ services:
       PROTOCOL_HEADER: x-forwarded-proto
       HOST_HEADER: x-forwarded-host
       PUBLIC_ANON_MODE: ${PUBLIC_ANON_MODE:-TRUE}
+      # Unset, the store is Supabase. DATA_STORE=postgres uses the `store-postgres`
+      # profile's database over the compose network (not localhost, which is this container);
+      # COMPOSE_DATABASE_URL points it elsewhere.
+      DATA_STORE: ${DATA_STORE:-}
+      PRIVATE_DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgres://tutors:tutors@postgres:5432/tutors}
 
 volumes:
   timescale-data:
+  store-data:

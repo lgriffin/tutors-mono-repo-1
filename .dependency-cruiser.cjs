@@ -42,7 +42,7 @@ const VENDORS = [
   { name: "markdown", match: "(^|/)(markdown-it|katex|shiki|mermaid|@marp-team)(/|$)", adapter: "^packages/adapters/driven/render-markdown/" },
   { name: "better-auth", match: "(^|/)(@better-auth/|better-auth(/|$))", adapter: "^packages/adapters/driven/identity-better-auth/" },
   { name: "redis", match: "(^|/)(redis|@redis/[^/]+)(/|$)", adapter: "^packages/adapters/driven/live-redis/" },
-  { name: "pg", match: "(^|/)(pg|pg-[^/]+)(/|$)", adapter: "^packages/adapters/driven/live-postgres/" }
+  { name: "pg", match: "(^|/)(pg|pg-[^/]+)(/|$)", adapter: "^packages/adapters/driven/(live-postgres|store-postgres)/" }
 ];
 
 /** The authoring toolchain (generator and CLIs) is published on its own and is not an adapter of the reader; its extraction is a separate phase. */

@@ -15,6 +15,6 @@ export const POST: RequestHandler = async ({ request }) => {
   if (Number(request.headers.get("content-length") ?? 0) > MAX_LIVE_ACTIVITY_BYTES) {
     return json({ message: "body is larger than 4 KB" }, { status: 400 });
   }
-  const result = await receiveLiveActivity(await request.text(), readerServer().data?.db);
+  const result = await receiveLiveActivity(await request.text(), readerServer().data?.realtime ?? undefined);
   return result.body === undefined ? new Response(null, { status: result.status }) : json(result.body, { status: result.status });
 };

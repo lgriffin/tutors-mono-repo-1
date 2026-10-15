@@ -18,13 +18,15 @@
     "@supabase/supabase-js": "^2.117.1",
     "@tutors/application": "workspace:*",
     "@tutors/course-http": "workspace:*",
+    "@tutors/data-api": "workspace:*",
     "@tutors/identity-better-auth": "workspace:*",
     "@tutors/moodle": "workspace:*",
-    "@tutors/data-api": "workspace:*",
     "@tutors/realtime-supabase": "workspace:*",
+    "@tutors/store-postgres": "workspace:*",
     "@tutors/store-supabase": "workspace:*",
     "@tutors/svelte-state": "workspace:*",
-    "isomorphic-dompurify": "^4.5.0"
+    "isomorphic-dompurify": "^4.5.0",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@iconify/svelte": "^5.2.2",

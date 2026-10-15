@@ -1,22 +1,21 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-import { checkSupabase, getRecentErrorCounts } from "@tutors/store-supabase";
 import { now } from "@tutors/clock";
-import { serviceClient } from "#lib/server/snippets.ts";
+import { storeHealth } from "#lib/server/snippets.ts";
 
-/** The database is read with the server's service client; the browser's anon key reads nothing (Rule 0472). */
+/** The store is read by the server, never with the browser's anon key (Rule 0472); the check is named for the store DATA_STORE picks. */
 export const GET: RequestHandler = async () => {
-  const db = serviceClient();
-  const [supabaseCheck, errorCounts] = await Promise.all([checkSupabase(db), getRecentErrorCounts(db)]);
+  const health = storeHealth();
+  const [storeCheck, errorCounts] = await Promise.all([health.check(), health.errorCounts()]);
 
-  const overallStatus = supabaseCheck.status === "ok" || supabaseCheck.status === "skipped" ? "ok" : "degraded";
+  const overallStatus = storeCheck.status === "ok" || storeCheck.status === "skipped" ? "ok" : "degraded";
 
   return json({
     status: overallStatus,
     timestamp: now().toISOString(),
     app: "tutors-time",
     checks: {
-      supabase: supabaseCheck
+      [health.store]: storeCheck
     },
     errors: {
       last60min: errorCounts

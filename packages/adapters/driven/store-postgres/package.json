@@ -1,0 +1,24 @@
+{
+  "name": "@tutors/store-postgres",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Plain Postgres adapter for Tutors: learning records, learner profiles, content locks, snippets, SCORM, playground hand-ins, the catalogue and the error log behind the application ports",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tutors/application": "workspace:*",
+    "@tutors/domain": "workspace:*",
+    "@tutors/logger": "workspace:*"
+  },
+  "peerDependencies": {
+    "pg": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
+  }
+}

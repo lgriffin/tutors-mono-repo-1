@@ -10,3 +10,5 @@ export const SYNC_INTERVAL_MINUTES: string | undefined = undefined;
 export const PRIVATE_API_ALLOWED_ORIGINS: string | undefined = undefined;
 export const PRIVATE_COURSE_HOSTS: string | undefined = undefined;
 export const PRIVATE_TUTORS_ADMINS: string | undefined = undefined;
+export const DATA_STORE: string | undefined = undefined;
+export const PRIVATE_DATABASE_URL: string | undefined = undefined;

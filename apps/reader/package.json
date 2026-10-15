@@ -27,10 +27,12 @@
     "@tutors/render-markdown": "workspace:*",
     "@tutors/runtime-wasm": "workspace:*",
     "@tutors/scorm-runtime": "workspace:*",
+    "@tutors/store-postgres": "workspace:*",
     "@tutors/store-supabase": "workspace:*",
     "@tutors/workspace-indexeddb": "workspace:*",
     "dompurify": "^3.4.14",
-    "isomorphic-dompurify": "^4.5.0"
+    "isomorphic-dompurify": "^4.5.0",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@codemirror/lang-python": "^6.2.1",

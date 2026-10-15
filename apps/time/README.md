@@ -34,7 +34,7 @@ Runs on http://localhost:5176
 - `@tutors/tutors-time-lib` for course time, calendar and lab models
 - `@tutors/ui-navigators`, `@tutors/ui-components` and `@tutors/ui-primitives` for the shell, heatmaps, tables and icons
 - `@tutors/themes` and `@tutors/i18n` for themes and interface text
-- `@tutors/store-supabase` for the server's service-key access (snippets, health check) and the browser's Realtime client, composed in `src/lib/compose.ts` and `src/lib/server/snippets.ts`; `@tutors/data-api` reports errors to the reader's `POST /api/errors`; `@tutors/moodle` and `@tutors/application` for the Moodle assignment source behind its port
+- `@tutors/store-supabase` for the server's service-key access (snippets, health check) and the browser's Realtime client, composed in `src/lib/compose.ts` and `src/lib/server/snippets.ts`; `@tutors/store-postgres` for the same server access when `DATA_STORE=postgres`; `@tutors/data-api` reports errors to the reader's `POST /api/errors`; `@tutors/moodle` and `@tutors/application` for the Moodle assignment source behind its port
 - `@tutors/identity-better-auth` (and the `@tutors/identity` contracts) for the educator sign-in behind the shared-snippets page; `@tutors/course-http` for the course's published enrollment the educator check reads; `@tutors/realtime-supabase` and `@tutors/svelte-state` for the snippet pings the page hears, composed in `src/lib/compose.ts`
 - `@tutors/logger`, `@tutors/metrics` and `@tutors/clock` for logs, `GET /metrics`, the server clock seam (`HARNESS_NOW`) and `GET /version`
 - AG Grid, Heat.js, Tailwind CSS v4 + Skeleton UI

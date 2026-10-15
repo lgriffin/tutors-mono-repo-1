@@ -436,6 +436,8 @@ export const publicEnv: Record<string, string> = {
 
 export const privateEnv: Record<string, string> = {
   PRIVATE_SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+  DATA_STORE: "",
+  PRIVATE_DATABASE_URL: "",
   PRIVATE_API_ALLOWED_ORIGINS: "https://time.test",
   PRIVATE_COURSE_HOSTS: "",
   PRIVATE_TUTORS_ADMINS: ""

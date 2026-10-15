@@ -58,6 +58,7 @@ export const workspaceAliases: Record<string, string> = {
   "@tutors/scorm-runtime": resolve(root, "packages/adapters/driving/scorm-runtime/src/index.ts"),
   "@tutors/live-redis": resolve(root, "packages/adapters/driven/live-redis/src/index.ts"),
   "@tutors/live-postgres": resolve(root, "packages/adapters/driven/live-postgres/src/index.ts"),
+  "@tutors/store-postgres": resolve(root, "packages/adapters/driven/store-postgres/src/index.ts"),
   "@tutors/live-events-http": resolve(root, "packages/adapters/driven/live-events-http/src/index.ts"),
   "@tutors/svelte-state/adapters": resolve(root, "packages/adapters/driving/svelte-state/src/adapters.ts"),
   "@tutors/identity": resolve(root, "packages/jsr/identity/src/index.ts"),
