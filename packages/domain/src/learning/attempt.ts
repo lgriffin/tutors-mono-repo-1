@@ -4,7 +4,7 @@
  * route with the step id appended (`learningObjectRoute`), so the step is the last segment.
  */
 import type { LearningRecordRow } from "./rows.ts";
-import type { StepRef } from "./step-ref.ts";
+import { trimSlashes, type StepRef } from "./step-ref.ts";
 
 export type Attempt = {
   ref: StepRef;
@@ -27,15 +27,13 @@ export type LabSteps = {
   stepIds: readonly string[];
 };
 
-const trimSlash = (route: string) => route.replace(/\/+$/, "");
-
 /**
  * One attempt per learner per step of the lab, from the records of that lab. A record whose step
  * the lab no longer has stays an attempt under the lab, marked removed, so no history is lost when
  * an author renames a step. Records of other labs and courses are ignored.
  */
 export function attemptsFromRecords(records: readonly LearningRecordRow[], lab: LabSteps): Attempt[] {
-  const prefix = `${trimSlash(lab.recordRoute)}/`;
+  const prefix = `${trimSlashes(lab.recordRoute, false)}/`;
   const known = new Set(lab.stepIds);
   const attempts: Attempt[] = [];
   for (const record of records) {

@@ -3,7 +3,7 @@
  * their browser (decision D1); the learner may export a course's notes as one markdown document
  * (Rule 0382) or share one as a reflection (Rule 0384).
  */
-import type { StepRef } from "./step-ref.ts";
+import { trimSlashes, type StepRef } from "./step-ref.ts";
 
 export const NOTE_KINDS = ["note", "discovery", "question", "snippet", "reflection"] as const;
 export type NoteKind = (typeof NOTE_KINDS)[number];
@@ -22,8 +22,6 @@ export type Note = {
 export function isNoteKind(value: unknown): value is NoteKind {
   return typeof value === "string" && (NOTE_KINDS as readonly string[]).includes(value);
 }
-
-const trimSlashes = (s: string) => s.replace(/^\/+|\/+$/g, "");
 
 /** Where a step's note is kept in browser storage: `@notes/{courseId}/{labRoute}/{stepId}`. */
 export function noteKey(ref: StepRef): string {

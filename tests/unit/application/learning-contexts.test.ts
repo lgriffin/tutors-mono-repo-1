@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { openRequest, queueOrder, shouldExpire, transition, type HelpRequest } from "@tutors/domain/assistance";
 import { anchorOf, audienceOf, isBroadcast } from "@tutors/domain/feedback";
 import { cohortProfile, median, percentile, responseTimes, studentProgress } from "@tutors/domain/insights";
-import { isStepRef, noteKey, notesToMarkdown, sameStep, stepKey, type StepRef } from "@tutors/domain/learning";
+import { isStepRef, noteKey, notesToMarkdown, sameStep, stepKey, trimSlashes, type StepRef } from "@tutors/domain/learning";
 import {
   broadcast,
   helpQueue,
@@ -42,6 +42,7 @@ describe("learning", () => {
     expect(sameStep(ref, { ...ref, stepId: "03" })).toBe(false);
     expect(stepKey(ref)).toBe("cs101|/lab/cs101/lab-01|02");
     expect(noteKey(ref)).toBe("@notes/cs101/lab/cs101/lab-01/02");
+    expect([trimSlashes("//a/b//"), trimSlashes("/a/", false), trimSlashes("///"), trimSlashes("/".repeat(100000) + "x")]).toEqual(["a/b", "/a", "", "x"]);
   });
 
   it("exports no empty note and falls back to routes when titles are missing", () => {

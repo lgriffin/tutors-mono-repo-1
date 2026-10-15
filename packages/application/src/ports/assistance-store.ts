@@ -5,7 +5,11 @@
 import type { HelpRequest, HelpState, NewHelpRequest } from "@tutors/domain/assistance";
 
 export interface AssistanceStore {
-  /** Keeps a new request and resolves it with its id; rejects when it could not be kept. */
+  /**
+   * Keeps a new request and resolves it with its id; rejects when it could not be kept. A durable
+   * adapter rejects a second live request for the same learner and course (a unique index), so
+   * two opens racing each other cannot both succeed.
+   */
   open(request: NewHelpRequest): Promise<HelpRequest>;
   /** One request by id, or null. */
   get(id: string): Promise<HelpRequest | null>;

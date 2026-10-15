@@ -36,3 +36,12 @@ export function sameStep(a: StepRef, b: StepRef): boolean {
 export function stepKey(ref: StepRef): string {
   return `${ref.courseId}|${ref.labRoute}|${ref.stepId}`;
 }
+
+/** `s` without the slashes at its start (when `leading`) and its end; a loop, so no input makes it slow. */
+export function trimSlashes(s: string, leading = true): string {
+  let start = 0;
+  let end = s.length;
+  while (leading && start < end && s[start] === "/") start++;
+  while (end > start && s[end - 1] === "/") end--;
+  return s.slice(start, end);
+}
