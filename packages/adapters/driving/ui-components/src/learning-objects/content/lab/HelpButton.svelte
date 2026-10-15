@@ -5,7 +5,7 @@
    * and how long they have waited, with Change kind, Withdraw and Solved it. Hidden in anonymous mode and for
    * visitors who are not signed in; the lab works the same without it.
    */
-  import { onDestroy, tick } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
   import { helpService } from "@tutors/svelte-state/assistance/help";
   import { tutorsId } from "@tutors/svelte-state";
   import { HELP_KINDS, isLive, type HelpKind } from "@tutors/domain/assistance";
@@ -24,8 +24,12 @@
   let now = $state(Date.now());
   let menu = $state<HTMLElement | null>(null);
 
+  // Only the step and sign-in drive this effect: arrive() reads and writes the service's runes, which
+  // would otherwise make the effect depend on them and run it again on every write.
   $effect(() => {
-    if (ref) void helpService.arrive(ref, signedIn);
+    const at = ref;
+    const signed = signedIn;
+    if (at) untrack(() => void helpService.arrive(at, signed));
   });
 
   // Leaving the lab stops reading the request; arriving at a lab again resumes it.
