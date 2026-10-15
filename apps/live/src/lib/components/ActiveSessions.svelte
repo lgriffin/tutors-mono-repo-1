@@ -29,11 +29,11 @@
 <section class="card preset-filled-surface-100-900 flex min-w-0 flex-col gap-3 p-4">
   <header class="flex flex-wrap items-baseline justify-between gap-2">
     <h2 class="text-base font-semibold">Sessions open now</h2>
-    <span class="text-surface-600-400 text-xs">{sessions.length} in the last 2 minutes</span>
+    <span class="text-[var(--ui-muted)] text-xs">{sessions.length} in the last 2 minutes</span>
   </header>
 
   {#if sessions.length === 0}
-    <p class="text-surface-600-400 py-4 text-center text-sm">Nobody is reading right now.</p>
+    <p class="text-[var(--ui-muted)] py-4 text-center text-sm">Nobody is reading right now.</p>
   {:else}
     <div class="table-wrap">
       <table class="table table-fixed text-sm">
@@ -67,11 +67,11 @@
       </table>
     </div>
     {#if remaining > 0}
-      <p class="text-surface-600-400 text-xs">and {remaining} more session{remaining === 1 ? "" : "s"}</p>
+      <p class="text-[var(--ui-muted)] text-xs">and {remaining} more session{remaining === 1 ? "" : "s"}</p>
     {/if}
   {/if}
 
-  <p class="text-surface-600-400 text-xs">
+  <p class="text-[var(--ui-muted)] text-xs">
     A session handle is derived from that day's random token. It is not a person, and it does not survive the night.
   </p>
 </section>

@@ -103,7 +103,7 @@ import type { ActivityResponse, StatsResponse } from "@tutors/application";
     <section class="card preset-filled-surface-100-900 flex min-w-0 flex-col gap-3 p-4">
       <h2 class="text-base font-semibold">Reading right now</h2>
       {#if !here || here.los.length === 0}
-        <p class="text-surface-600-400 py-4 text-center text-sm">Nobody is on this course right now.</p>
+        <p class="text-[var(--ui-muted)] py-4 text-center text-sm">Nobody is on this course right now.</p>
       {:else}
         <ul class="flex flex-col gap-1">
           {#each here.los as lo (lo.lo)}
@@ -126,7 +126,7 @@ import type { ActivityResponse, StatsResponse } from "@tutors/application";
     <section class="card preset-filled-surface-100-900 flex min-w-0 flex-col gap-3 p-4">
       <h2 class="text-base font-semibold">Top labs and topics</h2>
       {#if !stats?.topLos || stats.topLos.length === 0}
-        <p class="text-surface-600-400 py-4 text-center text-sm">No learning objects opened in this range yet.</p>
+        <p class="text-[var(--ui-muted)] py-4 text-center text-sm">No learning objects opened in this range yet.</p>
       {:else}
         <div class="table-wrap">
           <table class="table table-fixed text-sm">
@@ -150,7 +150,7 @@ import type { ActivityResponse, StatsResponse } from "@tutors/application";
     <section class="card preset-filled-surface-100-900 flex min-w-0 flex-col gap-3 p-4">
       <h2 class="text-base font-semibold">Service mix</h2>
       {#if mix.length === 0}
-        <p class="text-surface-600-400 py-4 text-center text-sm">No service touches in this range yet.</p>
+        <p class="text-[var(--ui-muted)] py-4 text-center text-sm">No service touches in this range yet.</p>
       {:else}
         <ul class="flex flex-col gap-2">
           {#each mix as entry (entry.service)}

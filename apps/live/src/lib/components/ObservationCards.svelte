@@ -22,7 +22,7 @@
 <section class="card preset-filled-surface-100-900 flex min-w-0 flex-col gap-3 p-4">
   <h2 class="text-base font-semibold">Observations</h2>
   {#if observations.length === 0}
-    <p class="text-surface-600-400 py-4 text-center text-sm">Nothing out of the ordinary.</p>
+    <p class="text-[var(--ui-muted)] py-4 text-center text-sm">Nothing out of the ordinary.</p>
   {:else}
     <ul class="flex flex-col gap-2">
       {#each observations as observation (observation.id)}
@@ -31,7 +31,7 @@
             <span class="text-sm font-semibold">{observation.title}</span>
             <span class="badge preset-tonal text-xs">{observation.kind}</span>
           </div>
-          <p class="text-surface-600-400 text-xs leading-relaxed">{observation.detail}</p>
+          <p class="text-[var(--ui-muted)] text-xs leading-relaxed">{observation.detail}</p>
           {#if observation.course}
             <a class="anchor text-xs" href="/course/{observation.course}">Open {observation.course}</a>
           {/if}

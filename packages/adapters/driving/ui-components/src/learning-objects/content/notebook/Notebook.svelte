@@ -18,7 +18,8 @@
 
   // One kernel for the notebook, handed to the cells through context. Nothing is
   // downloaded until a cell is actually run.
-  const kernel = createNotebookKernel(notebook.notebook.kernelLanguage);
+  // Course JSON published before the generator recorded a kernel has none; such notebooks were always Python.
+  const kernel = createNotebookKernel(notebook.notebook.kernelLanguage || "python");
   setNotebookKernel(kernel);
 
   /** How far below the top of the view a cell still counts as the one being read, in pixels. */

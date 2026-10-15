@@ -32,11 +32,11 @@
 <section class="card preset-filled-surface-100-900 flex min-w-0 flex-col gap-3 p-4">
   <header class="flex flex-wrap items-baseline justify-between gap-2">
     <h2 class="text-base font-semibold">Visits per day</h2>
-    <span class="text-surface-600-400 text-xs">{count(total)} visitors</span>
+    <span class="text-[var(--ui-muted)] text-xs">{count(total)} visitors</span>
   </header>
 
   {#if rows.length === 0}
-    <p class="text-surface-600-400 py-4 text-center text-sm">No sessions in this range yet.</p>
+    <p class="text-[var(--ui-muted)] py-4 text-center text-sm">No sessions in this range yet.</p>
   {:else}
     <ul class="flex flex-col gap-2">
       {#each rows as row (row.label)}
@@ -46,12 +46,12 @@
             <span class="bg-primary-500 block h-full rounded-full" style="width: {(row.tokens / peak) * 100}%"></span>
           </span>
           <span class="w-20 shrink-0 text-right text-xs tabular-nums">
-            {count(row.tokens)}<span class="text-surface-600-400"> · {percent(row.tokens / Math.max(1, total))}</span>
+            {count(row.tokens)}<span class="text-[var(--ui-muted)]"> · {percent(row.tokens / Math.max(1, total))}</span>
           </span>
         </li>
       {/each}
     </ul>
   {/if}
 
-  <p class="text-surface-600-400 text-xs">Sessions opened by one daily token on one day. Nothing here links two days together.</p>
+  <p class="text-[var(--ui-muted)] text-xs">Sessions opened by one daily token on one day. Nothing here links two days together.</p>
 </section>

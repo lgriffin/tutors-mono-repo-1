@@ -99,7 +99,7 @@
     <div class="flex items-baseline gap-3">
       <p class="ui-eyebrow">{t("home.live")}</p>
       <h1 class="ui-title">Tutors Live</h1>
-      <span class="text-surface-600-400 flex items-center gap-1 text-xs">
+      <span class="text-[var(--ui-muted)] flex items-center gap-1 text-xs">
         <span
           class="inline-block size-2 rounded-full {connected ? 'bg-success-500 animate-pulse' : 'bg-surface-400-600'}"
           aria-hidden="true"

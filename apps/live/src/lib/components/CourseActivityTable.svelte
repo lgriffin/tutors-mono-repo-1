@@ -26,14 +26,14 @@ import type { ActivityResponse } from "@tutors/application";
   <header class="flex flex-wrap items-baseline justify-between gap-2">
     <h2 class="text-base font-semibold">Course activity</h2>
     {#if activity}
-      <span class="text-surface-600-400 text-xs">
+      <span class="text-[var(--ui-muted)] text-xs">
         {count(activity.visitors)} visitors · {count(activity.sessions)} sessions · {percent(activity.returningRate)} came back
       </span>
     {/if}
   </header>
 
   {#if rows.length === 0}
-    <p class="text-surface-600-400 py-4 text-center text-sm">No course activity in this range yet.</p>
+    <p class="text-[var(--ui-muted)] py-4 text-center text-sm">No course activity in this range yet.</p>
   {:else}
     <div class="table-wrap">
       <table class="table table-fixed text-sm">
@@ -58,7 +58,7 @@ import type { ActivityResponse } from "@tutors/application";
                 {#if row.activeNow > 0}
                   <span class="badge preset-filled-success-500">{row.activeNow}</span>
                 {:else}
-                  <span class="text-surface-600-400">—</span>
+                  <span class="text-[var(--ui-muted)]">—</span>
                 {/if}
               </td>
               <td class="text-right text-xs tabular-nums">{since(row.lastSeen)}</td>
@@ -77,7 +77,7 @@ import type { ActivityResponse } from "@tutors/application";
     </div>
   {/if}
 
-  <p class="text-surface-600-400 text-xs">
+  <p class="text-[var(--ui-muted)] text-xs">
     Visitors are distinct daily tokens {rangeLabel[range]}; "came back" is the share of sessions from a token that opened the course more than
     once on the same day. Tokens are regenerated every night, so nobody is counted across days.
   </p>

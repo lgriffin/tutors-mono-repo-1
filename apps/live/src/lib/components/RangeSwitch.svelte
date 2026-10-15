@@ -15,7 +15,7 @@
   {#each RANGES as range (range)}
     <button
       type="button"
-      class="btn btn-sm {value === range ? 'preset-filled-primary-500' : 'preset-tonal'}"
+      class="btn btn-sm {value === range ? 'bg-[var(--ui-brand)] text-[var(--ui-on-brand)]' : 'preset-tonal'}"
       aria-pressed={value === range}
       onclick={() => onchange(range)}
     >

@@ -97,7 +97,7 @@
 <section class="card preset-filled-surface-100-900 flex min-w-0 flex-col gap-3 p-4">
   <header class="flex flex-wrap items-baseline justify-between gap-2">
     <h2 class="text-base font-semibold">{title ?? matrix.title}</h2>
-    <span class="text-surface-600-400 truncate text-xs" aria-live="polite">
+    <span class="text-[var(--ui-muted)] truncate text-xs" aria-live="polite">
       {#if readout}
         {readout}
       {:else}
@@ -107,7 +107,7 @@
   </header>
 
   {#if empty}
-    <p class="text-surface-600-400 py-6 text-center text-sm">No {matrix.unit} recorded in this range yet.</p>
+    <p class="text-[var(--ui-muted)] py-6 text-center text-sm">No {matrix.unit} recorded in this range yet.</p>
   {:else}
     <div class="w-full overflow-x-auto">
       <svg
@@ -193,7 +193,7 @@
       </svg>
     </div>
 
-    <div class="text-surface-600-400 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+    <div class="text-[var(--ui-muted)] flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
       <span class="flex items-center gap-2">
         <span>less</span>
         {#each [0, 0.25, 0.5, 0.75, 1] as level (level)}

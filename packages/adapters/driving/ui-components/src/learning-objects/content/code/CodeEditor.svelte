@@ -19,8 +19,10 @@
     /** Ctrl/Cmd+Enter, the shortcut every notebook has trained people to expect. */
     onRun?: () => void;
     minHeight?: string;
+    /** The editor's accessible name, so assistive technology (and the e2e suite) can find it as a textbox. */
+    label?: string;
   }
-  let { value, language = "python", readOnly = false, onChange, onRun, minHeight = "auto" }: Props = $props();
+  let { value, language = "python", readOnly = false, onChange, onRun, minHeight = "auto", label }: Props = $props();
 
   let container: HTMLDivElement;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,6 +64,7 @@
     const editable = new Compartment();
 
     const extensions = [
+      ...(label ? [EditorView.contentAttributes.of({ "aria-label": label })] : []),
       lineNumbers(),
       highlightActiveLine(),
       highlightActiveLineGutter(),

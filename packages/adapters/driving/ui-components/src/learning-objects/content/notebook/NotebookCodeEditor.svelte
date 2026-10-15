@@ -30,6 +30,7 @@
   let failed = $state(false);
 
   const editorLanguage = $derived(language === "javascript" || language === "typescript" ? language : "python");
+  const runtimeName = $derived(editorLanguage === "javascript" ? "JavaScript" : editorLanguage === "typescript" ? "TypeScript" : "Python");
   const runnable = $derived(notebookKernel?.runtime !== null && notebookKernel?.runtime !== undefined);
 
   function handleEvent(event: RuntimeEvent, id: string) {
@@ -76,7 +77,7 @@
 </script>
 
 <div class="notebook-editor">
-  <CodeEditor value={code} language={editorLanguage} onChange={(value) => (code = value)} onRun={runCode} />
+  <CodeEditor value={code} language={editorLanguage} label={`${language} exercise code`} onChange={(value) => (code = value)} onRun={runCode} />
 </div>
 
 <div class="border-surface-200 dark:border-surface-700 flex items-center gap-2 border-t px-3 py-1.5">
@@ -107,8 +108,8 @@
 </div>
 
 {#if hasRun && output}
-  <div class="notebook-outputs border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900 border-t p-3">
-    <pre class="font-mono text-sm whitespace-pre-wrap {failed ? 'text-error-600 dark:text-error-400' : ''}" aria-live="polite">{output}</pre>
+  <div class="notebook-outputs border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900 border-t p-3" role="status" aria-label={`${runtimeName} output`}>
+    <pre class="font-mono text-sm whitespace-pre-wrap {failed ? 'text-error-600 dark:text-error-400' : ''}">{output}</pre>
   </div>
 {/if}
 
