@@ -34,7 +34,8 @@ import {
   readerApiProfile,
   readerApiScormRecords,
   readerApiWhiteboardStore,
-  readerApiHelpDesk
+  readerApiHelpDesk,
+  readerApiFeedbackDesk
 } from "@tutors/data-api";
 import log, { withRequestId } from "@tutors/logger";
 
@@ -142,6 +143,8 @@ function signedInAdapters(
     snippets: httpSnippetStore(),
     notices: realtime.notices,
     // A student's help requests go to the reader's server, which keeps them as the session's login (Rule 0390).
-    helpDesk: readerApiHelpDesk()
+    helpDesk: readerApiHelpDesk(),
+    // Lecturer feedback is read and posted through the reader's server as the session's login.
+    feedbackDesk: readerApiFeedbackDesk()
   };
 }

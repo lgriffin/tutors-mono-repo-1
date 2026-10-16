@@ -45,3 +45,17 @@ export function trimSlashes(s: string, leading = true): string {
   while (end > start && s[end - 1] === "/") end--;
   return s.slice(start, end);
 }
+
+/**
+ * The step a reader route names, `/lab/<courseId>/<lab...>/<stepId>`, or null when the route is not
+ * a step of one of the course's labs (a lab's own route names no step). A shared snippet carries the
+ * route it was shared from, so feedback on it lands on that step.
+ */
+export function stepRefOfRoute(courseId: string, route: string | null | undefined): StepRef | null {
+  const prefix = `/lab/${courseId}/`;
+  if (!courseId || !route?.startsWith(prefix)) return null;
+  const rest = trimSlashes(route.slice(prefix.length));
+  const cut = rest.lastIndexOf("/");
+  if (cut <= 0) return null;
+  return stepRef(courseId, `${prefix}${rest.slice(0, cut)}`, rest.slice(cut + 1));
+}

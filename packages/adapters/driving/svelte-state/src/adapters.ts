@@ -13,6 +13,7 @@ import type {
   CourseNotices,
   CourseSource,
   EventPublisher,
+  FeedbackDesk,
   HelpDesk,
   IdentityClient,
   LearningEventSink,
@@ -46,6 +47,7 @@ import {
   RecordingLiveEventReporter,
   RecordingPublisher,
   ScriptedCodeRuntimePort,
+  SignedOutFeedbackDesk,
   SignedOutHelpDesk
 } from "@tutors/application/testing";
 
@@ -94,6 +96,12 @@ export type Adapters = {
    * (Rule 0390). With nobody to sign in, every ask is refused.
    */
   helpDesk: HelpDesk;
+  /**
+   * Lecturer feedback as the person signed in: a student reads what was posted for them at a step,
+   * a lecturer posts, broadcasts and revokes from the reader, Tutors Live or Tutors Time. The browser
+   * only asks; the reader's server keeps annotations. With nobody to sign in, there is nothing.
+   */
+  feedbackDesk: FeedbackDesk;
 };
 
 const systemClock: Clock = { now: () => new Date(), nowMs: () => Date.now() };
@@ -126,6 +134,7 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     notes: new InMemoryNotesStore(),
     assistanceFeed: new InMemoryAssistanceFeed(false),
     helpDesk: new SignedOutHelpDesk(),
+    feedbackDesk: new SignedOutFeedbackDesk(),
     ...overrides
   };
 }

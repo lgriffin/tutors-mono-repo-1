@@ -3,7 +3,9 @@
    * The learner's private notes on a lab step (Rules 0380 to 0383, 0554 to 0558): docked beside the
    * step on a wide screen and a bottom sheet under 1024px, minimised to a bar or closed to the
    * Notes button, with the same state on every step. Notes stay in this browser; the exports are
-   * built here and downloaded, never sent anywhere.
+   * built here and downloaded, never sent anywhere, unless the signed-in student shares one step's
+   * note with the course's lecturers as a reflection (a copy; the note stays theirs, Rule 0384). The
+   * feedback history lists what lecturers posted for them in the course, newest first (Rule 0409).
    */
   import { tick } from "svelte";
   import type { LiveLab } from "@tutors/svelte-state/course";
@@ -12,6 +14,7 @@
   import { NOTE_KINDS, stepRef, type StepRef } from "@tutors/domain/learning";
   import { sanitizeHtml } from "@tutors/ui-primitives/utils/sanitize";
   import { toaster } from "@tutors/ui-primitives/utils/toaster";
+  import { feedbackService } from "@tutors/svelte-state/feedback/step";
   import { t, type MessageKey } from "@tutors/i18n";
 
   let { lab }: { lab: LiveLab } = $props();
@@ -84,6 +87,16 @@
     confirmingDelete = false;
   }
 
+  async function shareNote() {
+    if (!ref) return;
+    const note = { ref, body: notesService.body.value, kind: notesService.kind.value, updatedAt: new Date().toISOString(), labTitle: lab.lab.title, stepTitle };
+    const shared = await feedbackService.share(note);
+    toaster.create({ type: shared ? "success" : "error", title: t(shared ? "feedback.shared" : "feedback.shareFailed") });
+  }
+
+  const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+  const stepUrl = (r: StepRef) => `${r.labRoute}/${r.stepId}`;
+
   async function openPanel() {
     notesService.open();
     await tick();
@@ -123,7 +136,18 @@
   {:else if panel.open}
     <aside id="notes-panel" class="notes-panel ui-panel" aria-label={t("notes.title")} style:--notes-width={`${panel.width}px`}>
       <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-      <div class="resize-handle" role="separator" aria-orientation="vertical" aria-label={t("notes.resize")} aria-valuemin={NOTES_PANEL_MIN_WIDTH} aria-valuemax={NOTES_PANEL_MAX_WIDTH} aria-valuenow={panel.width} tabindex="0" onkeydown={resizeKey} onpointerdown={resizeStart}></div>
+      <div
+        class="resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t("notes.resize")}
+        aria-valuemin={NOTES_PANEL_MIN_WIDTH}
+        aria-valuemax={NOTES_PANEL_MAX_WIDTH}
+        aria-valuenow={panel.width}
+        tabindex="0"
+        onkeydown={resizeKey}
+        onpointerdown={resizeStart}
+      ></div>
       <header class="notes-header">
         <div>
           <span class="ui-eyebrow">{t("notes.title")}</span>
@@ -158,14 +182,49 @@
         </div>
       {:else}
         <label class="sr-only" for="notes-body">{t("notes.label")}</label>
-        <textarea id="notes-body" class="notes-body" placeholder={t("notes.placeholder")} value={notesService.body.value} oninput={(e) => notesService.edit(e.currentTarget.value)} onblur={() => notesService.flush()}></textarea>
+        <textarea
+          id="notes-body"
+          class="notes-body"
+          placeholder={t("notes.placeholder")}
+          value={notesService.body.value}
+          oninput={(e) => notesService.edit(e.currentTarget.value)}
+          onblur={() => notesService.flush()}></textarea>
       {/if}
-      <p class="save-state ui-muted" aria-live="polite">{notesService.saveState.value === "saved" ? t("notes.saved") : notesService.saveState.value === "pending" ? t("notes.saving") : t("notes.private")}</p>
+      <p class="save-state ui-muted" aria-live="polite">
+        {notesService.saveState.value === "saved" ? t("notes.saved") : notesService.saveState.value === "pending" ? t("notes.saving") : t("notes.private")}
+      </p>
+
+      {#if feedbackService.available.value && notesService.body.value.trim()}
+        <button type="button" class="ui-button share-note" disabled={feedbackService.sending.value} onclick={shareNote}>{t("feedback.share")}</button>
+      {/if}
+
+      {#if feedbackService.available.value}
+        <details class="received ui-disclosure" ontoggle={(e) => e.currentTarget.open && feedbackService.readReceived(lab.course.courseId)}>
+          <summary class="ui-label">{t("feedback.received")}</summary>
+          {#if feedbackService.received.value?.length}
+            <ol>
+              {#each feedbackService.received.value as a (a.id)}
+                <li>
+                  <a href={stepUrl(a.anchor.ref)}>{titleOf(a.anchor.ref.stepId)}</a>
+                  <span class="ui-muted">
+                    · {a.audience.kind === "everyone" ? t("feedback.toEveryone") : t("feedback.forYou")} · <time datetime={a.createdAt}>{when(a.createdAt)}</time></span
+                  >
+                  <div class="received-body prose dark:prose-invert">{@html sanitizeHtml(feedbackService.render(a.body))}</div>
+                </li>
+              {/each}
+            </ol>
+          {:else if feedbackService.received.value}
+            <p class="ui-muted">{t("feedback.receivedEmpty")}</p>
+          {/if}
+        </details>
+      {/if}
 
       {#if otherNoted.length}
         <nav class="noted-steps" aria-label={t("notes.otherSteps")}>
           <h3 class="ui-label">{t("notes.otherSteps")}</h3>
-          <ul>{#each otherNoted as id (id)}<li><a href={`${lab.url}/${id}`}>{titleOf(id)}</a></li>{/each}</ul>
+          <ul>
+            {#each otherNoted as id (id)}<li><a href={`${lab.url}/${id}`}>{titleOf(id)}</a></li>{/each}
+          </ul>
         </nav>
       {/if}
 
@@ -191,34 +250,193 @@
 {/if}
 
 <style>
-  .notes-panel { position: sticky; top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); width: var(--notes-width, 360px); max-height: calc(100dvh - var(--space-8)); overflow-y: auto; padding: var(--space-5); }
-  .resize-handle { position: absolute; inset-block: var(--space-4); inset-inline-start: -6px; width: 12px; cursor: col-resize; border-radius: var(--radius-control); touch-action: none; }
-  .resize-handle:hover, .resize-handle:focus-visible { background: color-mix(in srgb, var(--ui-brand) 24%, transparent); }
-  .notes-header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); }
-  .notes-step { font-size: var(--font-section); font-weight: var(--weight-semibold); line-height: var(--leading-heading); overflow-wrap: anywhere; }
-  .notes-actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
-  .notes-actions .ui-button, .view-switch .ui-button { min-height: 36px; padding: var(--space-1) var(--space-3); font-size: var(--font-meta); }
-  .notes-controls { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3); }
-  .kind .ui-label { margin-bottom: var(--space-1); font-size: var(--font-meta); }
-  .view-switch { display: flex; gap: 2px; padding: 2px; border-radius: var(--radius-control); background: var(--ui-canvas); border: 1px solid var(--ui-border); }
-  .view-switch .ui-button { background: transparent; border-color: transparent; color: var(--ui-muted); }
-  .view-switch .ui-button[aria-pressed="true"] { color: var(--ui-brand); background: var(--ui-surface); border-color: var(--ui-border); box-shadow: none; }
-  .notes-body { width: 100%; min-height: 14rem; resize: vertical; padding: var(--space-3); font-family: var(--ui-mono-family, ui-monospace, monospace); font-size: var(--font-body); line-height: 1.5; }
-  .notes-preview { min-height: 14rem; padding: var(--space-3); border: 1px solid var(--ui-border); border-radius: var(--radius-control); font-size: var(--font-body); }
-  .save-state { margin-top: calc(-1 * var(--space-2)); font-size: var(--font-caption); }
-  .session-only { padding: var(--space-3); border-radius: var(--radius-control); background: var(--ui-selected); color: var(--ui-warning); font-size: var(--font-meta); }
-  .noted-steps ul { display: grid; gap: var(--space-1); }
-  .noted-steps a { font-size: var(--font-meta); }
-  .notes-footer { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--ui-border); }
-  .link-button { justify-self: start; min-height: 44px; color: var(--ui-error); font-size: var(--font-meta); text-decoration: underline; text-underline-offset: 3px; }
-  .confirm p { margin-bottom: var(--space-2); font-size: var(--font-meta); }
-  .danger { color: var(--ui-error); border-color: var(--ui-error); }
-  .notes-minimised { position: fixed; right: var(--space-6); bottom: calc(var(--space-6) + 64px); z-index: 41; display: flex; align-items: center; gap: var(--space-3); max-width: min(28rem, calc(100vw - 2 * var(--space-4))); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); box-shadow: 0 4px 12px rgb(0 0 0 / 0.15); }
-  .minimised-step { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-meta); }
+  .notes-panel {
+    position: sticky;
+    top: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: var(--notes-width, 360px);
+    max-height: calc(100dvh - var(--space-8));
+    overflow-y: auto;
+    padding: var(--space-5);
+  }
+  .resize-handle {
+    position: absolute;
+    inset-block: var(--space-4);
+    inset-inline-start: -6px;
+    width: 12px;
+    cursor: col-resize;
+    border-radius: var(--radius-control);
+    touch-action: none;
+  }
+  .resize-handle:hover,
+  .resize-handle:focus-visible {
+    background: color-mix(in srgb, var(--ui-brand) 24%, transparent);
+  }
+  .notes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  .notes-step {
+    font-size: var(--font-section);
+    font-weight: var(--weight-semibold);
+    line-height: var(--leading-heading);
+    overflow-wrap: anywhere;
+  }
+  .notes-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-shrink: 0;
+  }
+  .notes-actions .ui-button,
+  .view-switch .ui-button {
+    min-height: 36px;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--font-meta);
+  }
+  .notes-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .kind .ui-label {
+    margin-bottom: var(--space-1);
+    font-size: var(--font-meta);
+  }
+  .view-switch {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius-control);
+    background: var(--ui-canvas);
+    border: 1px solid var(--ui-border);
+  }
+  .view-switch .ui-button {
+    background: transparent;
+    border-color: transparent;
+    color: var(--ui-muted);
+  }
+  .view-switch .ui-button[aria-pressed="true"] {
+    color: var(--ui-brand);
+    background: var(--ui-surface);
+    border-color: var(--ui-border);
+    box-shadow: none;
+  }
+  .notes-body {
+    width: 100%;
+    min-height: 14rem;
+    resize: vertical;
+    padding: var(--space-3);
+    font-family: var(--ui-mono-family, ui-monospace, monospace);
+    font-size: var(--font-body);
+    line-height: 1.5;
+  }
+  .notes-preview {
+    min-height: 14rem;
+    padding: var(--space-3);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--radius-control);
+    font-size: var(--font-body);
+  }
+  .save-state {
+    margin-top: calc(-1 * var(--space-2));
+    font-size: var(--font-caption);
+  }
+  .session-only {
+    padding: var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--ui-selected);
+    color: var(--ui-warning);
+    font-size: var(--font-meta);
+  }
+  .noted-steps ul {
+    display: grid;
+    gap: var(--space-1);
+  }
+  .share-note {
+    justify-self: start;
+    min-height: 36px;
+    font-size: var(--font-meta);
+  }
+  .received ol {
+    display: grid;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+    font-size: var(--font-meta);
+  }
+  .received-body {
+    max-width: none;
+    margin-top: var(--space-1);
+    overflow-wrap: anywhere;
+  }
+  .noted-steps a {
+    font-size: var(--font-meta);
+  }
+  .notes-footer {
+    display: grid;
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--ui-border);
+  }
+  .link-button {
+    justify-self: start;
+    min-height: 44px;
+    color: var(--ui-error);
+    font-size: var(--font-meta);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .confirm p {
+    margin-bottom: var(--space-2);
+    font-size: var(--font-meta);
+  }
+  .danger {
+    color: var(--ui-error);
+    border-color: var(--ui-error);
+  }
+  .notes-minimised {
+    position: fixed;
+    right: var(--space-6);
+    bottom: calc(var(--space-6) + 64px);
+    z-index: 41;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    max-width: min(28rem, calc(100vw - 2 * var(--space-4)));
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+  }
+  .minimised-step {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-meta);
+  }
   /* Under 1024px there is no room beside the step: the panel is a sheet across the bottom. */
   @media (max-width: 1023px) {
-    .notes-panel { position: fixed; inset: auto 0 0 0; z-index: 45; width: auto; max-height: 70dvh; border-radius: var(--radius-panel) var(--radius-panel) 0 0; box-shadow: 0 -4px 16px rgb(0 0 0 / 0.18); }
-    .resize-handle { display: none; }
-    .notes-minimised { right: var(--space-4); left: var(--space-4); bottom: calc(var(--space-4) + 64px); max-width: none; }
+    .notes-panel {
+      position: fixed;
+      inset: auto 0 0 0;
+      z-index: 45;
+      width: auto;
+      max-height: 70dvh;
+      border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+      box-shadow: 0 -4px 16px rgb(0 0 0 / 0.18);
+    }
+    .resize-handle {
+      display: none;
+    }
+    .notes-minimised {
+      right: var(--space-4);
+      left: var(--space-4);
+      bottom: calc(var(--space-4) + 64px);
+      max-width: none;
+    }
   }
 </style>

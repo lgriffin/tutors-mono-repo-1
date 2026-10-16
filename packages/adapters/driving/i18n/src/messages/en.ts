@@ -119,14 +119,19 @@ const en = {
   "home.connectedAs": "Connected as:",
   "home.favourites": "Favourites",
   "home.recentlyAccessed": "Recently accessed",
-  "home.values.title": "The <span class=\"font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone\">Values</span> of the project",
+  "home.values.title":
+    'The <span class="font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone">Values</span> of the project',
   "home.developer.title": "Developer Experience",
-  "home.developer.description": "The <b>Developer Experience</b> prioritizes the specification and implementation of <b>robust, well-documented, loosely coupled components & services</b>, integrated into a <b>coherent toolkit</b> open to contributions from <b>diverse skill sets</b>.",
+  "home.developer.description":
+    "The <b>Developer Experience</b> prioritizes the specification and implementation of <b>robust, well-documented, loosely coupled components & services</b>, integrated into a <b>coherent toolkit</b> open to contributions from <b>diverse skill sets</b>.",
   "home.educator.title": "Educator Experience",
-  "home.educator.description": "The <b>Educator Experience</b> prioritizes the creation of <b>guided paths</b> through a curriculum via the creation of learning materials that are <b>autonomous, structurally aligned, composable, auditable, extensible, versioned</b> and <b>independent</b>.",
+  "home.educator.description":
+    "The <b>Educator Experience</b> prioritizes the creation of <b>guided paths</b> through a curriculum via the creation of learning materials that are <b>autonomous, structurally aligned, composable, auditable, extensible, versioned</b> and <b>independent</b>.",
   "home.learner.title": "Learner Experience",
-  "home.learner.description": "The <b>Learner Experience</b> prioritizes web interactions that are <b>engaging, contextual, linkable, searchable, accessible</b> and <b>responsive</b>. In addition, the experience should foster a sense of <b>community</b> and <b>connection</b> among fellow learners.",
-  "home.credits.title": "A fully <span class=\"font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone\">Open Source</span> project",
+  "home.learner.description":
+    "The <b>Learner Experience</b> prioritizes web interactions that are <b>engaging, contextual, linkable, searchable, accessible</b> and <b>responsive</b>. In addition, the experience should foster a sense of <b>community</b> and <b>connection</b> among fellow learners.",
+  "home.credits.title":
+    'A fully <span class="font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone">Open Source</span> project',
   "home.credits.description": "Tutors is an open source project available for free under the MIT license on GitHub.",
   "home.credits.viewSource": "View Source Code",
 
@@ -203,7 +208,8 @@ Tutors is an open source application - the data collection component [is here](h
 
   // Footer
   "footer.version": "Tutors v:",
-  "footer.message": "An [Open Learning Web Toolkit](/course/tutors-reference-manual): Explore [What's New in Tutors](https://tutors.dev/note/tutors-reference-manual/side/note-whats-new)",
+  "footer.message":
+    "An [Open Learning Web Toolkit](/course/tutors-reference-manual): Explore [What's New in Tutors](https://tutors.dev/note/tutors-reference-manual/side/note-whats-new)",
   "footer.sponsorsAlt": "sponsors",
   "footer.setuAlt": "South East Technological University",
 
@@ -225,7 +231,8 @@ Tutors is an open source application - the data collection component [is here](h
   "lecturer.locks.unlocked": "Unlocked",
   "lecturer.locks.empty": "No lockable content found",
   "lecturer.locks.showToStudents": "Show locked content to students",
-  "lecturer.locks.showToStudentsHelp": "Students see locked items greyed out and cannot open them. When off, locked items are hidden from students, the course tree and the LLM version.",
+  "lecturer.locks.showToStudentsHelp":
+    "Students see locked items greyed out and cannot open them. When off, locked items are hidden from students, the course tree and the LLM version.",
   "lecturer.enrollment.title": "Enrollment",
   "lecturer.enrollment.whitelist": "Whitelist",
   "lecturer.enrollment.students": "Students",
@@ -616,7 +623,47 @@ Tutors is an open source application - the data collection component [is here](h
   "help.stale": "The last read failed; showing the queue read at",
   "help.refused": "The help queue could not be read. Sign in to the reader as an educator of this course.",
   "help.actionFailed": "That did not go through; the queue was read again.",
-  "help.loading": "Reading the help queue…"
+  "help.loading": "Reading the help queue…",
+
+  // Lecturer feedback (PR E of the learning plan)
+  "feedback.banner": "Explanation for everyone on this step",
+  "feedback.dismiss": "Hide",
+  "feedback.from": "From",
+  "feedback.forYou": "Feedback for you",
+  "feedback.onStep": "On this step",
+  "feedback.onSnippet": "On your snippet",
+  "feedback.onReflection": "On your reflection",
+  "feedback.educatorPanel": "Feedback on this step",
+  "feedback.audience": "For",
+  "feedback.everyone": "Everyone on this step",
+  "feedback.oneStudent": "One student",
+  "feedback.studentLogin": "Student's GitHub login",
+  "feedback.body": "Feedback (markdown)",
+  "feedback.post": "Post",
+  "feedback.notSent": "The feedback was not sent. Try again.",
+  "feedback.forbidden": "Only an educator of this course can do that.",
+  "feedback.notKept": "Feedback is not kept on this server.",
+  "feedback.history": "Posted on this step",
+  "feedback.historyEmpty": "Nothing posted on this step yet.",
+  "feedback.toEveryone": "To everyone",
+  "feedback.to": "To",
+  "feedback.revoke": "Revoke",
+  "feedback.revoked": "Revoked",
+  "feedback.reflections": "Reflections shared here",
+  "feedback.reply": "Reply",
+  "feedback.share": "Share with lecturer",
+  "feedback.shared": "Shared with your lecturers. Your note stays yours.",
+  "feedback.shareFailed": "The note was not shared. Try again.",
+  "feedback.received": "Feedback received",
+  "feedback.receivedEmpty": "No feedback in this course yet.",
+  "feedback.explain": "Turn into an explanation for everyone",
+  "feedback.explainLabel": "Explanation for everyone on",
+  "feedback.explainSend": "Post explanation",
+  "feedback.explanationPosted": "Explanation posted on",
+  "feedback.cancel": "Cancel",
+  "feedback.snippet": "Send feedback",
+  "feedback.sent": "Sent to the student",
+  "feedback.snippetLabel": "Feedback to this student on their snippet"
 } as const;
 
 export default en;

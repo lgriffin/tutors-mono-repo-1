@@ -38,7 +38,9 @@ const TABLES = [
   "app_errors",
   "assignments",
   "assignments_submissions",
-  "assistance_requests"
+  "assistance_requests",
+  "feedback_annotations",
+  "feedback_reflections"
 ];
 
 export interface TestDatabase {

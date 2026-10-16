@@ -7,7 +7,8 @@ Feature: Contextual feedback
   An annotation is anchored to exactly one thing and addressed to one student or everyone on the
   step; one for everyone is a broadcast. Only an educator the course's published enrollment lists
   may post. These Rules drive the Feedback use cases over the in-memory adapters; the reader's
-  server route, the banner and the composer come in later pull requests.
+  server route is in shared/feedback-server.feature, and the banner, the cards and the history on a
+  lab step in student/step-feedback.feature.
 
   Background:
     Given "ellen" teaches the course "cs101"

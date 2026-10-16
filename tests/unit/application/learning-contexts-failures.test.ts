@@ -8,8 +8,31 @@ import { openRequest, type HelpRequest } from "@tutors/domain/assistance";
 import { isRevoked, type Annotation } from "@tutors/domain/feedback";
 import { stepDiagnostics } from "@tutors/domain/insights";
 import { isEvidenceKind, type StepRef } from "@tutors/domain/learning";
-import { annotate, broadcast, myHelpRequest, rateHelp, recordEvidence, requestHelp, resolveHelp, saveNote, type AssistanceDeps } from "@tutors/application";
-import { FixedClock, InMemoryAssistanceFeed, InMemoryAssistanceStore, InMemoryFeedbackStore, InMemoryHelpDesk, InMemoryNotesStore, RecordingPublisher, SignedOutHelpDesk } from "@tutors/application/testing";
+import {
+  annotate,
+  broadcast,
+  myHelpRequest,
+  rateHelp,
+  recordEvidence,
+  requestHelp,
+  resolveHelp,
+  revokeAnnotation,
+  saveNote,
+  stepHistory,
+  type AssistanceDeps
+} from "@tutors/application";
+import {
+  FixedClock,
+  InMemoryAssistanceFeed,
+  InMemoryAssistanceStore,
+  InMemoryCourseNotices,
+  InMemoryFeedbackDesk,
+  InMemoryFeedbackStore,
+  InMemoryHelpDesk,
+  InMemoryNotesStore,
+  RecordingPublisher,
+  SignedOutHelpDesk
+} from "@tutors/application/testing";
 
 const ref: StepRef = { courseId: "cs101", labRoute: "/lab/cs101/lab-01", stepId: "02" };
 const alice = { login: "alice", name: null };
@@ -133,7 +156,10 @@ describe("assistance when the store or feed fails", () => {
     expect(await mine()).toBeNull();
     await requestHelp(d)(ref, "stuck", alice);
     const id = d.store.rows[0].id;
-    await d.store.replace({ ...d.store.rows[0], state: "withdrawn", closed: { by: "alice", at: d.store.rows[0].requestedAt, reason: "withdrawn" } } as HelpRequest, d.store.rows[0]);
+    await d.store.replace(
+      { ...d.store.rows[0], state: "withdrawn", closed: { by: "alice", at: d.store.rows[0].requestedAt, reason: "withdrawn" } } as HelpRequest,
+      d.store.rows[0]
+    );
     expect(await mine()).toBeNull();
     d.store.rows[0] = { ...d.store.rows[0], state: "resolved", closed: null };
     expect(await mine()).toBeNull();
@@ -188,6 +214,72 @@ describe("feedback when the store or feed fails", () => {
   it("keeps a broadcast when the feed throws", async () => {
     const result = await broadcast({ ...feedbackDeps(), feed: new ThrowingFeed() })(ref, "Await it.", { login: "ellen" });
     expect(result.ok).toBe(true);
+  });
+
+  it("keeps a broadcast when the toast is refused, and passes on a refused broadcast", async () => {
+    const notices = new InMemoryCourseNotices();
+    notices.post = () => Promise.reject(new Error("broker down"));
+    expect((await broadcast({ ...feedbackDeps(), feed: new InMemoryAssistanceFeed(), notices })(ref, "Await it.", { login: "ellen" })).ok).toBe(true);
+    expect(await broadcast({ ...feedbackDeps(), feed: new InMemoryAssistanceFeed() })(ref, "Await it.", { login: "alice" })).toMatchObject({ ok: false, reason: "forbidden" });
+  });
+
+  it("says unavailable when a step's history cannot be read or its educators are unknown", async () => {
+    const d = feedbackDeps();
+    d.store.unavailable = true;
+    expect(await stepHistory(d)(ref, { login: "ellen" })).toEqual({ ok: false, reason: "unavailable", status: 503 });
+    expect(await stepHistory({ ...feedbackDeps(), educatorsOf: () => Promise.reject(new Error("no list")) })(ref, { login: "ellen" })).toMatchObject({ status: 503 });
+    expect(await stepHistory(feedbackDeps())(ref, { login: "alice" })).toMatchObject({ status: 403 });
+  });
+
+  it("says unavailable or not found when revoking fails part way", async () => {
+    const d = feedbackDeps();
+    const posted = await annotate(d)({ anchor: { ref }, audience: { everyone: true }, body: "Look again" }, { login: "ellen" });
+    if (!posted.ok) throw new Error("not posted");
+    const id = posted.annotation.id;
+    d.store.unavailable = true;
+    expect(await revokeAnnotation(d)(id, { login: "ellen" })).toEqual({ ok: false, reason: "unavailable", status: 503 });
+    d.store.unavailable = false;
+    expect(await revokeAnnotation({ ...d, educatorsOf: () => Promise.reject(new Error("no list")) })(id, { login: "ellen" })).toMatchObject({ status: 503 });
+    expect(await revokeAnnotation(d)(id, { login: "alice" })).toMatchObject({ status: 403 });
+    const revoke = d.store.revoke.bind(d.store);
+    d.store.revoke = () => Promise.reject(new Error("down"));
+    expect(await revokeAnnotation(d)(id, { login: "ellen" })).toMatchObject({ status: 503 });
+    d.store.revoke = async () => null;
+    expect(await revokeAnnotation(d)(id, { login: "ellen" })).toMatchObject({ reason: "not-found", status: 404 });
+    d.store.revoke = revoke;
+    expect((await revokeAnnotation({ ...d, feed: new ThrowingFeed() })(id, { login: "ellen" })).ok).toBe(true);
+  });
+
+  it("refuses every ask on an in-memory desk with nobody signed in", async () => {
+    const desk = new InMemoryFeedbackDesk({ educators: { cs101: ["ellen"] } });
+    const note = { ref, body: "my thoughts", kind: "reflection" as const, updatedAt: "2026-01-05T09:00:00.000Z" };
+    expect(await desk.step(ref)).toEqual({ broadcasts: [], personal: [], history: null });
+    expect(await desk.received("cs101")).toEqual([]);
+    expect(await desk.annotate({ ref }, { everyone: true }, "x")).toEqual({ ok: false, reason: "signed-out" });
+    expect(await desk.broadcast(ref, "x")).toEqual({ ok: false, reason: "signed-out" });
+    expect(await desk.revoke("annotation-1")).toEqual({ ok: false, reason: "signed-out" });
+    expect(await desk.reflect(note)).toEqual({ ok: false, reason: "signed-out" });
+    expect(desk.calls).toEqual({ step: 1, received: 1 });
+  });
+
+  it("answers an in-memory desk's refusals with the desk's reasons", async () => {
+    const lecturer = new InMemoryFeedbackDesk({ educators: { cs101: ["ellen"] }, actor: { login: "ellen", name: null } });
+    expect(await lecturer.annotate({ ref, snippetId: "s1", reflectionId: "r1" }, { everyone: true }, "x")).toMatchObject({
+      ok: false,
+      reason: "invalid",
+      detail: expect.any(String)
+    });
+    expect(await lecturer.revoke("annotation-404")).toEqual({ ok: false, reason: "not-found" });
+    expect(await lecturer.as({ login: "alice", name: null }).broadcast(ref, "x")).toEqual({ ok: false, reason: "forbidden" });
+    expect(await lecturer.as({ login: "alice", name: null }).reflect({ ref, body: "  ", kind: "reflection" as const, updatedAt: "2026-01-05T09:00:00.000Z" })).toEqual({
+      ok: false,
+      reason: "no-note"
+    });
+    lecturer.store.unavailable = true;
+    expect(await lecturer.annotate({ ref }, { everyone: true }, "x")).toEqual({ ok: false, reason: "unavailable" });
+    lecturer.store.unavailable = false;
+    lecturer.store.reflectionsAt = () => Promise.reject(new Error("down"));
+    await expect(lecturer.step(ref)).rejects.toThrow("history");
   });
 });
 

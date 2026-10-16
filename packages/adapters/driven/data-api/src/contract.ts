@@ -13,6 +13,8 @@
 import type { QueueEntry } from "@tutors/application";
 import type { PlaygroundSnapshot, ScormRecord, WhiteboardRoom, WhiteboardScene } from "@tutors/application/ports";
 import type { HelpKind, HelpRequest } from "@tutors/domain/assistance";
+import type { Annotation, Reflection } from "@tutors/domain/feedback";
+import type { NoteKind } from "@tutors/domain/learning";
 import type { ContentLock } from "@tutors/domain/access";
 import type { CourseVisit } from "@tutors/domain/presence";
 
@@ -20,8 +22,7 @@ export type { ContentLock, PlaygroundSnapshot, WhiteboardRoom, WhiteboardScene }
 
 /** POST /api/analytics: a page load, or the 30-second "still reading" tick, for the signed-in student. */
 export type AnalyticsEvent =
-  | { kind: "page-load"; courseId: string; loId: string; loType: string; day: string }
-  | { kind: "tick"; courseId: string; loId: string | null; day: string };
+  { kind: "page-load"; courseId: string; loId: string; loType: string; day: string } | { kind: "tick"; courseId: string; loId: string | null; day: string };
 
 /** GET /api/me: the signed-in user's stored sentiment and online status. */
 export interface MyStatus {
@@ -175,4 +176,30 @@ export interface MyHelpRequest {
 /** GET /api/assistance?courseId=: the course's queue, for an educator of the course; Tutors Live calls it with the lecturer's session. */
 export interface HelpQueue {
   queue: QueueEntry[];
+}
+
+type StepFields = { courseId: string; labRoute: string; stepId: string };
+
+/**
+ * POST /api/feedback: an educator of the course annotates a step, a snippet or a reflection for one
+ * student (or everyone on the step), broadcasts an explanation or revokes an annotation; a
+ * signed-in student shares a note as a reflection. Answers `{ annotation }` or `{ reflection }`
+ * (201 for a new one), or `{ message, reason }`.
+ */
+export type FeedbackPost =
+  | (StepFields & { action: "annotate"; body: string; snippetId?: string | null; reflectionId?: string | null; learnerId?: string | null; everyone?: boolean })
+  | (StepFields & { action: "broadcast"; body: string; stepTitle?: string | null })
+  | { action: "revoke"; id: string }
+  | (StepFields & { action: "reflect"; kind: NoteKind; body: string });
+
+/** GET /api/feedback?courseId=&labRoute=&stepId=: the step's feedback for the person signed in; `history` for an educator of the course only. */
+export interface StepFeedbackRead {
+  broadcasts: Annotation[];
+  personal: Annotation[];
+  history: { annotations: Annotation[]; reflections: Reflection[] } | null;
+}
+
+/** GET /api/feedback/mine?courseId=: what the signed-in student received in the course, newest first. */
+export interface ReceivedFeedback {
+  annotations: Annotation[];
 }

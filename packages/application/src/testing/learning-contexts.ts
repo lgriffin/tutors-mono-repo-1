@@ -4,11 +4,12 @@
  * returns never changes what it stores.
  */
 import { isLive, type HelpRequest, type NewHelpRequest } from "@tutors/domain/assistance";
-import type { Annotation, NewAnnotation, NewReflection, Reflection } from "@tutors/domain/feedback";
+import { isFor, isRevoked, newestFirst, revokedAt, type Annotation, type NewAnnotation, type NewReflection, type Reflection } from "@tutors/domain/feedback";
 import { sameStep, stepKey, type Note, type StepRef } from "@tutors/domain/learning";
 import type { AssistanceChange, AssistanceFeed } from "../ports/assistance-feed.ts";
 import type { AssistanceStore } from "../ports/assistance-store.ts";
-import type { FeedbackStore } from "../ports/feedback-store.ts";
+import { RECEIVED_LIMIT, type FeedbackStore } from "../ports/feedback-store.ts";
+import type { FeedbackDesk, FeedbackDeskResult, ReflectionDeskResult, StepFeedbackView } from "../ports/feedback-desk.ts";
 import type { HelpDesk, HelpDeskResult } from "../ports/help-desk.ts";
 import type { InsightsPeriod, InsightsRead } from "../ports/insights-read.ts";
 import type { NotesStore } from "../ports/notes-store.ts";
@@ -79,28 +80,58 @@ export class InMemoryAssistanceFeed implements AssistanceFeed {
   }
 }
 
-/** Annotations and reflections in memory. */
+/** Annotations and reflections in memory. `unavailable` makes every call reject, as an unreachable store does. */
 export class InMemoryFeedbackStore implements FeedbackStore {
   readonly annotations: Annotation[] = [];
   readonly reflectionRows: Reflection[] = [];
+  unavailable = false;
   private nextId = 1;
+  private check() {
+    if (this.unavailable) throw new Error("feedback store unavailable");
+  }
   async annotate(annotation: NewAnnotation): Promise<Annotation> {
+    this.check();
     if (!annotation.anchor?.ref?.courseId || !annotation.authorId || !annotation.body) throw new Error("an annotation needs a step, an author and a body");
     const row: Annotation = { ...copy(annotation), id: `annotation-${this.nextId++}`, revokedAt: null };
     this.annotations.push(row);
     return copy(row);
   }
+  async get(id: string): Promise<Annotation | null> {
+    this.check();
+    const row = this.annotations.find((a) => a.id === id);
+    return row ? copy(row) : null;
+  }
   async forStep(ref: StepRef): Promise<Annotation[]> {
+    this.check();
     return this.annotations.filter((a) => stepKey(a.anchor.ref) === stepKey(ref)).map(copy);
   }
+  async received(courseId: string, learnerId: string): Promise<Annotation[]> {
+    this.check();
+    return newestFirst(this.annotations.filter((a) => a.anchor.ref.courseId === courseId && !isRevoked(a) && isFor(a, learnerId)))
+      .slice(0, RECEIVED_LIMIT)
+      .map(copy);
+  }
+  async revoke(id: string, at: string): Promise<Annotation | null> {
+    this.check();
+    const index = this.annotations.findIndex((a) => a.id === id);
+    if (index < 0) return null;
+    this.annotations[index] = revokedAt(this.annotations[index], at);
+    return copy(this.annotations[index]);
+  }
   async reflect(reflection: NewReflection): Promise<Reflection> {
+    this.check();
     if (!reflection.ref?.courseId || !reflection.learnerId || !reflection.body) throw new Error("a reflection needs a step, a learner and a body");
     const row: Reflection = { ...copy(reflection), id: `reflection-${this.nextId++}` };
     this.reflectionRows.push(row);
     return copy(row);
   }
   async reflections(courseId: string, learnerId: string): Promise<Reflection[]> {
+    this.check();
     return this.reflectionRows.filter((r) => r.ref.courseId === courseId && r.learnerId === learnerId).map(copy);
+  }
+  async reflectionsAt(ref: StepRef): Promise<Reflection[]> {
+    this.check();
+    return this.reflectionRows.filter((r) => sameStep(r.ref, ref)).map(copy);
   }
 }
 
@@ -176,5 +207,27 @@ export class SignedOutHelpDesk implements HelpDesk {
   }
   async queue(): Promise<HelpRequest[]> {
     throw new Error("nobody is signed in to read a help queue");
+  }
+}
+
+/** A feedback desk for a deployment where nobody can sign in: nothing to read, and every ask is refused. */
+export class SignedOutFeedbackDesk implements FeedbackDesk {
+  async step(): Promise<StepFeedbackView> {
+    return { broadcasts: [], personal: [], history: null };
+  }
+  async received(): Promise<Annotation[]> {
+    return [];
+  }
+  async annotate(): Promise<FeedbackDeskResult> {
+    return { ok: false, reason: "signed-out" };
+  }
+  async broadcast(): Promise<FeedbackDeskResult> {
+    return { ok: false, reason: "signed-out" };
+  }
+  async revoke(): Promise<FeedbackDeskResult> {
+    return { ok: false, reason: "signed-out" };
+  }
+  async reflect(): Promise<ReflectionDeskResult> {
+    return { ok: false, reason: "signed-out" };
   }
 }

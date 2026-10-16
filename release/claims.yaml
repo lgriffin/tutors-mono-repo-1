@@ -78,7 +78,7 @@ claims:
   - artefact: axe
     scope: "reference:note"
     rule: "0036"
-    reason: "code block copy buttons are named \"Copy code\" (button-name, critical) fixed by #313"
+    reason: 'code block copy buttons are named "Copy code" (button-name, critical) fixed by #313'
   # PR #143 (commit 4070315) dropped npm, npx, corepack and yarn from the runtime image: npm's bundled tar and
   # brace-expansion failed the Trivy gate, and the runtime only runs `node build/index.js`. The SBOM of each of the
   # four images loses the same 174 packages (696 diffs). One claim, the exact package list, generated from the
@@ -345,3 +345,24 @@ claims:
     scope: "live:*"
     rule: "0393"
     reason: "Rule 0393: Tutors Live reads the course's help queue from the reader's GET /api/assistance every 60 seconds"
+
+  # Lecturer feedback (Rules 0403, 0404, 0564): a signed-in student's lab step reads its feedback
+  # from the reader's GET /api/feedback when it opens and every 60 seconds while visible, and shows
+  # a lecturer's explanation as a banner above the step and their own annotations below it; an
+  # educator's step also shows the feedback composer. Visitors and anonymous mode see no change.
+  - artefact: network
+    scope: "reader:lab*"
+    rule: "0404"
+    reason: "Rule 0404: a signed-in student's lab step reads its feedback from GET /api/feedback when it opens and every 60 seconds while it stays visible"
+  - artefact: dom
+    scope: "reader:lab*"
+    rule: "0403"
+    reason: "Rule 0403: a lab step shows a lecturer's explanation above its content and the student's own annotations below it"
+  - artefact: screenshot
+    scope: "reader:lab*"
+    rule: "0403"
+    reason: "Rule 0403: a lab step shows a lecturer's explanation above its content and the student's own annotations below it"
+  - artefact: dom
+    scope: "live:*"
+    rule: "0407"
+    reason: "Rule 0407: Tutors Live's help queue offers a resolved request as an explanation for everyone on its step"

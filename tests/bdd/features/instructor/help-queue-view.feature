@@ -78,3 +78,25 @@ Feature: The help queue in Tutors Live
       Given the help queue is streamed
       When "alice" asks for help as "stuck" on the step "step%2002" of the lab "/lab/cs101/lab%2001"
       Then the queue's row shall name the lab "lab 01" and the step "step 02"
+
+  @rule-0407 @ears-event-driven
+  Rule: When a lecturer resolves a help request in the help queue, the live dashboard shall offer to turn it into an explanation for everyone on the request's step, pre-filled with that step and any hint.
+
+    Scenario: An answered hint becomes an explanation for everyone on the step
+      Given the help queue is streamed
+      And "alice" asks for help as "hint" on the step "02" of the lab "/lab/cs101/lab-01"
+      When "ellen" answers the request of "alice" with the hint "Check the loop bound."
+      Then the queue shall offer an explanation for the step "02" of the lab "/lab/cs101/lab-01" starting "Check the loop bound."
+      When "ellen" posts the explanation
+      Then everyone on the step "02" of the lab "/lab/cs101/lab-01" shall have the explanation "Check the loop bound."
+      And the queue shall say an explanation was posted on the step "02"
+      And the queue shall offer no explanation
+
+    Scenario: A lecturer who passes posts nothing
+      Given the help queue is streamed
+      And "alice" asks for help as "stuck" on the step "02" of the lab "/lab/cs101/lab-01"
+      When "ellen" resolves the request of "alice"
+      Then the queue shall offer an explanation for the step "02" of the lab "/lab/cs101/lab-01" starting ""
+      When "ellen" passes on the explanation
+      Then the queue shall offer no explanation
+      And nothing shall have been broadcast on the course

@@ -32,9 +32,11 @@ import {
   assistanceFeedContract,
   assistanceStoreContract,
   helpDeskContract,
+  feedbackDeskContract,
   feedbackStoreContract,
   InMemoryAssistanceFeed,
   InMemoryHelpDesk,
+  InMemoryFeedbackDesk,
   InMemoryAssistanceStore,
   InMemoryFeedbackStore,
   InMemoryInsightsRead,
@@ -79,7 +81,10 @@ function listedStorage(): NotesStorage {
 /** localStorage holds one learner's record, so the per-learner cases are read for that one learner. */
 const singleLearnerCases = (cases: ContractCase[]) => cases.filter((c) => !/per learner/.test(c.name));
 
-contract("ProfilePort: in memory", profileContract(() => new InMemoryProfile()));
+contract(
+  "ProfilePort: in memory",
+  profileContract(() => new InMemoryProfile())
+);
 contract(
   "ProfilePort: localStorage",
   singleLearnerCases(
@@ -89,20 +94,62 @@ contract(
     })
   )
 );
-contract("AccessStore: in memory", accessStoreContract(() => new InMemoryAccessStore()));
-contract("PresencePort: in memory", presenceContract(() => new InMemoryPresence()));
-contract("EventPublisher: in memory", eventPublisherContract(() => new RecordingPublisher()));
-contract("EventPublisher: in process", eventPublisherContract(() => inProcessPublisher()));
-contract("LearningEventSink: in memory", learningEventSinkContract(() => new InMemoryLearningEventSink()));
-contract("WorkspaceStore: in memory", workspaceStoreContract(() => new InMemoryWorkspaceStore()));
-contract("ScormRecords: in memory", scormRecordsContract(() => new InMemoryScormRecords()));
-contract("PlaygroundSnapshots: in memory", playgroundSnapshotsContract(() => new InMemoryPlaygroundSnapshots({ enabled: true, reviews: ["cs101"] })));
-contract("PlaygroundLive: in memory", playgroundLiveContract(() => new InMemoryPlaygroundLive()));
-contract("CodeRuntime: scripted", codeRuntimeContract(() => new ScriptedCodeRuntime({ runtime: "python" }).script({ stdout: "1\n" })));
-contract("SnippetStore: in memory", snippetStoreContract(() => new InMemorySnippetStore()));
-contract("CourseNotices: in memory", courseNoticesContract(() => new InMemoryCourseNotices()));
-contract("AssistanceStore: in memory", assistanceStoreContract(() => new InMemoryAssistanceStore()));
-contract("AssistanceFeed: in memory", assistanceFeedContract(() => new InMemoryAssistanceFeed()));
+contract(
+  "AccessStore: in memory",
+  accessStoreContract(() => new InMemoryAccessStore())
+);
+contract(
+  "PresencePort: in memory",
+  presenceContract(() => new InMemoryPresence())
+);
+contract(
+  "EventPublisher: in memory",
+  eventPublisherContract(() => new RecordingPublisher())
+);
+contract(
+  "EventPublisher: in process",
+  eventPublisherContract(() => inProcessPublisher())
+);
+contract(
+  "LearningEventSink: in memory",
+  learningEventSinkContract(() => new InMemoryLearningEventSink())
+);
+contract(
+  "WorkspaceStore: in memory",
+  workspaceStoreContract(() => new InMemoryWorkspaceStore())
+);
+contract(
+  "ScormRecords: in memory",
+  scormRecordsContract(() => new InMemoryScormRecords())
+);
+contract(
+  "PlaygroundSnapshots: in memory",
+  playgroundSnapshotsContract(() => new InMemoryPlaygroundSnapshots({ enabled: true, reviews: ["cs101"] }))
+);
+contract(
+  "PlaygroundLive: in memory",
+  playgroundLiveContract(() => new InMemoryPlaygroundLive())
+);
+contract(
+  "CodeRuntime: scripted",
+  codeRuntimeContract(() => new ScriptedCodeRuntime({ runtime: "python" }).script({ stdout: "1\n" }))
+);
+contract(
+  "SnippetStore: in memory",
+  snippetStoreContract(() => new InMemorySnippetStore())
+);
+contract(
+  "CourseNotices: in memory",
+  courseNoticesContract(() => new InMemoryCourseNotices())
+);
+contract(
+  "AssistanceStore: in memory",
+  assistanceStoreContract(() => new InMemoryAssistanceStore())
+);
+contract(
+  "AssistanceFeed: in memory",
+  assistanceFeedContract(() => new InMemoryAssistanceFeed())
+);
 contract(
   "HelpDesk: in memory",
   helpDeskContract(() => {
@@ -110,8 +157,26 @@ contract(
     return { student: desk.as({ login: "alice", name: "Alice" }), educator: desk.as({ login: "ellen", name: "Ellen" }), visitor: desk };
   })
 );
-contract("FeedbackStore: in memory", feedbackStoreContract(() => new InMemoryFeedbackStore()));
-contract("NotesStore: in memory", notesStoreContract(() => new InMemoryNotesStore()));
+contract(
+  "FeedbackStore: in memory",
+  feedbackStoreContract(() => new InMemoryFeedbackStore())
+);
+contract(
+  "FeedbackDesk: in memory",
+  feedbackDeskContract(() => {
+    const desk = new InMemoryFeedbackDesk({ educators: { cs101: ["ellen"] } });
+    return {
+      student: desk.as({ login: "alice", name: "Alice" }),
+      other: desk.as({ login: "bob", name: "Bob" }),
+      educator: desk.as({ login: "ellen", name: "Ellen" }),
+      visitor: desk
+    };
+  })
+);
+contract(
+  "NotesStore: in memory",
+  notesStoreContract(() => new InMemoryNotesStore())
+);
 contract(
   "NotesStore: localStorage",
   notesStoreContract(() => {
@@ -119,4 +184,7 @@ contract(
     return localStorageNotes(() => storage);
   })
 );
-contract("InsightsRead: in memory", insightsReadContract(({ requests, annotations, reflections }) => new InMemoryInsightsRead(requests, annotations, reflections)));
+contract(
+  "InsightsRead: in memory",
+  insightsReadContract(({ requests, annotations, reflections }) => new InMemoryInsightsRead(requests, annotations, reflections))
+);

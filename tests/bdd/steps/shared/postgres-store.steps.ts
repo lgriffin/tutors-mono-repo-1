@@ -30,6 +30,7 @@ import type { Course } from "../../../../packages/jsr/model/src/tutors.ts";
 import {
   accessStoreContract,
   assistanceStoreContract,
+  feedbackStoreContract,
   learningEventSinkContract,
   playgroundSnapshotsContract,
   profileContract,
@@ -42,6 +43,7 @@ import {
   migrate,
   postgresAccessStore,
   postgresAssistanceStore,
+  postgresFeedbackStore,
   postgresLearningEventSink,
   postgresPlaygroundSnapshotRows,
   postgresProfile,
@@ -140,7 +142,9 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
       RuleScenario("The migrations build the store on an empty database", ({ When, Then, And }) => {
         When("the migrations under db/migrations are applied to an empty Postgres database", async () => {
           // The Background's database was migrated the way `pnpm db:migrate` does it.
-          expect((await db.sql.query<{ name: string }>("SELECT name FROM schema_migrations ORDER BY name")).rows.map((r) => r.name)).toEqual(committedMigrations().map((m) => m.name));
+          expect((await db.sql.query<{ name: string }>("SELECT name FROM schema_migrations ORDER BY name")).rows.map((r) => r.name)).toEqual(
+            committedMigrations().map((m) => m.name)
+          );
         });
         Then("every table the Postgres store reads and writes exists", async () => {
           expect(await tables()).toEqual(expect.arrayContaining(STORE_TABLES));
@@ -196,7 +200,7 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     RuleScenario("The Postgres store keeps every store port's contract", ({ When, Then }) => {
       const failures: string[] = [];
       When(
-        "the contract suites of ProfilePort, AccessStore, LearningEventSink, ScormRecords, SnippetStore, PlaygroundSnapshots and AssistanceStore run against the Postgres store",
+        "the contract suites of ProfilePort, AccessStore, LearningEventSink, ScormRecords, SnippetStore, PlaygroundSnapshots, AssistanceStore and FeedbackStore run against the Postgres store",
         async () => {
           const sql: SqlClient = db.sql;
           const rows = postgresPlaygroundSnapshotRows(sql);
@@ -215,7 +219,8 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
             ...scormRecordsContract(() => postgresScormRecords(sql)),
             ...snippetStoreContract(() => postgresSnippetStore(sql), new Date().toISOString()),
             ...playgroundSnapshotsContract(snapshots),
-            ...assistanceStoreContract(() => postgresAssistanceStore(sql))
+            ...assistanceStoreContract(() => postgresAssistanceStore(sql)),
+            ...feedbackStoreContract(() => postgresFeedbackStore(sql))
           ];
           expect(suites.length).toBeGreaterThan(20);
           for (const c of suites) {

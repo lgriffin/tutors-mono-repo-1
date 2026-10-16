@@ -1,11 +1,22 @@
 export {
   annotate,
   broadcast,
+  EXPLANATION_TOAST,
+  explanationNotice,
   MAX_ANNOTATION_CHARS,
+  receivedFeedback,
+  revokeAnnotation,
   shareReflection,
+  stepFeedback,
+  stepHistory,
   type AnnotateResult,
   type AnnotationInput,
+  type BroadcastToast,
   type FeedbackDeps,
   type FeedbackRefusal,
-  type ShareReflectionResult
+  type RevokeResult,
+  type ShareReflectionResult,
+  type StepHistory,
+  type StepHistoryResult,
+  type ToastLimiter
 } from "./feedback.ts";

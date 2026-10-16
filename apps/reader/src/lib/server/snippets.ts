@@ -4,7 +4,7 @@
  * role, or Postgres, as DATA_STORE picks), the realtime publisher PUBLIC_REALTIME picks, and the
  * educator check that reads a course's published enrollment.
  */
-import { courseEducators, isCourseEducator, createBroadcastLimiter, type EducatorCheck } from "@tutors/application";
+import { courseAccessOf, educatorsFrom, isCourseEducator, createBroadcastLimiter, type EducatorCheck } from "@tutors/application";
 import type { CourseNotices, SnippetStore } from "@tutors/application/ports";
 import { httpCourseSource } from "@tutors/course-http";
 import { readerServer } from "./api/adapters.ts";
@@ -23,8 +23,11 @@ export const serverNotices: CourseNotices = {
 /** One limiter for the server's lifetime: one broadcast per course per minute, whoever sends it. */
 export const broadcastLimiter = createBroadcastLimiter();
 
-/** A course's educator logins from its published enrollment, cached for five minutes; shared by every route that checks one. */
-export const educatorsOf = courseEducators({ source: httpCourseSource() });
+/** A course's access rules (auth level and enrollment) from its published tutors.json, cached for five minutes. */
+export const accessOf = courseAccessOf({ source: httpCourseSource() });
+
+/** A course's educator logins from its published enrollment, from the same cache; shared by every route that checks one. */
+export const educatorsOf = educatorsFrom(accessOf);
 const check = isCourseEducator(educatorsOf);
 
 /** Whether the request's actor teaches the course, read from the course's published enrollment. */

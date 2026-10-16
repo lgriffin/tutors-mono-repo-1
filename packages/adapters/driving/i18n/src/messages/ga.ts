@@ -117,14 +117,19 @@ const ga = {
   "home.connectedAs": "Ceangailte mar:",
   "home.favourites": "Ceanáin",
   "home.recentlyAccessed": "Rochtain le Déanaí",
-  "home.values.title": "Na <span class=\"font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone\">Luachanna</span> atá ag an tionscadal",
+  "home.values.title":
+    'Na <span class="font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone">Luachanna</span> atá ag an tionscadal',
   "home.developer.title": "Taithí Forbróra",
-  "home.developer.description": "Tugann an <b>Taithí Forbróra</b> tosaíocht do shonraíocht agus cur chun feidhme <b>comhpháirteanna agus seirbhísí láidre, maith-dhoiciméadaithe, scaoilte</b>, comhtháite i <b>meánchiste comhleanúnach</b> oscailte do rannchuidithe ó <b>scileanna éagsúla</b>.",
+  "home.developer.description":
+    "Tugann an <b>Taithí Forbróra</b> tosaíocht do shonraíocht agus cur chun feidhme <b>comhpháirteanna agus seirbhísí láidre, maith-dhoiciméadaithe, scaoilte</b>, comhtháite i <b>meánchiste comhleanúnach</b> oscailte do rannchuidithe ó <b>scileanna éagsúla</b>.",
   "home.educator.title": "Taithí Oideachasóra",
-  "home.educator.description": "Tugann an <b>Taithí Oideachasóra</b> tosaíocht do chruthú <b>conairí treoraithe</b> trí churaclam trí ábhair foghlama a chruthú atá <b>neamhspleách, ailínithe go struchtúrach, in-chomhdhéanta, in-iniúchta, in-sínte, leaganacha</b> agus <b>neamhspleách</b>.",
+  "home.educator.description":
+    "Tugann an <b>Taithí Oideachasóra</b> tosaíocht do chruthú <b>conairí treoraithe</b> trí churaclam trí ábhair foghlama a chruthú atá <b>neamhspleách, ailínithe go struchtúrach, in-chomhdhéanta, in-iniúchta, in-sínte, leaganacha</b> agus <b>neamhspleách</b>.",
   "home.learner.title": "Taithí Foghlaimeoirí",
-  "home.learner.description": "Tugann an <b>Taithí Foghlaimeoirí</b> tosaíocht d'idirghníomhaíochtaí gréasáin atá <b>tarraingteach, comhthéacsúil, innasc-ábalta, in-chuardaithe, inrochtana</b> agus <b>freagrúil</b>. Ina theannta sin, ba chóir don taithí mothú <b>pobail</b> agus <b>nascachta</b> a chothú i measc comhfhoghlaimeoirí.",
-  "home.credits.title": "Tionscadal <span class=\"font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone\">Foinse Oscailte</span> go hiomlán",
+  "home.learner.description":
+    "Tugann an <b>Taithí Foghlaimeoirí</b> tosaíocht d'idirghníomhaíochtaí gréasáin atá <b>tarraingteach, comhthéacsúil, innasc-ábalta, in-chuardaithe, inrochtana</b> agus <b>freagrúil</b>. Ina theannta sin, ba chóir don taithí mothú <b>pobail</b> agus <b>nascachta</b> a chothú i measc comhfhoghlaimeoirí.",
+  "home.credits.title":
+    'Tionscadal <span class="font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone">Foinse Oscailte</span> go hiomlán',
   "home.credits.description": "Is tionscadal foinse oscailte é Tutors atá ar fáil saor in aisce faoi cheadúnas MIT ar GitHub.",
   "home.credits.viewSource": "Féach ar an gCód Foinse",
 
@@ -201,7 +206,8 @@ Is feidhmchlár foinse oscailte é Tutors - tá an comhpháirt bailiúcháin son
 
   // Footer
   "footer.version": "Tutors v:",
-  "footer.message": "An [Meánchiste Foghlama Gréasáin Oscailte](/course/tutors-reference-manual): Déan iniúchadh ar [Cad atá Nua i Tutors](https://tutors.dev/note/tutors-reference-manual/side/note-whats-new)",
+  "footer.message":
+    "An [Meánchiste Foghlama Gréasáin Oscailte](/course/tutors-reference-manual): Déan iniúchadh ar [Cad atá Nua i Tutors](https://tutors.dev/note/tutors-reference-manual/side/note-whats-new)",
   "footer.sponsorsAlt": "urraitheoirí",
   "footer.setuAlt": "Ollscoil Teicneolaíochta an Oirdheiscirt",
 
@@ -256,7 +262,8 @@ Is feidhmchlár foinse oscailte é Tutors - tá an comhpháirt bailiúcháin son
   "tour.editCourse.title": "Cuir an Cúrsa seo in Eagar",
   "tour.editCourse.description": "Osclaíonn sé foinse an leathanaigh atá á léamh agat ar GitHub, ionas gur féidir leat ceartúchán a mholadh.",
   "tour.educatorControl.title": "Rialú Oideachasóra",
-  "tour.educatorControl.description": "D'oideachasóirí an chúrsa seo: cuir acmhainní faoi ghlas agus bain an glas díobh, agus féach cad is féidir le do rang a oscailt faoi láthair.",
+  "tour.educatorControl.description":
+    "D'oideachasóirí an chúrsa seo: cuir acmhainní faoi ghlas agus bain an glas díobh, agus féach cad is féidir le do rang a oscailt faoi láthair.",
   "tour.whiteboard.title": "Clár Bán",
   "tour.whiteboard.description": "Clár líníochta comhroinnte don chúrsa seo, oscailte do gach duine atá á léamh.",
   "tour.myTime.title": "Mo Chuid Ama",
@@ -322,7 +329,8 @@ Is feidhmchlár foinse oscailte é Tutors - tá an comhpháirt bailiúcháin son
   "tour.card.whiteboard.title": "Cárta Cláir Bháin",
   "tour.card.whiteboard.description": "Oscail clár líníochta don chuid seo den chúrsa chun léaráidí a fheiceáil agus smaointe a sceitseáil.",
   "lecturer.locks.showToStudents": "Taispeáin ábhar faoi ghlas do mhic léinn",
-  "lecturer.locks.showToStudentsHelp": "Feiceann mic léinn míreanna faoi ghlas liathaithe agus ní féidir leo iad a oscailt. Nuair atá sé múchta, bíonn siad i bhfolach ó mhic léinn, ón gcrann cúrsa agus ón leagan LLM.",
+  "lecturer.locks.showToStudentsHelp":
+    "Feiceann mic léinn míreanna faoi ghlas liathaithe agus ní féidir leo iad a oscailt. Nuair atá sé múchta, bíonn siad i bhfolach ó mhic léinn, ón gcrann cúrsa agus ón leagan LLM.",
   "catalogue.summary": "Cúrsaí a foilsíodh le Tutors, na cinn is mó cuairteanna ar dtús.",
   "catalogue.modules": "modúil",
   "catalogue.students": "mic léinn",
@@ -591,7 +599,47 @@ Is feidhmchlár foinse oscailte é Tutors - tá an comhpháirt bailiúcháin son
   "help.stale": "Theip ar an léamh deireanach; scuaine a léadh ag",
   "help.refused": "Níorbh fhéidir an scuaine chabhrach a léamh. Sínigh isteach sa léitheoir mar oideachasóir an chúrsa seo.",
   "help.actionFailed": "Níor éirigh leis sin; léadh an scuaine arís.",
-  "help.loading": "Ag léamh na scuaine cabhrach…"
+  "help.loading": "Ag léamh na scuaine cabhrach…",
+
+  // Lecturer feedback (PR E of the learning plan)
+  "feedback.banner": "Míniú do chách ar an gcéim seo",
+  "feedback.dismiss": "Folaigh",
+  "feedback.from": "Ó",
+  "feedback.forYou": "Aiseolas duit",
+  "feedback.onStep": "Ar an gcéim seo",
+  "feedback.onSnippet": "Ar do bhlúire",
+  "feedback.onReflection": "Ar do mhachnamh",
+  "feedback.educatorPanel": "Aiseolas ar an gcéim seo",
+  "feedback.audience": "Do",
+  "feedback.everyone": "Gach duine ar an gcéim seo",
+  "feedback.oneStudent": "Mac léinn amháin",
+  "feedback.studentLogin": "Logáil isteach GitHub an mhic léinn",
+  "feedback.body": "Aiseolas (markdown)",
+  "feedback.post": "Postáil",
+  "feedback.notSent": "Níor seoladh an t-aiseolas. Bain triail eile as.",
+  "feedback.forbidden": "Ní féidir é sin a dhéanamh ach ag oideoir an chúrsa seo.",
+  "feedback.notKept": "Ní choinnítear aiseolas ar an bhfreastalaí seo.",
+  "feedback.history": "Postáilte ar an gcéim seo",
+  "feedback.historyEmpty": "Níl aon rud postáilte ar an gcéim seo fós.",
+  "feedback.toEveryone": "Do chách",
+  "feedback.to": "Do",
+  "feedback.revoke": "Aistarraing",
+  "feedback.revoked": "Aistarraingthe",
+  "feedback.reflections": "Machnaimh a roinneadh anseo",
+  "feedback.reply": "Freagair",
+  "feedback.share": "Roinn leis an léachtóir",
+  "feedback.shared": "Roinnte le do léachtóirí. Is leatsa do nóta i gcónaí.",
+  "feedback.shareFailed": "Níor roinneadh an nóta. Bain triail eile as.",
+  "feedback.received": "Aiseolas faighte",
+  "feedback.receivedEmpty": "Níl aon aiseolas sa chúrsa seo fós.",
+  "feedback.explain": "Déan míniú do chách de",
+  "feedback.explainLabel": "Míniú do chách ar",
+  "feedback.explainSend": "Postáil an míniú",
+  "feedback.explanationPosted": "Míniú postáilte ar",
+  "feedback.cancel": "Cealaigh",
+  "feedback.snippet": "Seol aiseolas",
+  "feedback.sent": "Seolta chuig an mac léinn",
+  "feedback.snippetLabel": "Aiseolas don mhac léinn seo ar a bhlúire"
 } as const;
 
 export default ga;

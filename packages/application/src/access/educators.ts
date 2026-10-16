@@ -7,7 +7,7 @@
  * domain: localhost and self-hosted courses included) over the plain `CourseSource`, so the time
  * app can gate its dashboard without the reader's host allow-list, and answers why it refused.
  */
-import { isEducatorOf, type Enrolment } from "@tutors/domain/access";
+import { isEducatorOf, type CourseAccess, type Enrolment } from "@tutors/domain/access";
 import type { CourseSource, FetchLike } from "../ports/course-source.ts";
 import { courseJsonUrl } from "@tutors/domain/course";
 
@@ -31,25 +31,41 @@ export function courseLocationOf(courseId: string): { courseId: string; courseUr
 }
 
 /**
+ * A course's access rules (its auth level and enrollment) from its published tutors.json, cached
+ * for `cacheMs`; null when the course cannot be read, which is cached as well.
+ */
+export function courseAccessOf({ source, cacheMs = 5 * 60 * 1000, nowMs = () => Date.now() }: CourseEducatorsDeps) {
+  const cache = new Map<string, { access: CourseAccess | null; fetchedAt: number }>();
+  return async (courseId: string, fetchFn?: FetchLike): Promise<CourseAccess | null> => {
+    const cached = cache.get(courseId);
+    if (cached && nowMs() - cached.fetchedAt < cacheMs) return cached.access;
+    let access: CourseAccess | null;
+    try {
+      const course = JSON.parse(await source.load(courseLocationOf(courseId), fetchFn)) as { authLevel?: unknown; enrollment?: Enrolment } | null;
+      access = { authLevel: typeof course?.authLevel === "number" ? course.authLevel : 0, enrollment: course?.enrollment ?? undefined };
+    } catch {
+      access = null;
+    }
+    cache.set(courseId, { access, fetchedAt: nowMs() });
+    return access;
+  };
+}
+
+/** Who teaches a course, from its access rules: the `educators` its enrollment lists; none when it cannot be read. */
+export function educatorsFrom(accessOf: (courseId: string, fetchFn?: FetchLike) => Promise<CourseAccess | null>) {
+  return async (courseId: string, fetchFn?: FetchLike): Promise<string[]> => {
+    const educators = (await accessOf(courseId, fetchFn))?.enrollment?.educators;
+    return Array.isArray(educators) ? educators : [];
+  };
+}
+
+/**
  * Who teaches a course, read from the `educators` list its published tutors.json carries (the
  * course's enrollment.yaml): one source of truth, with nothing to sync at publish time. A course
  * that cannot be read, or has no enrollment, has no educators.
  */
-export function courseEducators({ source, cacheMs = 5 * 60 * 1000, nowMs = () => Date.now() }: CourseEducatorsDeps) {
-  const cache = new Map<string, { educators: string[]; fetchedAt: number }>();
-  return async (courseId: string, fetchFn?: FetchLike): Promise<string[]> => {
-    const cached = cache.get(courseId);
-    if (cached && nowMs() - cached.fetchedAt < cacheMs) return cached.educators;
-    let educators: string[] = [];
-    try {
-      const course = JSON.parse(await source.load(courseLocationOf(courseId), fetchFn)) as { enrollment?: Enrolment };
-      educators = Array.isArray(course?.enrollment?.educators) ? course.enrollment.educators : [];
-    } catch {
-      educators = [];
-    }
-    cache.set(courseId, { educators, fetchedAt: nowMs() });
-    return educators;
-  };
+export function courseEducators(deps: CourseEducatorsDeps) {
+  return educatorsFrom(courseAccessOf(deps));
 }
 
 /**
