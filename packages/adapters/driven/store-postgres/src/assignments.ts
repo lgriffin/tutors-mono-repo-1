@@ -1,8 +1,7 @@
 /**
  * Tutors Time's cache of Moodle assignments and submissions in `assignments` and
- * `assignments_submissions`: the writes of the time app's Moodle sync, so that on DATA_STORE=postgres
- * the sync fills the same tables the reader's `timeRows` reads. Rows are the shapes the sync builds
- * for the Supabase upserts; a row already there (by `id`) is replaced.
+ * `assignments_submissions`: the writes of the time app's Moodle sync, which fills the same tables
+ * the reader's `timeRows` reads. A row already there (by `id`) is replaced.
  */
 import { run, type SqlClient } from "./client.ts";
 

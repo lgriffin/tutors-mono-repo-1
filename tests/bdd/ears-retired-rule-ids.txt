@@ -1,3 +1,13 @@
 # Rule ids that are never used again (see guides/testing/EARS-METHODOLOGY.md, Rule ids).
 # One four-digit id per line, e.g. 0031. A Rule that is deleted adds its id here in the same commit;
 # the audit fails a Rule that carries one of these ids.
+0305
+0069
+0472
+0316
+0331
+0332
+0333
+0334
+0335
+0337

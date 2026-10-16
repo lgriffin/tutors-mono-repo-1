@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseLiveActivity } from "../../../packages/adapters/driven/realtime-supabase/src/live-activity.ts";
+import { parseLiveActivity } from "@tutors/domain/presence";
 
 describe("server live activity icon validation", () => {
   const event = { courseId: "course-1", user: { id: "student-1" } };
@@ -15,7 +15,7 @@ describe("server live activity icon validation", () => {
     { type: "x".repeat(1001) },
     Object.fromEntries(Array.from({ length: 9 }, (_, i) => [String(i), "value"])),
     ["lab"]
-  ])("rejects invalid icons before they can reach Realtime: %j", (icon) => {
+  ])("rejects invalid icons before they can be published to Tutors Live: %j", (icon) => {
     expect(parseLiveActivity(JSON.stringify({ ...event, icon }))).toBe("icon must be an object of strings");
   });
 });

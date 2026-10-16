@@ -109,17 +109,6 @@ Feature: Learning Progress Tracking
       Then the reader shall have made 0 activity requests and no other learning record or calendar requests
       And the system shall record 0 more blocks of time active against the lab and against the calendar for today
 
-  @rule-0305 @ears-unwanted
-  Rule: If the database lacks the single-request recording functions, then the reader shall record page views and activity with the per-table requests.
-
-    Scenario: Recording falls back before the migration is applied
-      Given the database lacks the single-request recording functions
-      When the student views lab 1 of the course 2 times
-      And the student stays on that page for 60 seconds
-      Then the system shall record 2 more blocks of time active against the lab and against the calendar for today
-      And the system shall increment the page load count for the lab to 2
-      And the reader shall have asked for a recording function once
-
   @rule-0319 @ears-event-driven
   Rule: When a lecturer loads a course's time report for a date range, the time dashboard shall read only that course's calendar days within the range from the database.
 

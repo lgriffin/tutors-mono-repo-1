@@ -335,8 +335,9 @@ On 17 September a PR added an export, regenerated the snapshot and not the repor
 red on `api-report:check` until the report was regenerated. If you touch the public surface of
 `model`, `gen` or `time`, run both and commit both.
 
-The rest of `tests/contract/` is Zod schemas for the external shapes the apps depend on — six
-Supabase tables, two RPCs, the realtime `LoRecord` and whiteboard protocols, and the generated
+The rest of `tests/contract/` is Zod schemas for the external shapes the apps depend on — the rows
+of seven Postgres store tables (`tests/contract/supabase/`) and the parameters of two of its SQL
+functions, the realtime `LoRecord` and whiteboard protocols, and the generated
 course JSON — asserting that conforming data is accepted and malformed data rejected.
 `tests/mutation/schema-snapshot.test.ts` snapshots the schemas themselves as JSON Schema, so a
 renamed column shows up as a snapshot diff rather than a runtime surprise.
@@ -405,8 +406,8 @@ product that fails when the product stops doing it.
 [`vitest-cucumber`](https://vitest-cucumber.miceli.click/), inside the ordinary Vitest run, so
 there is one runner and no second CI job. The binder fails the run when a scenario or step is
 on one side only, which is what keeps the Gherkin from drifting back into prose. Steps drive
-product code and never assert on a fixture; Supabase, the course host and `$state` are the only
-stand-ins.
+product code and never assert on a fixture; the store and realtime (`tests/bdd/support/backend.ts`),
+the course host and `$state` are the only stand-ins.
 
 **Proves it can fail.** Changing one expected value in a feature file turns its run red; every
 bound feature was checked that way when it was bound. Tier O fails a feature that nothing
@@ -429,8 +430,8 @@ Rule id.
 **How.** `pnpm test:ears:audit` binds the two statically: a scenario with no test
 (`unproved-scenario`), a test whose title or Rule id matches no scenario (`orphan-ui-test`) and
 a skipped test (`rule-not-run`) fail it. The tests run with `apps/reader/playwright.config.ts`
-against an isolated `vite dev` on port 5173 with authentication enabled and Supabase directed to
-a local discard fixture.
+against an isolated `vite dev` on port 5173 with authentication enabled and no data store
+(`PRIVATE_DATABASE_URL` unset, so the data API answers 503).
 The config supplies test OAuth credentials and explicitly preloads the shared GitHub stub into the
 server process. No production login endpoint or trusted identity header is added. Auth-dependent
 specs call `signInAs` to obtain real signed cookies through HTTP; store seeding is limited to
@@ -489,10 +490,13 @@ lands.
 |---|---|---|
 | F | The authorisation matrix — every route against every role | RBAC [#77](https://github.com/tutors-sdk/tutors-mono-repo/issues/77); `/api/sync` auth is the open decision. See [RBAC.md](../RBAC.md) |
 | H | Message contracts for the realtime and broadcast protocols, versioned | No issue yet; shapes are snapshot-checked in `tests/contract/` |
-| I | Data migration and the Supabase exit | No issue yet |
 
 Do not claim these in documentation or PR descriptions until the suite and its negative fixture
 exist.
+
+Tier I, data migration, is in place: the one-off move into the Postgres store is `pnpm db:move`
+([DATA-MOVE.md](../DATA-MOVE.md)), rehearsed in the PR `build-and-test` job by
+`scripts/db-move-rehearsal.sh` (Rules 0486 to 0489).
 
 ## CI schedule
 

@@ -1,7 +1,7 @@
 Feature: Student data goes through the reader's server
   As a student
   I want only the reader's server, acting for my signed-in session, to read and change my data
-  So that nobody holding the public anon key can download or rewrite it
+  So that nobody but my own session can download or rewrite it
 
   Background:
     Given the course "web-dev-101" is published with 2 labs and "eve" as its educator
@@ -38,7 +38,7 @@ Feature: Student data goes through the reader's server
       Given "Alice" is signed in to the reader
       When "Alice" opens the first lab of "web-dev-101"
       Then the learning record and calendar row are stored under "alice"
-      And no row was written with the browser's anon key
+      And the browser posted the lab visit to the reader's server with the session of "alice"
 
   @rule-0065 @ears-unwanted
   Rule: If a signed-in user who is not an educator of a course asks the reader to lock or unlock its content, then the reader shall answer 403 and leave the course's locks unchanged.
@@ -138,7 +138,6 @@ Feature: Student data goes through the reader's server
       When "Eve" opens "web-dev-101" in the time dashboard
       Then the time dashboard asked the reader for "/api/time/web-dev-101" with the viewer's reader session
       And the time dashboard's calendar lists "Alice" and "Bob"
-      And the time dashboard read nothing from the database directly
 
   @rule-0068 @ears-state-driven
   Rule: While a student is signed in, the reader shall save the student's edits to a whiteboard learning object in a room that only that student's session can read or overwrite.
@@ -152,7 +151,6 @@ Feature: Student data goes through the reader's server
       Then the whiteboard of the first lab holds the drawing of "Alice" for "alice" and the drawing of "Bob" for "bob"
       And the reader gives "Bob" back only the drawing of "Bob"
       And a public shared route cannot read "Alice"'s personal drawing
-      And the database gives the anon key no policy on whiteboard_scenes
 
     @inactive
     Scenario: An anonymous visitor's whiteboard edits are not saved
@@ -160,15 +158,6 @@ Feature: Student data goes through the reader's server
       When the browser saves a drawing on the whiteboard of the first lab of "web-dev-101"
       Then the reader answers 401
       And no whiteboard scene is stored
-
-  @rule-0069 @ears-ubiquitous
-  Rule: Tutors shall give the anon key no read access to the rows of app_errors.
-
-    Scenario: A browser can report an error but cannot read the error log
-      When the database is built from supabase/migrations in order
-      Then a policy lets the anon key insert into app_errors
-      And no policy lets the anon key read app_errors
-      And the error counts the health checks read run as the function's owner and return only app, level and count
 
   @rule-0070 @ears-event-driven
   Rule: When a visitor opens the catalogue, the catalogue shall show the number of students without reading any student's profile.
@@ -182,23 +171,12 @@ Feature: Student data goes through the reader's server
   @rule-0471 @ears-ubiquitous
   Rule: Tutors shall read and change data from the browser only through the reader's server, with no browser code calling a database table or function.
 
-    Scenario: A lab visit and a catalogue visit call nothing with the anon key
+    Scenario: A lab visit and a catalogue visit go through the reader's server
       Given "Alice" is signed in to the reader
       When she opens the first lab of "web-dev-101"
       And a visitor opens the catalogue
-      Then the anon key was used for no table and no database function
+      Then the reader's server recorded the lab visit and answered the catalogue
       And no browser code in the reader, catalogue, live or time apps calls a table or a database function
-
-  @rule-0472 @ears-unwanted
-  Rule: If a browser presents the anon key to the database, then tutors shall give it no table, view, sequence or function in the public schema once the server-side contract step has run, and leave Realtime open to it.
-
-    Scenario: The contract step closes the public schema to the browser roles
-      When the contract step supabase/contracts/revoke_anon_student_data.sql is read
-      Then it drops every public-schema policy that names anon, authenticated or public
-      And it revokes every privilege on every public-schema table, view and sequence from anon and authenticated
-      And it revokes execute on every public-schema function from anon and authenticated
-      And it names nothing in the realtime schema
-      And every policy supabase/migrations gives the anon key is on a public-schema table
 
   @rule-0473 @ears-state-driven
   Rule: While a session is signed in, the reader shall answer each of its read routes with only what that session is allowed to see.
@@ -220,11 +198,11 @@ Feature: Student data goes through the reader's server
       And no row is read from or written to the database
 
   @rule-0474 @ears-unwanted
-  Rule: If the reader's server has no service key, then the reader shall answer 503 to each of its data routes and read or write no row.
+  Rule: If the reader's server has no database URL, then the reader shall answer 503 to each of its data routes and read or write no row.
 
-    Scenario Outline: A data route on a server without the service key
+    Scenario Outline: A data route on a server without a database URL
       Given "Alice" is signed in to the reader
-      And the reader's server has no service key
+      And the reader's server has no database URL
       When the browser calls the reader's <route> route for "web-dev-101"
       Then the reader answers 503
       And no row is read from or written to the database
@@ -237,7 +215,6 @@ Feature: Student data goes through the reader's server
         | SCORM           |
         | playground      |
         | errors          |
-        | live watch      |
 
   @rule-0475 @ears-event-driven
   Rule: When a browser hands in or withdraws playground work, the reader shall store or remove only the signed-in student's own hand-in, whoever the request names and whether or not the session teaches the course.

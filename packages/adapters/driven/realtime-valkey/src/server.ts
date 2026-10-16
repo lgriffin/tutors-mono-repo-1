@@ -15,7 +15,7 @@ import { PLAYGROUND_EVENTS, WHITEBOARD_EVENTS, playgroundOf, whiteboardTopicOf }
 
 export const LO_EVENT = "lo-event";
 
-/** The answer to POST /api/live/activity: the same shape as on Supabase, always the normal tier. */
+/** The answer to POST /api/live/activity: the topics the event went to (the tier is always `normal`: there is no budget). */
 export type ValkeyActivityResponse = { status: number; body?: { tier: "normal"; topics: string[] } | { message: string } };
 
 /**
@@ -115,7 +115,7 @@ export async function publishBrowserMessage(raw: string, hub: RealtimeHub, allow
 
 type BrowserMessage = { event?: unknown; payload?: unknown; from?: unknown };
 
-/** The tab a message came from, so the tab can ignore its own: what Supabase's `broadcast: { self: false }` did. */
+/** The tab a message came from, so the tab can ignore its own. */
 async function publishAs(hub: RealtimeHub, topic: string, body: BrowserMessage): Promise<BrowserPublishResponse> {
   const from = typeof body.from === "string" && body.from.length <= 64 ? body.from : undefined;
   try {

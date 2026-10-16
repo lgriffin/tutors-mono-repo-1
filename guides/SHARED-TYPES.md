@@ -17,7 +17,7 @@ As of October 2026 there is no shared vocabulary. Types live in about 15 `types.
 learner-facing ones are mostly `string`:
 
 - **Shared learner types sit in the data layer.** `LoUser` and `LoEvent` live in `@tutors/svelte-state/community`, so
-  `themes/src/types.ts` and `ui-primitives/.../StudentCard.svelte` depend on the Supabase package to
+  `themes/src/types.ts` and `ui-primitives/.../StudentCard.svelte` depend on a data package to
   get a type.
 - **Settings are stringly typed.** `TutorsId.share` holds `"true"`, `"false"`, `"online"` or
   `"offline"` depending on the code path (`connect.svelte.ts:72`, `:78`, `:103`). `connect` tests
@@ -27,10 +27,8 @@ learner-facing ones are mostly `string`:
 - **One shape is written several ways.** The course icon has four spellings. `Lo.type` is `string`,
   although every subtype narrows it to a literal. Learning events are
   `Record<string, unknown>` in the interface and `Record<string, string>` in the implementation.
-- **Row types are hand-written and partial.** The code reads 11 tables. Only `app_errors` has a
-  migration, six tables have hand-written rows, and five tables have none.
-- **Ports carry their adapters.** `PresenceService` exposes Supabase `RealtimeChannel`s, so nothing
-  but the Supabase adapter can implement it.
+- **Row types are hand-written and partial.** The code reads 11 tables. Six have hand-written rows,
+  and five have none.
 
 ## What the package holds
 
@@ -39,7 +37,7 @@ learner-facing ones are mostly `string`:
 | `learning-objects.ts` | `LO_SIMPLE_TYPES`, `LO_COMPOSITE_TYPES`, `LO_TYPES`, `LoType`, `isLoType`, `CourseIcon` | model-lib `simpleTypes`, `loCompositeTypes`, the icon spellings |
 | `learner.ts` | `SENTIMENTS`, `Sentiment`, `parseSentiment`, `ONLINE_STATUSES`, `parseSharing`, `onlineStatusFor`, `LearnerDisplay`, `CourseVisit` | `COURSE_SENTIMENT_IDS`, community `LoUser`, connect `CourseVisit`, ad hoc share and sentiment parsing |
 | `events.ts` | `LearningEvent` (page-load, tick), `PresenceEvent`, `CalendarDay` | community `LoRecord` as data, #327's `AnalyticsEvent` |
-| `rows.ts` | `TutorsConnectUserRow`, `TutorsConnectCourseRow`, `TutorsConnectLatestRow`, `CalendarDbRow`, `LearningRecordRow`, `AppErrorRow`, `TutorsTables` | time-lib's hand-written rows, inline casts in `supabase-client.ts` |
+| `rows.ts` | `TutorsConnectUserRow`, `TutorsConnectCourseRow`, `TutorsConnectLatestRow`, `CalendarDbRow`, `LearningRecordRow`, `AppErrorRow`, `TutorsTables` | time-lib's hand-written rows, inline row casts in the store adapter |
 | `ports.ts` | `PresencePort`, `ProfilePort`, `LearningEventSink`, `Unsubscribe` | community `PresenceService`, connect `ProfileStore` |
 | `tutors-json.ts` | `TUTORS_JSON_SCHEMA` (JSON Schema 2020-12) and `TutorsJsonCourse`, `TutorsJsonLo`, `TutorsJsonStep`: tutors.json as the generator writes it | the hand-written Zod `CourseJsonSchema` in tests/contract, which described the reader's decorated course and was never checked against real output |
 
@@ -74,9 +72,9 @@ from the unification block (0132-0149). Identity is not in this plan.
 | 0 (this PR) | Add the package, Rules 0130-0131, the dependency rule, the API report and this plan | None | Are the names and shapes the ones we want to standardise on? |
 | 1 | Publish `@tutors/tutors-types` 0.1.0 to JSR. Make model-lib and time-lib re-export from it: `COURSE_SENTIMENT_IDS = SENTIMENTS`, `simpleTypes` from `LO_SIMPLE_TYPES`, `TutorsConnectUser = TutorsConnectUserRow` and so on, as type aliases so every existing name keeps working. Add a ratchet that lists type names declared in more than one package and may only shrink. | None (aliases) | API reports show only re-exports. The duplicate-type ratchet has a baseline. |
 | 2 | Normalise at the edges. Connect and community read the share setting with `parseSharing` and write it with `onlineStatusFor`. Sentiment reads go through `parseSentiment`, replacing `normalizeStoredSentiment`. Learning-object kinds go through `isLoType`. Community's `LoUser.sentiment` and `LoRecord.type` narrow to `Sentiment` and `LoType`, and `TutorsId.share` is read as a boolean internally while storage keeps its current values. This has to come before step 3, because `string` fields don't fit the shared `Sentiment` and `LoType`. | Yes: the presence truthiness check is fixed | Write BDD Rules for sharing (0132) and sentiment (0133) and see them fail before the change. Live presence still works end to end in the e2e stack. |
-| 3 | Move the learner and presence types out of `@tutors/svelte-state/community`. Themes and ui-primitives import `LearnerDisplay` and `PresenceEvent` from tutors-types, `LoUser` becomes an alias, and `LoRecord` implements `PresenceEvent`, which is possible now that step 2 has narrowed its fields. Add a compat assertion for the community payloads. Rule 0134: themes and UI primitives import no data package. | None | Two `known-violations` lines are gone, and themes and primitives build without Supabase in their graph. |
-| 4 | Ports. Community, connect and PR #327's data-api client implement `PresencePort`, `ProfilePort` and `LearningEventSink`. #327's contract imports `LearningEvent` and `CourseVisit` instead of `string` and `Record<string, unknown>`. Apps depend on the ports, and the Supabase types stay inside the adapters. | None | Each app can be given a fake adapter in tests. This step lines up with #327 landing and with #416's adapter shape. |
-| 5 | Generated row types. Once the schema is in `supabase/migrations` (migration plan), generate with `supabase gen types typescript` and make `rows.ts` re-export the generated tables. Add the five missing tables. CI fails when the generated file is stale. | None | No inline row casts remain in `supabase-client.ts`. |
+| 3 | Move the learner and presence types out of `@tutors/svelte-state/community`. Themes and ui-primitives import `LearnerDisplay` and `PresenceEvent` from tutors-types, `LoUser` becomes an alias, and `LoRecord` implements `PresenceEvent`, which is possible now that step 2 has narrowed its fields. Add a compat assertion for the community payloads. Rule 0134: themes and UI primitives import no data package. | None | Two `known-violations` lines are gone, and themes and primitives build without a data adapter in their graph. |
+| 4 | Ports. Community, connect and PR #327's data-api client implement `PresencePort`, `ProfilePort` and `LearningEventSink`. #327's contract imports `LearningEvent` and `CourseVisit` instead of `string` and `Record<string, unknown>`. Apps depend on the ports, and the database types stay inside the adapters. | None | Each app can be given a fake adapter in tests. This step lines up with #327 landing and with #416's adapter shape. |
+| 5 | Generated row types. Generate them from the schema in `db/migrations` and make `rows.ts` re-export the generated tables. Add the five missing tables. CI fails when the generated file is stale. | None | No inline row casts remain in the store adapter. |
 | 6 | Narrow the learning-object model: `Lo.type` becomes `LoType`, and model-lib's `Lo` family moves here (or is re-exported) if it stays dependency-free. Unknown kinds found while parsing a course are reported, not silently passed. | Possible, for courses with unknown kinds | Run `check:generator-diff` over real courses first and count unknown kinds. Only then decide. |
 
 Step 1 only moves code. Step 2 is the first step that changes behaviour, and it must land before step 3: the

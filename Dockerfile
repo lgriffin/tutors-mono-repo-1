@@ -13,7 +13,7 @@
 #     --build-arg GIT_SHA=$(git rev-parse HEAD) --build-arg BUILD_DATE=$(date -u +%FT%TZ) \
 #     -t quay.io/tutors-sdk/tutors-reader:16.2.2 .
 #
-# All configuration (Supabase, auth, log level, ...) is read from the
+# All configuration (database, auth, log level, ...) is read from the
 # environment at runtime via SvelteKit's $env/dynamic modules, so one image
 # serves every environment and no secret is ever baked into a layer.
 

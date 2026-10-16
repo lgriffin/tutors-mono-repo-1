@@ -81,15 +81,27 @@ function forbiddenRuleNames(): string[] {
   return [...new Set([...config.matchAll(/name: "([a-z-]+)"/g)].map((m) => m[1]))].filter((name) => !["supabase", "markdown", "better-auth", "redis", "pg"].includes(name)).sort();
 }
 
-/** Every `.from("table")` the adapters, the time library and the apps make. */
-function queriedTables(): string[] {
-  const roots = ["packages/adapters/driven", "packages/jsr/time/src", "apps"].map((dir) => resolve(REPO_ROOT, dir));
-  const tables = roots
-    .flatMap((root) => sources(root, /\.(ts|svelte)$/))
-    .filter((file) => isProductModule(relative(REPO_ROOT, file)))
-    .flatMap((file) => [...readFileSync(file, "utf8").matchAll(/\.from\("([a-z_-]+)"\)/g)].map((m) => m[1]));
+/** Every table and view the Postgres store's migrations (db/migrations) create. */
+function migrationTables(): string[] {
+  const tables = sources(resolve(REPO_ROOT, "db/migrations"), /\.sql$/).flatMap((file) =>
+    [...readFileSync(file, "utf8").matchAll(/^CREATE (?:TABLE(?: IF NOT EXISTS)?|(?:OR REPLACE )?(?:MATERIALIZED )?VIEW(?: IF NOT EXISTS)?) "?([a-z_-]+)"?/gim)].map((m) => m[1])
+  );
   return [...new Set(tables)].sort();
 }
+
+/**
+ * The prefixed topics the Valkey adapter streams, as `<prefix>:`, read from `streamableTopic` in
+ * its topics.ts, so a topic added there needs its row.
+ */
+function streamedTopicPrefixes(): string[] {
+  const source = readFileSync(resolve(REPO_ROOT, "packages/adapters/driven/realtime-valkey/src/topics.ts"), "utf8");
+  const body = source.slice(source.indexOf("export function streamableTopic"));
+  return [...new Set([...body.matchAll(/raw\.startsWith\("([a-z]+:)"\)/g)].map((m) => m[1]))].sort();
+}
+
+/** A data-ownership row whose first cell starts with `Valkey channel` and names the channel, or a channel starting so. */
+const hasChannelRow = (doc: string, channel: string, exact: boolean) =>
+  new RegExp("^\\| Valkey (?:pub/sub )?channel `" + channel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + (exact ? "`" : ""), "m").test(doc);
 
 const ruleIdsOf = (feature: string) => [...feature.matchAll(/@rule-(\d{4})/g)].map((m) => m[1]);
 
@@ -100,8 +112,8 @@ function allFeatureRuleIds(): Set<string> {
 /** The ids the requirements table of the document cites, as `| 0340 |` rows. */
 const citedRuleIds = (doc: string) => [...doc.matchAll(/^\| (\d{4}) \|/gm)].map((m) => m[1]);
 
-/** A data-ownership or ports row names its subject in backticks in the first cell. */
-const hasRowFor = (doc: string, name: string) => new RegExp("^\\| `" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "`", "m").test(doc);
+/** A data-ownership or ports row names its subject in backticks in the first cell (a row may name several, comma-separated). */
+const hasRowFor = (doc: string, name: string) => new RegExp("^\\| (?:`[^`|]+`, )*`" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "`", "m").test(doc);
 
 /**
  * What the document leaves out: packages it does not name and tables it has no row for. The
@@ -161,7 +173,7 @@ describeFeature(feature, ({ Rule }) => {
   });
 
   Rule(
-    "Tutors shall import a vendor library (the Supabase client, the markdown renderers, Better Auth) only from the adapter that wraps it, outside the authoring toolchain.",
+    "Tutors shall import a vendor library (the Postgres and Valkey clients, the markdown renderers, Better Auth) only from the adapter that wraps it, outside the authoring toolchain.",
     ({ RuleScenario }) => {
       let violations: ArchitectureViolation[] = [];
       RuleScenario("A package other than the wrapping adapter importing a vendor library is a violation", ({ Given, Then, And }) => {
@@ -325,19 +337,32 @@ describeFeature(feature, ({ Rule }) => {
     });
   });
 
-  Rule("Tutors shall name in ARCHITECTURE.md every Supabase table and channel a package reads or writes, with the adapter that owns it.", ({ RuleScenario }) => {
-    RuleScenario("Every table a package queries is in the data ownership table", ({ Given, Then, And }) => {
+  Rule("Tutors shall name in ARCHITECTURE.md every Postgres table and Valkey realtime topic a package reads or writes, with the adapter that owns it.", ({ RuleScenario }) => {
+    RuleScenario("Every table and topic a package uses is in the data ownership table", ({ Given, Then, And }) => {
       let tables: string[] = [];
-      Given("the Supabase tables the adapters, the time library and the apps query", () => {
-        tables = queriedTables();
+      Given("the Postgres tables and views the store's migrations create", () => {
+        tables = migrationTables();
         expect(tables).toContain("learning_records");
+        expect(tables).toContain("insights_help_requests");
       });
       Then("ARCHITECTURE.md has a data ownership row for each of them", () => {
         expect(missingFromAuthority(architectureDoc(), { packages: [], tables })).toEqual([]);
       });
-      And("ARCHITECTURE.md has a data ownership row for the platform-wide presence channel", async () => {
-        const { ALL_COURSES_CHANNEL } = await import("../../../../packages/adapters/driven/realtime-supabase/src/index.ts");
-        expect(hasRowFor(architectureDoc(), `Realtime channel \`${ALL_COURSES_CHANNEL}\``) || architectureDoc().includes(`| Realtime channel \`${ALL_COURSES_CHANNEL}\``)).toBe(true);
+      And("ARCHITECTURE.md has a data ownership row for each topic the Valkey realtime adapter streams", async () => {
+        const { CHANNEL_PREFIX } = await import("../../../../packages/adapters/driven/realtime-valkey/src/hub.ts");
+        const { streamableTopic } = await import("../../../../packages/adapters/driven/realtime-valkey/src/topics.ts");
+        const { topics } = await import("../../../../packages/jsr/realtime/src/index.ts");
+        const prefixes = streamedTopicPrefixes();
+        expect(prefixes).toContain("snippets:");
+        const doc = architectureDoc();
+        const platform = topics.platformActivity();
+        expect(streamableTopic(platform)).toBe(platform);
+        const missing = [
+          ...(hasChannelRow(doc, CHANNEL_PREFIX + platform, true) ? [] : [CHANNEL_PREFIX + platform]),
+          ...(hasChannelRow(doc, CHANNEL_PREFIX + "<courseId>", true) ? [] : [CHANNEL_PREFIX + "<courseId>"]),
+          ...prefixes.filter((prefix) => !hasChannelRow(doc, CHANNEL_PREFIX + prefix, false)).map((prefix) => CHANNEL_PREFIX + prefix)
+        ];
+        expect(missing).toEqual([]);
       });
     });
   });
@@ -365,7 +390,7 @@ describeFeature(feature, ({ Rule }) => {
       let doc = "";
       let missing: string[] = [];
       Given("an architecture document that names {string} and {string} only", (_ctx: unknown, pkg: string, table: string) => {
-        doc = `| \`${pkg}\` | ring |\n| \`${table}\` | store-supabase |\n`;
+        doc = `| \`${pkg}\` | ring |\n| \`${table}\` | store-postgres |\n`;
       });
       When("it is checked against the packages {string} and the tables {string}", (_ctx: unknown, packages: string, tables: string) => {
         missing = missingFromAuthority(doc, { packages: packages.split(",").map((s) => s.trim()), tables: tables.split(",").map((s) => s.trim()) });

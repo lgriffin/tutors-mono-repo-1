@@ -5,8 +5,7 @@ import { allowedOriginHeaders, answer } from "#lib/server/api/cors.ts";
 import { requireEducator } from "#lib/server/snippets.ts";
 
 /**
- * GET /api/realtime/stream?topic=: one realtime topic as server-sent events, when PUBLIC_REALTIME is
- * valkey (Rule 0482). The reader's own tabs stream course broadcasts and playground shares here;
+ * GET /api/realtime/stream?topic=: one realtime topic from Valkey as server-sent events (Rule 0482). The reader's own tabs stream course broadcasts and playground shares here;
  * Tutors Time's snippets page streams a course's snippet pings from its origin, which
  * PRIVATE_API_ALLOWED_ORIGINS lists. Only topics Tutors publishes are streamed (Rule 0483), and a
  * playground share's work only to a signed-in educator of its course (Rule 0560). A course's help

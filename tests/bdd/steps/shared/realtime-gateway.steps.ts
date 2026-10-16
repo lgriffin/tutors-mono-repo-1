@@ -1,28 +1,77 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
-
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
-  createClient: (await import("../../support/supabase-recorder.ts")).createClient
-}));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("$app/env/public", async () => (await import("../../support/supabase-recorder.ts")).publicEnv);
-
-import { createRealtimeGateway, topics, type RealtimeGateway, type Subscription, type Topic } from "../../../../packages/jsr/realtime/src/index.ts";
-import { supabaseRealtimeAdapter } from "../../../../packages/adapters/driven/realtime-supabase/src/gateway.ts";
-import { clientOptions, recorder, type RecordingChannel } from "../../support/supabase-recorder.ts";
-import { mountWhiteboardEditor } from "../../support/whiteboard-editor.ts";
-import { composeReader } from "../../../../apps/reader/src/lib/compose.ts";
-import { publicEnv } from "../../support/supabase-recorder.ts";
-
-// The reader's composition root creates the Supabase client with the gateway's socket options; the recorder keeps them.
-composeReader(publicEnv, { identityClient: { signIn: async () => {}, signOut: async () => {} } });
+import {
+  createRealtimeGateway,
+  topics,
+  type ChannelStatus,
+  type JoinOptions,
+  type RealtimeAdapter,
+  type RealtimeGateway,
+  type Subscription,
+  type Topic
+} from "../../../../packages/jsr/realtime/src/index.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/realtime-gateway.feature");
+
+/** One channel the gateway joined on the broker: what it sent, and whether the gateway has left it. */
+type BrokerChannel = {
+  name: string;
+  options: JoinOptions;
+  left: boolean;
+  deliver(event: string, payload: unknown): void;
+  report(status: ChannelStatus): void;
+};
+
+/**
+ * A broker behind the gateway: the adapter only translates, so every policy the scenarios observe
+ * (budget, backoff, channel cap, counts) is the gateway's own. A join is confirmed at once unless
+ * `confirmJoins` is off, as a broker that accepts a join but never answers.
+ */
+function fakeBroker() {
+  const broker = {
+    channels: [] as BrokerChannel[],
+    /** Every broadcast that reached the broker, published or sent on a joined channel. */
+    sent: [] as { topic: string; event: string; payload: unknown }[],
+    confirmJoins: true,
+    /** The channels joined on `name` and not left. */
+    joined: (name: string) => broker.channels.filter((channel) => channel.name === name && !channel.left),
+    /** A message the broker delivers to every channel joined on `name`. */
+    relay(name: string, event: string, payload: unknown) {
+      for (const channel of broker.joined(name)) channel.deliver(event, payload);
+    },
+    reset() {
+      broker.channels = [];
+      broker.sent = [];
+      broker.confirmJoins = true;
+    },
+    adapter: {
+      async publish(topic: Topic, event: string, payload: unknown) {
+        broker.sent.push({ topic, event, payload });
+      },
+      join(topic, options, onMessage, onStatus) {
+        const channel: BrokerChannel = { name: topic, options, left: false, deliver: onMessage, report: onStatus };
+        broker.channels.push(channel);
+        if (broker.confirmJoins) onStatus("SUBSCRIBED");
+        return {
+          send: async (event: string, payload: unknown) => {
+            broker.sent.push({ topic, event, payload });
+          },
+          leave: async () => {
+            channel.left = true;
+          }
+        };
+      }
+    } as RealtimeAdapter
+  };
+  return broker;
+}
+
+const broker = fakeBroker();
 
 describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   let gateway: RealtimeGateway;
   let subscription: Subscription;
-  let joined: RecordingChannel;
+  let joined: BrokerChannel;
   const subscriptions = new Map<string, Subscription[]>();
   const received = new Map<string, number>();
   let delays: number[] = [];
@@ -35,7 +84,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   };
   /** Lets a rejoin that waits on the previous channel's removal go ahead. */
   const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
-  const sentCount = () => recorder.channels.flatMap((channel) => channel.sent).length;
+  const sentCount = () => broker.sent.length;
   const totals = (kind: "sent" | "dropped" | "refused") => Object.values(gateway.counts()).reduce((sum, counts) => sum + counts[kind], 0);
   const publish = (count: number) => {
     for (let i = 0; i < count; i++) gateway.publish(topics.platformActivity(), "lo-event", { i });
@@ -43,19 +92,19 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   const jitter = (_ctx: unknown, draw: number) => vi.spyOn(Math, "random").mockReturnValue(draw);
   const joinOne = (_ctx: unknown, name: string) => {
     subscription = join(name);
-    joined = recorder.joined(name)[0];
+    joined = broker.joined(name)[0];
   };
   const fail = (status: string) => {
     const before = vi.getTimerCount();
     const spy = vi.spyOn(globalThis, "setTimeout");
-    recorder.joined(joined.name)[0]?.report(status);
+    broker.joined(joined.name)[0]?.report(status as ChannelStatus);
     const call = spy.mock.calls.at(-1);
     if (vi.getTimerCount() > before && call) delays.push(call[1] as number);
     spy.mockRestore();
   };
   /** Each rejoin is accepted but never confirmed, so every failure is a repeat. */
   const failTimes = async (_ctx: unknown, times: number) => {
-    recorder.confirmJoins = false;
+    broker.confirmJoins = false;
     for (let i = 0; i < times; i++) {
       fail("TIMED_OUT");
       vi.advanceTimersByTime(delays.at(-1)!);
@@ -73,12 +122,12 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
 
   Background(({ Given }) => {
     Given("a fresh realtime gateway", () => {
-      recorder.reset();
+      broker.reset();
       subscriptions.clear();
       received.clear();
       delays = [];
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"], now: new Date("2026-10-13T10:00:00Z") });
-      gateway = createRealtimeGateway({ adapter: supabaseRealtimeAdapter(recorder as never) });
+      gateway = createRealtimeGateway({ adapter: broker.adapter });
     });
   });
 
@@ -113,15 +162,15 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         Given("the gateway has joined {string}", joinOne);
         And("the jitter draw is {number}", jitter);
         When("the channel reports an error", () => fail("CHANNEL_ERROR"));
-        Then("the failed channel has been left", () => expect(joined.subscribed).toBe(false));
+        Then("the failed channel has been left", () => expect(joined.left).toBe(true));
         And("{string} is rejoined after {number} milliseconds", async (_ctx, name: string, ms: number) => {
           vi.advanceTimersByTime(ms - 1);
           await flush();
-          expect(recorder.joined(name)).toHaveLength(0);
+          expect(broker.joined(name)).toHaveLength(0);
           vi.advanceTimersByTime(1);
           await flush();
-          expect(recorder.joined(name)).toHaveLength(1);
-          expect(recorder.joined(name)[0]).not.toBe(joined);
+          expect(broker.joined(name)).toHaveLength(1);
+          expect(broker.joined(name)[0]).not.toBe(joined);
         });
       });
       RuleScenario("Repeated failures double the delay up to 30 seconds", ({ Given, And, When, Then }) => {
@@ -135,8 +184,8 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         And("the jitter draw is {number}", jitter);
         When("the channel times out {number} times in a row", failTimes);
         And("the channel rejoins successfully", () => {
-          recorder.confirmJoins = true;
-          recorder.joined(joined.name)[0].report("SUBSCRIBED");
+          broker.confirmJoins = true;
+          broker.joined(joined.name)[0].report("SUBSCRIBED");
           expect(subscription.state()).toBe("live");
         });
         And("the channel times out {number} times in a row", (_ctx, times: number) => {
@@ -153,7 +202,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
           vi.advanceTimersByTime(seconds * 1000);
           await flush();
         });
-        Then("{string} is not joined", (_ctx, name: string) => expect(recorder.joined(name)).toHaveLength(0));
+        Then("{string} is not joined", (_ctx, name: string) => expect(broker.joined(name)).toHaveLength(0));
       });
     }
   );
@@ -189,16 +238,16 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     RuleScenario("A fourth channel is refused", ({ Given, When, Then, And }) => {
       Given("the gateway has joined {string}, {string} and {string}", joinThree);
       When("{string} is requested", (_ctx, name: string) => join(name));
-      Then("{string} is not joined", (_ctx, name: string) => expect(recorder.joined(name)).toHaveLength(0));
+      Then("{string} is not joined", (_ctx, name: string) => expect(broker.joined(name)).toHaveLength(0));
       And("the {string} subscription is {string}", (_ctx, name: string, expected: string) => expect(subscriptions.get(name)![0].state()).toBe(expected));
       And("{number} channel is counted as refused on {string}", (_ctx, count: number, name: string) => expect(gateway.counts()[topic(name)].refused).toBe(count));
     });
     RuleScenario("Requesting a joined topic again shares its channel", ({ Given, When, Then, And }) => {
       Given("the gateway has joined {string}, {string} and {string}", joinThree);
       When("{string} is requested again", (_ctx, name: string) => join(name));
-      Then("{number} channels are joined", (_ctx, count: number) => expect(recorder.channels.filter((channel) => channel.subscribed)).toHaveLength(count));
+      Then("{number} channels are joined", (_ctx, count: number) => expect(broker.channels.filter((channel) => !channel.left)).toHaveLength(count));
       And("both {string} subscriptions receive a message sent to it", (_ctx, name: string) => {
-        recorder.relay(name, { type: "broadcast", event: "lo-event", payload: {} });
+        broker.relay(name, "lo-event", {});
         expect(received.get(name)).toBe(2);
       });
     });
@@ -208,7 +257,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         await subscriptions.get(closed)![0].close();
         join(requested);
       });
-      Then("{string} is joined", (_ctx, name: string) => expect(recorder.joined(name)).toHaveLength(1));
+      Then("{string} is joined", (_ctx, name: string) => expect(broker.joined(name)).toHaveLength(1));
     });
   });
 
@@ -219,7 +268,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         for (let i = 0; i < count; i++) subscription.send("lo-event", { i });
       });
       And("{number} messages arrive on {string}", (_ctx, count: number, name: string) => {
-        for (let i = 0; i < count; i++) recorder.relay(name, { type: "broadcast", event: "lo-event", payload: { i } });
+        for (let i = 0; i < count; i++) broker.relay(name, "lo-event", { i });
       });
       And("{number} activity event is published", (_ctx, count: number) => publish(count));
       Then("{string} counts {number} sent and {number} received", (_ctx, name: string, sent: number, got: number) => {
@@ -230,26 +279,4 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       });
     });
   });
-
-  Rule(
-    "When the Realtime connection drops, tutors shall reconnect the reader and the whiteboard editor after a jittered exponential delay of at most 30 seconds.",
-    ({ RuleScenario }) => {
-      const delaysFor = (reconnectAfterMs: ((tries: number) => number) | undefined, tries: number) => Array.from({ length: tries }, (_, i) => reconnectAfterMs!(i + 1));
-      RuleScenario("The reader's connection backs off with jitter", ({ Given, Then }) => {
-        Given("the jitter draw is {number}", jitter);
-        Then("the reader's reconnect delays for {number} tries are {string} milliseconds", (_ctx, tries: number, list: string) => {
-          const options = clientOptions.at(-1) as { realtime?: { reconnectAfterMs?: (tries: number) => number } };
-          expect(delaysFor(options?.realtime?.reconnectAfterMs, tries)).toEqual(delayList(list));
-        });
-      });
-      RuleScenario("The whiteboard editor's connection backs off with jitter", ({ Given, Then }) => {
-        Given("the jitter draw is {number}", jitter);
-        Then("the whiteboard editor's reconnect delays for {number} tries are {string} milliseconds", (_ctx, tries: number, list: string) => {
-          const editor = mountWhiteboardEditor();
-          expect(delaysFor(editor.clientOptions()?.realtime?.reconnectAfterMs, tries)).toEqual(delayList(list));
-          editor.unmount();
-        });
-      });
-    }
-  );
 });

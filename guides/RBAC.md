@@ -71,7 +71,7 @@ Educators can lock and unlock top-level learning objects (topics, units) to hide
 
 ### How It Works
 
-1. When an educator visits a course, content locks are loaded from Supabase (`tutors_content_locks` table) with a localStorage fallback.
+1. When an educator visits a course, content locks are loaded through the reader's `GET /api/locks` (the `tutors_content_locks` table in the Postgres store) with a localStorage fallback.
 2. The educator panel (integrated into the Info sidebar) shows a **Locks** tab with toggle switches for each top-level learning object.
 3. When a lock is toggled, the change is applied immediately to the reactive `contentLocks` map, persisted to localStorage, and saved through the reader's `/api/locks`. The server checks the course's `enrollment.yaml` itself (or `PRIVATE_TUTORS_ADMINS`) and answers 403 to anyone else (Rule 0065).
 4. Locked content is **completely hidden** from students — not blurred or greyed out.
@@ -134,7 +134,7 @@ Located at `packages/adapters/driving/svelte-state/`. Contains:
 |------|---------|
 | `src/types.ts` | `Role`, `Permission`, and `ContentLock` type definitions |
 | `src/permissions.ts` | Static role-to-permission mapping and query functions |
-| `src/lock-store.ts` | Supabase CRUD operations for `tutors_content_locks` table |
+| `src/lock-store.ts` | Reads and writes `tutors_content_locks` through the reader's `/api/locks` |
 | `src/rbac-service.svelte.ts` | Main service: role resolution, lock management, educator status, `isLoRouteLocked` / `isLoLocked` |
 | `src/index.ts` | Public exports (`rbacService`, `isLoRouteLocked`) |
 
@@ -175,33 +175,23 @@ MainNavigator passes showEducatorPanel → InfoButton
 Cards/Units/Wall call rbacService.isLoLocked + isEducator to filter visible content
 ```
 
-## Supabase Setup
+## Database Setup
 
-The `tutors_content_locks` table must be created in your Supabase project. Run the SQL in `packages/adapters/driven/store-supabase/sql/002_content_locks.sql`:
+The `tutors_content_locks` table is part of the Postgres store's schema in `db/migrations/20261019000000_create_tutors_store.sql`, applied with `pnpm db:migrate`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS tutors_content_locks (
-  id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  course_id   text NOT NULL,
-  lo_route    text NOT NULL,
-  locked      boolean NOT NULL DEFAULT true,
-  locked_by   text NOT NULL,
-  locked_at   timestamptz NOT NULL DEFAULT now(),
+  id        UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  course_id TEXT NOT NULL,
+  lo_route  TEXT NOT NULL,
+  locked    BOOLEAN NOT NULL DEFAULT true,
+  locked_by TEXT NOT NULL,
+  locked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (course_id, lo_route)
 );
-
-CREATE INDEX IF NOT EXISTS idx_content_locks_course_id
-  ON tutors_content_locks (course_id);
-
-ALTER TABLE tutors_content_locks ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "content_locks_select" ON tutors_content_locks FOR SELECT USING (true);
-CREATE POLICY "content_locks_insert" ON tutors_content_locks FOR INSERT WITH CHECK (true);
-CREATE POLICY "content_locks_update" ON tutors_content_locks FOR UPDATE USING (true);
-CREATE POLICY "content_locks_delete" ON tutors_content_locks FOR DELETE USING (true);
 ```
 
-If Supabase is unavailable, content locks fall back to localStorage.
+Only the reader's server reads and writes it; `/api/locks` lets anyone read a course's locks and only an educator of the course change them. If the store is unavailable, content locks fall back to localStorage.
 
 ## Icon
 

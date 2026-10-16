@@ -15,7 +15,7 @@ export type ValkeyBrowserRealtime = {
 };
 
 /**
- * A tab's realtime when PUBLIC_REALTIME=valkey: one gateway over a Tutors server's streams, and the
+ * A tab's realtime: one gateway over a Tutors server's streams, and the
  * three ports over that gateway. An app composes the ports it uses.
  */
 export function valkeyBrowserRealtime(options: SseAdapterOptions & { presence?: ValkeyPresenceOptions } = {}): ValkeyBrowserRealtime {

@@ -1,4 +1,4 @@
-// Supabase `tutors-connect-courses` table model
+// Store `tutors-connect-courses` table model (db/migrations)
 export interface TutorsConnectCourse {
   course_id: string;
   visited_at: string; // timestamptz not null (ISO string)
@@ -13,7 +13,7 @@ export interface TutorsConnectCourse {
   } | null; // json null
 }
 
-// Supabase `tutors-connect-users` table model (public.tutors-connect-users)
+// Store `tutors-connect-users` table model (db/migrations)
 export interface TutorsConnectUser {
   github_id: string;
   email: string | null;

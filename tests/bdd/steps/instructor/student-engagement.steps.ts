@@ -1,14 +1,13 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
 
-// The seams: Supabase (by the path product code resolves, and by name for a hoisted install), the public env,
-// SvelteKit and the identity adapter. Everything between them is product code.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("$app/env/public", async () => (await import("../../support/supabase-recorder.ts")).publicEnv);
+// The seams: the `pg` driver (the in-process store), the environments, SvelteKit and the identity
+// adapter. Everything between them is product code.
+vi.mock("pg", async () => (await import("../../support/backend.ts")).pgModule);
+vi.mock("$app/env/public", async () => (await import("../../support/backend.ts")).publicEnv);
 // `$app/env` and `$app/navigation` are aliased to one stub file, so one mock serves both.
 vi.mock("$app/env", () => ({ browser: true, goto: vi.fn() }));
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 
 import { freshBrowser, publishedCourse, studentOpensLab } from "../../support/connect.ts";
 import type { Course } from "../../../../packages/jsr/model/src/tutors.ts";
@@ -25,8 +24,8 @@ describeFeature(feature, ({ Background, Scenario, ScenarioOutline }) => {
   let course: Course;
 
   Background(({ Given }) => {
-    Given("the course {string} is published with {number} labs", (_ctx, courseId: string, labCount: number) => {
-      freshBrowser();
+    Given("the course {string} is published with {number} labs", async (_ctx, courseId: string, labCount: number) => {
+      await freshBrowser();
       course = publishedCourse(courseId, labCount);
     });
   });

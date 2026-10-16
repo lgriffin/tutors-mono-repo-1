@@ -82,12 +82,12 @@ started with a deploy is rolled back first and diagnosed after.
 
 5xx from the reader. Look at the reader's error logs (`level: error`, `loadError: true` on
 `request.completed`): a course host that is down shows as load errors for one course; errors across
-every course point at the reader itself or Supabase. Roll back a deploy that started it.
+every course point at the reader itself, its Postgres store (`/healthz`) or Valkey. Roll back a deploy that started it.
 
 ### reader-latency
 
 The reader is slow for many requests. Check the course host's response time first (the reader fetches
-`tutors.json` per course), then Supabase, then the pod's CPU and memory limits.
+`tutors.json` per course), then the Postgres store, then the pod's CPU and memory limits.
 
 ### reader-latency-tail
 
@@ -100,7 +100,7 @@ The slowest 1% of reader requests passed 2.5s. Usually one large course or one s
 
 ### time-availability
 
-5xx from that app. Its error logs first; time and live depend on Supabase, so check its status page.
+5xx from that app. Its error logs first; time depends on the Postgres store (its `/healthz`), and catalogue, live and time on the reader's data API, so check the reader too.
 Roll back a deploy that started it.
 
 ### catalogue-latency
@@ -109,4 +109,4 @@ Roll back a deploy that started it.
 
 ### time-latency
 
-That app is slow. Check Supabase latency (live, time), then the pod's limits.
+That app is slow. Check the Postgres store's latency (time) and the reader's (catalogue, live, time), then the pod's limits.

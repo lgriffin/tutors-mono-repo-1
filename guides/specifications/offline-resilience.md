@@ -1,6 +1,6 @@
 # Offline Resilience
 
-These scenarios are specification prose, not executed. One scenario of `tests/bdd/features/shared/offline-resilience.feature` is bound: "Failed API call does not corrupt local state" runs against the course cache of `courseService` in `packages/adapters/driving/svelte-state/src/course/services/course.svelte.ts`, which is the state the reader keeps between page loads (its original wording, about a Supabase call, is kept below; the Supabase fallback itself is bound in `error-handling.feature`). The other three describe behaviour the product does not have, so Node Vitest is not what is missing: there is no reconnection logic (`presence.svelte.ts` and `live.svelte.ts` in `packages/adapters/driving/svelte-state/src/community/services` subscribe to their channels without a status callback and leave reconnection to `supabase-js`), no stale-data indicator anywhere under `apps/` or `packages/`, and no app registers a service worker (there is no `service-worker` file in any app). No tier covers these today.
+These scenarios are specification prose, not executed. One scenario of `tests/bdd/features/shared/offline-resilience.feature` is bound: "Failed API call does not corrupt local state" runs against the course cache of `courseService` in `packages/adapters/driving/svelte-state/src/course/services/course.svelte.ts`, which is the state the reader keeps between page loads (its original wording is kept below; the database fallback itself is bound in `error-handling.feature`). The other three describe behaviour the product does not have, so Node Vitest is not what is missing: there is no reconnection logic (`presence.svelte.ts` and `live.svelte.ts` in `packages/adapters/driving/svelte-state/src/community/services` subscribe through the presence port without a status callback and leave reconnection to the `@tutors/realtime` gateway), no stale-data indicator anywhere under `apps/` or `packages/`, and no app registers a service worker (there is no `service-worker` file in any app). No tier covers these today.
 
 ```gherkin
   @ears-unwanted
@@ -16,7 +16,7 @@ These scenarios are specification prose, not executed. One scenario of `tests/bd
 
   @ears-unwanted
   Scenario: Failed API call does not corrupt local state
-    If an API call to Supabase fails
+    If an API call to the server fails
     Then the system shall retain previously loaded data
     And the system shall not overwrite valid state with error state
 

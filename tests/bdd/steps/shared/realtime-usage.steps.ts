@@ -1,16 +1,16 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
 
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
-  createClient: (await import("../../support/supabase-recorder.ts")).createClient
-}));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("$app/env/public", async () => (await import("../../support/supabase-recorder.ts")).publicEnv);
+// The seams: the `pg` driver (the in-process store), the environments and SvelteKit. Everything
+// between them is product code: the reader's routes, the realtime hub and the browser's streams.
+vi.mock("pg", async () => (await import("../../support/backend.ts")).pgModule);
+vi.mock("$app/env/public", async () => (await import("../../support/backend.ts")).publicEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 vi.mock("$app/env", () => ({ browser: true, goto: vi.fn() }));
 
-import { ALL_COURSES_CHANNEL, freshBrowser, githubUser, labsOf, liveWatcher, loEventArrives, onlineListLoads, openLo, publishedCourse, signIn, storedActivity } from "../../support/connect.ts";
-import { recorder, settle, type RecordingChannel } from "../../support/supabase-recorder.ts";
+import { ALL_COURSES_CHANNEL, freshBrowser, githubUser, labsOf, loEventArrives, onlineListLoads, openLo, publishedCourse, signIn, storedActivity } from "../../support/connect.ts";
+import { backend, settle } from "../../support/backend.ts";
+import { apiRequests } from "../../support/reader-api.ts";
 import { mountWhiteboardEditor } from "../../support/whiteboard-editor.ts";
 import { liveService } from "../../../../packages/adapters/driving/svelte-state/src/community/services/live.svelte.ts";
 import { presenceService } from "../../../../packages/adapters/driving/svelte-state/src/community/services/presence.svelte.ts";
@@ -21,8 +21,8 @@ const feature = await loadFeature("tests/bdd/features/shared/realtime-usage.feat
 
 describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   let course: ReturnType<typeof publishedCourse>;
-  let original: RecordingChannel;
-  let finishRemoval: () => void;
+  /** A browser's stream on a topic, as a scenario first saw it open. */
+  let original: (typeof backend.streams)[number];
   let restarting: Promise<void> | void;
   let whiteboard: ReturnType<typeof mountWhiteboardEditor> | undefined;
   let lastPosition = 0;
@@ -30,11 +30,14 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
 
   const monitor = async (_ctx: unknown, courseId: string) => {
     await presenceService.startPresenceListener(courseId);
+    await settle();
   };
+  /** Every stream any browser opened on `topic`, open or closed. */
+  const everStreamed = (topic: string) => backend.streams.filter((stream) => stream.topic === topic);
   const report = (_ctx: unknown, name: string) => loEventArrives(course.courseId, name, course, labsOf(course)[0]);
-  const noCourseChannel = () => expect(recorder.joined(course.courseId)).toHaveLength(0);
+  const noCourseChannel = () => expect(backend.streaming(course.courseId)).toHaveLength(0);
   const onlyCourse = (_ctx: unknown, courseId: string) => {
-    expect(recorder.channels.filter((channel) => channel.subscribed).map((channel) => channel.name)).toEqual([courseId]);
+    expect(backend.streams.filter((stream) => !stream.closed).map((stream) => stream.topic)).toEqual([courseId]);
   };
   const enterCourse = () => openLo(course, labsOf(course)[0]);
   const cursor = (position: number) => {
@@ -45,7 +48,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     vi.useFakeTimers();
     whiteboard = mountWhiteboardEditor();
     if (subscribed) {
-      whiteboard.status("SUBSCRIBED");
+      whiteboard.open();
       whiteboard.participants(2);
     }
   };
@@ -55,26 +58,16 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       vi.advanceTimersByTime(1);
     }
   };
-  const sent = (event: string) => whiteboard!.channel.send.mock.calls.filter(([message]) => message.event === event);
+  /** The collaboration broadcasts the editor posted to the room, as event and payload. */
+  const broadcasts = () => whiteboard!.broadcasts().map(({ event, payload }) => ({ event, payload }));
+  const sent = (event: string) => broadcasts().filter((message) => message.event === event);
   const cursorBroadcasts = (_ctx: unknown, count: number) => expect(sent("cursor-update")).toHaveLength(count);
   const roomOf = (_ctx: unknown, count: number) => whiteboard!.participants(count);
   const finalPosition = () =>
-    expect(whiteboard!.channel.send.mock.lastCall?.[0]).toMatchObject({
+    expect(broadcasts().at(-1)).toMatchObject({
       event: "cursor-update",
       payload: { pointer: { x: lastPosition, y: lastPosition }, button: "up" }
     });
-  const delayRemoval = () => {
-    const remove = recorder.removeChannel.bind(recorder);
-    vi.spyOn(recorder, "removeChannel").mockImplementationOnce(
-      (channel) =>
-        new Promise<string>((resolve) => {
-          finishRemoval = () => {
-            void remove(channel);
-            resolve("ok");
-          };
-        })
-    );
-  };
   const onlineNames = () => presenceService.studentsOnline.value.map((lo) => lo.user?.fullName).sort();
   const onlineListIs = (_ctx: unknown, list: string) => expect(onlineNames()).toEqual(list.split(", ").sort());
   const wasActive = (_ctx: unknown, name: string, minutesAgo: number) => storedActivity(name, course, labsOf(course)[0], minutesAgo);
@@ -100,8 +93,8 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   });
 
   Background(({ Given }) => {
-    Given("a fresh activity session", () => {
-      freshBrowser();
+    Given("a fresh activity session", async () => {
+      await freshBrowser();
       // The online list refreshes on an interval and ages rows by the clock; timeouts stay real so
       // fire-and-forget product promises still settle.
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"], now: new Date("2026-10-13T10:00:00Z") });
@@ -113,38 +106,44 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     RuleScenario("Repeating a reader course subscription preserves its activity", ({ Given, And, When, Then }) => {
       Given("course activity is monitored for {string}", async (ctx, courseId: string) => {
         await monitor(ctx, courseId);
-        original = recorder.joined(courseId)[0];
+        original = backend.streaming(courseId)[0];
       });
       And("{string} has reported activity in that course", report);
       When("monitoring is requested again for {string}", monitor);
       Then("the original course channel remains subscribed", () => {
-        expect(recorder.joined(course.courseId)).toEqual([original]);
-        expect(original.subscriptions).toBe(1);
+        expect(backend.streaming(course.courseId)).toEqual([original]);
+        expect(everStreamed(course.courseId)).toEqual([original]);
       });
       And("{string} remains in the course activity list", (_ctx, name: string) => {
         expect(presenceService.studentsOnline.value.map((lo) => lo.user?.fullName)).toEqual([name]);
       });
     });
     RuleScenario("Repeating a live course subscription preserves its channel", ({ Given, When, Then }) => {
-      Given("the live service monitors {string}", (_ctx, courseId: string) => {
+      Given("the live service monitors {string}", async (_ctx, courseId: string) => {
         liveService.startCoursePresenceListener(courseId);
-        original = recorder.joined(courseId)[0];
+        await settle();
+        original = backend.streaming(courseId)[0];
+        expect(original).toBeDefined();
       });
-      When("the live service is asked to monitor {string} again", (_ctx, courseId: string) => liveService.startCoursePresenceListener(courseId));
-      Then("the original live course channel remains subscribed", () => expect(recorder.joined(course.courseId)).toEqual([original]));
+      When("the live service is asked to monitor {string} again", async (_ctx, courseId: string) => {
+        liveService.startCoursePresenceListener(courseId);
+        await settle();
+      });
+      Then("the original live course channel remains subscribed", () => {
+        expect(backend.streaming(course.courseId)).toEqual([original]);
+        expect(everStreamed(course.courseId)).toEqual([original]);
+      });
     });
-    // The reader's server publishes for the browser, and only to a feed a Live tab is watching.
-    RuleScenario("Repeated global publishing reuses one publish-only channel", ({ Given, When, Then }) => {
-      Given("a live dashboard is watching the platform feed", () => liveWatcher(ALL_COURSES_CHANNEL, "live-tab"));
+    // The reader's server publishes for the browser; the browser opens no stream to publish.
+    RuleScenario("Repeated global publishing opens no global stream", ({ When, Then, And }) => {
       When("course activity is published {number} times", async (_ctx, count: number) => {
         for (let i = 0; i < count; i++) presenceService.sendLoEvent(course, labsOf(course)[0], githubUser("Alice"));
         await settle();
-        expect(recorder.sentOn(ALL_COURSES_CHANNEL)).toHaveLength(count);
       });
-      Then("one global channel exists without a subscription", () => {
-        expect(recorder.channels.filter((channel) => channel.name === ALL_COURSES_CHANNEL)).toHaveLength(1);
-        expect(recorder.joined(ALL_COURSES_CHANNEL)).toHaveLength(0);
+      Then("the platform feed has carried {number} events", (_ctx, count: number) => {
+        expect(backend.publishedOn(ALL_COURSES_CHANNEL).map((message) => message.event)).toEqual(Array(count).fill("lo-event"));
       });
+      And("no global stream is open", () => expect(everStreamed(ALL_COURSES_CHANNEL)).toEqual([]));
     });
   });
 
@@ -165,51 +164,50 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     RuleScenario("Leaving the global dashboard stops platform-wide delivery", ({ Given, When, Then, And }) => {
       Given("the global dashboard is monitoring activity", () => liveService.startGlobalPresenceService());
       When("the global dashboard is left", () => liveService.stopGlobalPresenceService());
-      Then("no global channel remains subscribed", () => expect(recorder.joined(ALL_COURSES_CHANNEL)).toHaveLength(0));
+      Then("no global channel remains subscribed", () => {
+        expect(everStreamed(ALL_COURSES_CHANNEL)).toHaveLength(1);
+        expect(backend.streaming(ALL_COURSES_CHANNEL)).toHaveLength(0);
+      });
       And("returning to the dashboard creates one global subscription", async () => {
         await liveService.startGlobalPresenceService();
-        expect(recorder.joined(ALL_COURSES_CHANNEL)).toHaveLength(1);
+        await settle();
+        expect(backend.streaming(ALL_COURSES_CHANNEL)).toHaveLength(1);
       });
     });
-    RuleScenario("Returning to a course waits for its closing channel", ({ Given, And, When, Then }) => {
+    const notReopened = () => {
+      expect(original.closed).toBe(true);
+      expect(backend.streaming(original.topic)).not.toContain(original);
+    };
+    const oneReplacement = async () => {
+      await restarting;
+      await settle();
+      expect(backend.streaming(original.topic)).toHaveLength(1);
+      expect(backend.streaming(original.topic)[0]).not.toBe(original);
+    };
+    RuleScenario("Returning to a course replaces its closed stream", ({ Given, When, Then, And }) => {
       Given("course activity is monitored for {string}", async (ctx, courseId: string) => {
         await monitor(ctx, courseId);
-        original = recorder.joined(courseId)[0];
+        original = backend.streaming(courseId)[0];
       });
-      And("removing that channel is pending", delayRemoval);
-      When("the course view is left and reopened before removal finishes", () => {
+      When("the course view is left and reopened at once", () => {
         presenceService.stopPresenceListener();
         restarting = presenceService.startPresenceListener(course.courseId);
       });
-      Then("the closing channel is not subscribed again", () => expect(original.subscriptions).toBe(1));
-      And("completing removal creates one replacement subscription", async () => {
-        finishRemoval();
-        await restarting;
-        // The replacement joins once the removal it waits on has settled.
-        await settle();
-        expect(recorder.joined(course.courseId)).toHaveLength(1);
-        expect(recorder.joined(course.courseId)[0]).not.toBe(original);
-      });
+      Then("the closed stream is not reopened", notReopened);
+      And("one replacement course stream is open", oneReplacement);
     });
-    RuleScenario("Returning to the global dashboard waits for its closing channel", ({ Given, And, When, Then }) => {
+    RuleScenario("Returning to the global dashboard replaces its closed stream", ({ Given, When, Then, And }) => {
       Given("the global dashboard is monitoring activity", async () => {
         await liveService.startGlobalPresenceService();
-        original = recorder.joined(ALL_COURSES_CHANNEL)[0];
+        await settle();
+        original = backend.streaming(ALL_COURSES_CHANNEL)[0];
       });
-      And("removing that channel is pending", delayRemoval);
-      When("the dashboard is left and reopened before removal finishes", () => {
+      When("the dashboard is left and reopened at once", () => {
         liveService.stopGlobalPresenceService();
         restarting = liveService.startGlobalPresenceService();
       });
-      Then("the closing channel is not subscribed again", () => expect(original.subscriptions).toBe(1));
-      And("completing removal creates one replacement global subscription", async () => {
-        finishRemoval();
-        await restarting;
-        // The replacement joins once the removal it waits on has settled.
-        await settle();
-        expect(recorder.joined(ALL_COURSES_CHANNEL)).toHaveLength(1);
-        expect(recorder.joined(ALL_COURSES_CHANNEL)[0]).not.toBe(original);
-      });
+      Then("the closed stream is not reopened", notReopened);
+      And("one replacement global stream is open", oneReplacement);
     });
   });
 
@@ -220,10 +218,10 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         for (let i = 1; i <= count; i++) cursor(i);
         vi.advanceTimersByTime(elapsed);
       });
-      Then("no cursor broadcast has been sent", () => expect(whiteboard!.channel.send).not.toHaveBeenCalled());
+      Then("no cursor broadcast has been sent", () => expect(broadcasts()).toEqual([]));
       And("at {number} milliseconds one broadcast carries the final position", (_ctx, at: number) => {
         vi.advanceTimersByTime(at - 99);
-        expect(whiteboard!.channel.send).toHaveBeenCalledTimes(1);
+        expect(broadcasts()).toHaveLength(1);
         finalPosition();
       });
     });
@@ -240,7 +238,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       cursor(1);
       vi.advanceTimersByTime(100);
     };
-    const noCursor = () => expect(whiteboard!.channel.send).not.toHaveBeenCalled();
+    const noCursor = () => expect(broadcasts()).toEqual([]);
     RuleScenario("Cursor movement before subscription sends no broadcast", ({ Given, When, Then }) => {
       Given("a whiteboard editor awaiting subscription", () => mountEditor(false));
       When("the cursor moves and {number} milliseconds elapse", moveAndWait);
@@ -250,7 +248,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       Given("a subscribed whiteboard editor", () => mountEditor(true));
       When("a cursor position is queued and the channel disconnects", () => {
         cursor(1);
-        whiteboard!.status("CHANNEL_ERROR");
+        whiteboard!.drop();
         vi.advanceTimersByTime(100);
       });
       Then("no cursor broadcast has been sent", noCursor);
@@ -258,7 +256,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     RuleScenario("Cursor movement after subscription sends a broadcast", ({ Given, When, Then }) => {
       Given("a subscribed whiteboard editor", () => mountEditor(true));
       When("the cursor moves and {number} milliseconds elapse", moveAndWait);
-      Then("one cursor broadcast has been sent", () => expect(whiteboard!.channel.send).toHaveBeenCalledTimes(1));
+      Then("one cursor broadcast has been sent", () => expect(broadcasts()).toHaveLength(1));
     });
   });
 
@@ -273,9 +271,13 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         whiteboard!.unmount();
         vi.advanceTimersByTime(100);
       });
-      Then("the editor channel has been removed", () => expect(whiteboard!.supabase.removeChannel).toHaveBeenCalledWith(whiteboard!.channel));
+      Then("the editor channel has been removed", () => {
+        expect(whiteboard!.sources).toHaveLength(1);
+        expect(whiteboard!.sources[0].closed).toBe(true);
+        expect(whiteboard!.published.at(-1)).toMatchObject({ event: "leave", payload: { userId: "alice" } });
+      });
       And("no queued broadcast or scene notification is sent", () => {
-        expect(whiteboard!.channel.send).not.toHaveBeenCalled();
+        expect(broadcasts()).toEqual([]);
         expect(whiteboard!.postMessage).not.toHaveBeenCalled();
         expect(vi.getTimerCount()).toBe(0);
       });
@@ -285,10 +287,11 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   Rule("If a course activity message has no student identity, then tutors shall ignore the message.", ({ RuleScenario }) => {
     RuleScenario("An activity message without a user is ignored", ({ Given, When, Then }) => {
       Given("course activity is monitored for {string}", monitor);
-      When("an activity message without a user arrives", () => {
+      When("an activity message without a user arrives", async () => {
         malformedError = undefined;
         try {
-          recorder.relay(course.courseId, { type: "broadcast", event: "lo-event", payload: { courseId: course.courseId } });
+          await backend.relay(course.courseId, "lo-event", { courseId: course.courseId });
+          await settle();
         } catch (error) {
           malformedError = error;
         }
@@ -353,7 +356,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         },
         "https://reader.invalid"
       );
-    const noBroadcast = () => expect(whiteboard!.channel.send).not.toHaveBeenCalled();
+    const noBroadcast = () => expect(broadcasts()).toEqual([]);
     RuleScenario("A solo whiteboard saves edits without broadcasting", ({ Given, And, When, Then }) => {
       Given("a subscribed whiteboard editor", () => mountEditor(true));
       And("only this editor is present in the room", () => whiteboard!.participants(1));
@@ -377,7 +380,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       When("a scene change and a cursor position are queued", queueUpdates);
       And("{number} milliseconds elapse", elapse);
       Then("a scene broadcast and a cursor broadcast are sent", () => {
-        expect(whiteboard!.channel.send.mock.calls.map(([message]) => message.event)).toEqual(["cursor-update", "scene-update"]);
+        expect(broadcasts().map((message) => message.event)).toEqual(["cursor-update", "scene-update"]);
       });
       And("the scene is sent to the parent for saving", saves);
     });
@@ -390,7 +393,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     const peerArrives = () => whiteboard!.participants(2);
     const noDuplicate = () => {
       peerArrives();
-      expect(whiteboard!.channel.send).toHaveBeenCalledTimes(1);
+      expect(broadcasts()).toHaveLength(1);
     };
     RuleScenario("An edit is replayed when a peer's delayed Presence update arrives", ({ Given, And, When, Then }) => {
       Given("a subscribed whiteboard editor with no visible peer", alone);
@@ -398,15 +401,14 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         whiteboard!.editor.onChange([{ id: "shape-1", version: 1 }]);
         vi.advanceTimersByTime(250);
         expect(whiteboard!.postMessage).toHaveBeenCalledWith({ type: "scene-changed", elements: [{ id: "shape-1", version: 1 }] }, "https://reader.invalid");
-        expect(whiteboard!.channel.send).not.toHaveBeenCalled();
+        expect(broadcasts()).toEqual([]);
       });
       When("another editor becomes visible in Presence", peerArrives);
       Then("one scene broadcast contains the skipped edit", () => {
-        expect(whiteboard!.channel.send).toHaveBeenCalledExactlyOnceWith({
-          type: "broadcast",
+        expect(broadcasts()).toEqual([{
           event: "scene-update",
           payload: { elements: [{ id: "shape-1", version: 1 }] }
-        });
+        }]);
       });
       And("another Presence sync sends no duplicate scene broadcast", noDuplicate);
     });
@@ -430,12 +432,11 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
           whiteboard!.editor.onChange(elements);
           vi.advanceTimersByTime(250);
         }
-        expect(whiteboard!.channel.send).not.toHaveBeenCalled();
+        expect(broadcasts()).toEqual([]);
       });
       When("another editor becomes visible in Presence", peerArrives);
       Then("one scene broadcast contains the latest edit and deletion", () => {
-        expect(whiteboard!.channel.send).toHaveBeenCalledExactlyOnceWith({
-          type: "broadcast",
+        expect(broadcasts()).toEqual([{
           event: "scene-update",
           payload: {
             elements: [
@@ -443,7 +444,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
               { id: "shape-2", version: 2, isDeleted: true }
             ]
           }
-        });
+        }]);
       });
       And("another Presence sync sends no duplicate scene broadcast", noDuplicate);
     });
@@ -501,7 +502,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       });
       And("{number} milliseconds elapse", (_ctx, duration: number) => vi.advanceTimersByTime(duration));
       Then("only a scene broadcast is sent", () => {
-        expect(whiteboard!.channel.send.mock.calls.map(([message]) => message.event)).toEqual(["scene-update"]);
+        expect(broadcasts().map((message) => message.event)).toEqual(["scene-update"]);
       });
     });
     RuleScenario("Cursors resume when the room shrinks to 8", ({ Given, And, When, Then }) => {
@@ -556,10 +557,10 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       Given("a subscribed whiteboard editor", () => mountEditor(true));
       When("a scene change is made", () => whiteboard!.editor.onChange([{ id: "shape-1", version: 1 }]));
       And("{number} milliseconds elapse", (_ctx, duration: number) => vi.advanceTimersByTime(duration));
-      Then("no collaboration broadcast is sent", () => expect(whiteboard!.channel.send).not.toHaveBeenCalled());
+      Then("no collaboration broadcast is sent", () => expect(broadcasts()).toEqual([]));
       And("at {number} milliseconds one scene broadcast carries the edit", () => {
         vi.advanceTimersByTime(1);
-        expect(scenes()).toEqual([[{ type: "broadcast", event: "scene-update", payload: { elements: [{ id: "shape-1", version: 1 }] } }]]);
+        expect(scenes()).toEqual([{ event: "scene-update", payload: { elements: [{ id: "shape-1", version: 1 }] } }]);
       });
     });
     RuleScenario("A continuous drag sends 4 scene broadcasts a second with the latest version", ({ Given, When, Then, And }) => {
@@ -578,7 +579,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         expect(whiteboard!.postMessage.mock.calls.filter(([message]) => message.type === "scene-changed")).toHaveLength(count);
       });
       And("the final scene broadcast carries the latest version", () => {
-        expect(scenes().at(-1)![0].payload).toEqual({ elements: [{ id: "shape-1", version }] });
+        expect(scenes().at(-1)!.payload).toEqual({ elements: [{ id: "shape-1", version }] });
       });
     });
   });
@@ -594,11 +595,11 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         And("no course channel remains subscribed", noCourseChannel);
       });
       RuleScenario("The student's activity is published to the course without joining it", ({ Given, When, Then, And }) => {
-        Given("a live dashboard is watching the course feed", () => liveWatcher(course.courseId, "live-tab"));
-        And("{string} is signed in with sharing {word}", signInWithSharing);
+        Given("{string} is signed in with sharing {word}", signInWithSharing);
         When("the student enters the course", enterCourse);
         Then("the course activity is published through HTTP", () => {
-          const published = recorder.sentOn(course.courseId).map((message) => message.payload as { courseId?: string; user?: { fullName?: string } });
+          const published = backend.publishedOn(course.courseId).map((message) => message.payload as { courseId?: string; user?: { fullName?: string } });
+          expect(apiRequests.filter((request) => request.url === "/api/realtime/publish")).toEqual([]);
           expect(published).toEqual([expect.objectContaining({ courseId: course.courseId, user: expect.objectContaining({ fullName: "Alice" }) })]);
         });
         And("no course channel remains subscribed", noCourseChannel);
@@ -648,7 +649,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       Given("{string} was active in the course {number} minutes ago", wasActive);
       And("{string} is signed in with sharing {word}", signInWithSharing);
       And("the student has entered the course", enterCourse);
-      And("the stored activity cannot be read", () => recorder.tableErrors.set("tutors-connect-latest", { message: "connection reset" }));
+      And("the stored activity cannot be read", () => backend.fail("tutors-connect-latest"));
       When("{number} seconds pass", secondsPass);
       Then("the online list is {string}", onlineListIs);
     });

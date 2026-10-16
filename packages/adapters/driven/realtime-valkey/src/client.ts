@@ -1,8 +1,8 @@
 /**
  * The one place this adapter touches the driver.
  *
- * `redis` (node-redis, which speaks to Valkey) is loaded lazily, so a deployment on Supabase
- * Realtime never pays for it and a browser bundle never sees it. Everything else in the package
+ * `redis` (node-redis, which speaks to Valkey) is loaded lazily, so a server with no
+ * PRIVATE_VALKEY_URL never pays for it and a browser bundle never sees it. Everything else in the package
  * talks to the narrow slice below, which a test implements with a fake.
  */
 import log from "@tutors/logger";
@@ -35,7 +35,7 @@ export async function connectValkey(url: string): Promise<PubSubPair> {
     const loaded = (await import(/* @vite-ignore */ specifier)) as typeof redis & { default?: typeof redis };
     redis = loaded.default ?? loaded;
   } catch (cause) {
-    throw new Error('PUBLIC_REALTIME=valkey needs the `redis` package (importing "redis" failed)', { cause });
+    throw new Error('Realtime over Valkey needs the `redis` package (importing "redis" failed)', { cause });
   }
   const publisher = redis.createClient({ url });
   const subscriber = publisher.duplicate();

@@ -20,10 +20,10 @@ Feature: Realtime resource usage
       When the live service is asked to monitor "web-dev-101" again
       Then the original live course channel remains subscribed
 
-    Scenario: Repeated global publishing reuses one publish-only channel
-      Given a live dashboard is watching the platform feed
+    Scenario: Repeated global publishing opens no global stream
       When course activity is published 3 times
-      Then one global channel exists without a subscription
+      Then the platform feed has carried 3 events
+      And no global stream is open
 
   @rule-0274 @ears-event-driven
   Rule: When an activity view is left, tutors shall stop its Realtime subscription.
@@ -47,19 +47,17 @@ Feature: Realtime resource usage
       Then no global channel remains subscribed
       And returning to the dashboard creates one global subscription
 
-    Scenario: Returning to a course waits for its closing channel
+    Scenario: Returning to a course replaces its closed stream
       Given course activity is monitored for "web-dev-101"
-      And removing that channel is pending
-      When the course view is left and reopened before removal finishes
-      Then the closing channel is not subscribed again
-      And completing removal creates one replacement subscription
+      When the course view is left and reopened at once
+      Then the closed stream is not reopened
+      And one replacement course stream is open
 
-    Scenario: Returning to the global dashboard waits for its closing channel
+    Scenario: Returning to the global dashboard replaces its closed stream
       Given the global dashboard is monitoring activity
-      And removing that channel is pending
-      When the dashboard is left and reopened before removal finishes
-      Then the closing channel is not subscribed again
-      And completing removal creates one replacement global subscription
+      When the dashboard is left and reopened at once
+      Then the closed stream is not reopened
+      And one replacement global stream is open
 
   @rule-0275 @ears-event-driven
   Rule: When whiteboard cursor updates arrive, the reader shall coalesce them into at most one broadcast per cursor interval.
@@ -301,8 +299,7 @@ Feature: Realtime resource usage
       And no course channel remains subscribed
 
     Scenario: The student's activity is published to the course without joining it
-      Given a live dashboard is watching the course feed
-      And "Alice" is signed in with sharing enabled
+      Given "Alice" is signed in with sharing enabled
       When the student enters the course
       Then the course activity is published through HTTP
       And no course channel remains subscribed

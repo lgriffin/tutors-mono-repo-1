@@ -44,9 +44,7 @@ export const workspaceAliases: Record<string, string> = {
   "@tutors/tutors-time-lib": resolve(root, "packages/jsr/time/src/index.ts"),
   "@tutors/tutors-types": resolve(root, "packages/jsr/types/src/index.ts"),
   // Driven adapters the apps compose; tests reach them for their recording seams.
-  "@tutors/store-supabase": resolve(root, "packages/adapters/driven/store-supabase/src/index.ts"),
   "@tutors/realtime": resolve(root, "packages/jsr/realtime/src/index.ts"),
-  "@tutors/realtime-supabase": resolve(root, "packages/adapters/driven/realtime-supabase/src/index.ts"),
   "@tutors/course-http": resolve(root, "packages/adapters/driven/course-http/src/index.ts"),
   "@tutors/data-api": resolve(root, "packages/adapters/driven/data-api/src/index.ts"),
   "@tutors/profile-localstorage": resolve(root, "packages/adapters/driven/profile-localstorage/src/index.ts"),

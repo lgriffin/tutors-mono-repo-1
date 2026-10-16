@@ -1,92 +1,91 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { checkPostgres, recentErrorCounts, type SqlClient } from "@tutors/store-postgres";
+import { testDatabase, type TestDatabase } from "../../support/postgres-store.ts";
 
-// health-check reads the client the server passes and treats an absent one as "no database here", so
-// the stub is held in a mutable binding the tests reassign rather than the shared MockSupabaseClient
-// (which has no rpc).
-let client: unknown;
+// The health page reads the database the server opened and treats an absent one as "no database here".
+let db: TestDatabase;
+beforeAll(async () => {
+  db = await testDatabase();
+}, 60_000);
+afterAll(() => db.close());
+beforeEach(() => db.reset());
 
-import { checkSupabase, getRecentErrorCounts } from "../../../packages/adapters/driven/store-supabase/src/health-check.ts";
-
-function clientReturning({ select, rpc }: { select?: unknown; rpc?: unknown } = {}) {
-  return {
-    from: vi.fn(() => ({ select: vi.fn(() => Promise.resolve(select)) })),
-    rpc: vi.fn(() => Promise.resolve(rpc))
+/** The database, with every statement it is sent kept. */
+function watched(sql: SqlClient) {
+  const sent: { text: string; params?: unknown[] }[] = [];
+  const client: SqlClient = {
+    query: (text, params) => {
+      sent.push({ text, params });
+      return sql.query(text, params);
+    },
+    end: async () => {}
   };
+  return { client, sent };
 }
 
-beforeEach(() => {
-  client = undefined;
-});
+const throwing = (thrown: unknown): SqlClient => ({ query: () => Promise.reject(thrown), end: async () => {} });
 
-describe("checkSupabase", () => {
-  it("skips the check when there is no client, so anon mode is not an error", async () => {
-    expect(await checkSupabase(client as never)).toEqual({ status: "skipped", latencyMs: 0, message: "no database client on this server" });
+describe("checkPostgres", () => {
+  it("skips the check when there is no database, so anon mode is not an error", async () => {
+    expect(await checkPostgres(null)).toEqual({ status: "skipped", latencyMs: 0, message: "no database client on this server" });
+    expect(await checkPostgres(undefined)).toEqual({ status: "skipped", latencyMs: 0, message: "no database client on this server" });
   });
 
-  it("reports ok and a latency when the count query answers", async () => {
-    client = clientReturning({ select: { error: null } });
-    const result = await checkSupabase(client as never);
+  it("reports ok and a latency when the database answers", async () => {
+    const result = await checkPostgres(db.sql);
     expect(result.status).toBe("ok");
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
     expect(result.message).toBeUndefined();
   });
 
-  it("asks only for the row count, not the rows", async () => {
-    const stub = clientReturning({ select: { error: null } });
-    client = stub;
-    await checkSupabase(client as never);
-    expect(stub.from).toHaveBeenCalledWith("tutors-connect-courses");
-  });
-
-  it("reports the error message when the query answers with one", async () => {
-    client = clientReturning({ select: { error: { message: "permission denied" } } });
-    const result = await checkSupabase(client as never);
-    expect(result).toMatchObject({ status: "error", message: "permission denied" });
+  it("makes one round trip that reads at most one row of the catalogue", async () => {
+    const { client, sent } = watched(db.sql);
+    await checkPostgres(client);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toMatch(/FROM "tutors-connect-courses"/);
+    expect(sent[0].text).toMatch(/LIMIT 1/);
   });
 
   it("reports the message when the query throws an Error", async () => {
-    client = { from: vi.fn(() => ({ select: () => Promise.reject(new Error("network down")) })) };
-    const result = await checkSupabase(client as never);
-    expect(result).toMatchObject({ status: "error", message: "network down" });
+    expect(await checkPostgres(throwing(new Error("network down")))).toMatchObject({ status: "error", message: "network down" });
   });
 
   it("stringifies a thrown value that is not an Error", async () => {
-    client = { from: vi.fn(() => ({ select: () => Promise.reject("gateway timeout") })) };
-    const result = await checkSupabase(client as never);
-    expect(result).toMatchObject({ status: "error", message: "gateway timeout" });
+    expect(await checkPostgres(throwing("gateway timeout"))).toMatchObject({ status: "error", message: "gateway timeout" });
   });
 });
 
-describe("getRecentErrorCounts", () => {
-  it("returns nothing when there is no client", async () => {
-    expect(await getRecentErrorCounts(client as never)).toEqual([]);
+describe("recentErrorCounts", () => {
+  const logError = (app: string, level: string, minutesAgo: number) =>
+    db.sql.query(`INSERT INTO app_errors (app, level, message, created_at) VALUES ($1, $2, 'boom', now() - make_interval(mins => $3))`, [app, level, minutesAgo]);
+
+  it("returns nothing when there is no database", async () => {
+    expect(await recentErrorCounts(null)).toEqual([]);
   });
 
-  it("returns the counts the function reports", async () => {
-    const counts = [{ app: "reader", level: "error", count: 3 }];
-    client = clientReturning({ rpc: { data: counts, error: null } });
-    expect(await getRecentErrorCounts(client as never)).toEqual(counts);
+  it("returns the counts per app and level", async () => {
+    await logError("reader", "error", 1);
+    await logError("reader", "error", 2);
+    await logError("time", "warn", 3);
+    expect(await recentErrorCounts(db.sql)).toEqual([
+      { app: "reader", level: "error", count: 2 },
+      { app: "time", level: "warn", count: 1 }
+    ]);
   });
 
-  it("asks for the last hour", async () => {
-    const stub = clientReturning({ rpc: { data: [], error: null } });
-    client = stub;
-    await getRecentErrorCounts(client as never);
-    expect(stub.rpc).toHaveBeenCalledWith("get_error_counts", { minutes_ago: 60 });
+  it("counts the last hour by default", async () => {
+    await logError("reader", "error", 30);
+    await logError("reader", "error", 90);
+    const { client, sent } = watched(db.sql);
+    expect(await recentErrorCounts(client)).toEqual([{ app: "reader", level: "error", count: 1 }]);
+    expect(sent[0].params).toEqual([60]);
   });
 
-  it("returns nothing when the function answers with an error", async () => {
-    client = clientReturning({ rpc: { data: null, error: { message: "no such function" } } });
-    expect(await getRecentErrorCounts(client as never)).toEqual([]);
+  it("returns nothing when no errors were logged", async () => {
+    expect(await recentErrorCounts(db.sql)).toEqual([]);
   });
 
-  it("returns nothing when the function answers with no data", async () => {
-    client = clientReturning({ rpc: { data: null, error: null } });
-    expect(await getRecentErrorCounts(client as never)).toEqual([]);
-  });
-
-  it("returns nothing when the call throws, so a health page still renders", async () => {
-    client = { rpc: () => Promise.reject(new Error("socket closed")) };
-    expect(await getRecentErrorCounts(client as never)).toEqual([]);
+  it("returns nothing when the query throws, so a health page still renders", async () => {
+    expect(await recentErrorCounts(throwing(new Error("socket closed")))).toEqual([]);
   });
 });

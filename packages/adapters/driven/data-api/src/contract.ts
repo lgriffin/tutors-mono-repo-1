@@ -147,17 +147,6 @@ export interface ErrorReport {
   entries: ErrorReportEntry[];
 }
 
-/** POST /api/live/watch: a Tutors Live tab watching a Realtime topic. */
-export interface LiveWatch {
-  topic: string;
-  watcher: string;
-}
-
-/** The answer to POST /api/live/watch: the day's Live budget tier, null when it could not be read. */
-export interface LiveWatchTier {
-  tier: "normal" | "slow" | "paused" | null;
-}
-
 /**
  * POST /api/assistance: a signed-in student asks for help on a step, or anyone acts on a request by
  * id: the student who asked withdraws, resolves or rates it, an educator of the course acknowledges,

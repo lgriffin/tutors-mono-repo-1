@@ -1,5 +1,5 @@
 import type { RequestHandler } from "@sveltejs/kit";
-import type { AppErrorRow } from "@tutors/store-supabase";
+import type { AppErrorRow } from "@tutors/store-postgres";
 import { sessionUser } from "#lib/server/api/http.ts";
 import { readerServer } from "#lib/server/api/adapters.ts";
 import { allowedOriginHeaders, answer, preflight } from "#lib/server/api/cors.ts";

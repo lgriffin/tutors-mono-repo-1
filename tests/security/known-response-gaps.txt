@@ -5,7 +5,7 @@
 
 # No app sends a Content-Security-Policy. Writing one needs an inventory of what the
 # reader loads (Iconify, KaTeX, Mermaid, Adobe PDF embed, YouTube/Panopto/Vimeo frames,
-# Supabase realtime) and a report-only rollout, so it is not guessed here.
+# the realtime stream) and a report-only rollout, so it is not guessed here.
 missing-header: reader: Content-Security-Policy
 missing-header: catalogue: Content-Security-Policy
 missing-header: live: Content-Security-Policy

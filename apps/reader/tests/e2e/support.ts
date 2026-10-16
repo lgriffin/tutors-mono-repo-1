@@ -114,7 +114,7 @@ export async function openNotebookWithoutHeadings(page: Page, path: string): Pro
 }
 
 /**
- * Locks routes on the loaded course the way the reader stores them without Supabase (localStorage, keyed by
+ * Locks routes on the loaded course the way the reader stores them without a data API (localStorage, keyed by
  * course), marks the course as enrolled (locks only apply to enrolled courses) and reloads the locks.
  * `showLocked` turns on the lecturer's "show locked content to students" setting. Nothing leaves the browser.
  */

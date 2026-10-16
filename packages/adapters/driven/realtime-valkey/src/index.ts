@@ -1,9 +1,8 @@
 /**
- * Realtime without Supabase (S3 of leaving Supabase): the reader's server publishes to Valkey
- * pub/sub, the reader's and Tutors Live's servers stream each topic to browsers over server-sent
- * events, and the browser's @tutors/realtime gateway subscribes to those streams. Picked by
- * PUBLIC_REALTIME=valkey; Supabase Realtime stays the default until S4. The only package that
- * imports `redis` for realtime, lazily, behind `connectValkey`.
+ * Tutors' realtime: the reader's server publishes to Valkey pub/sub, the reader's and Tutors Live's
+ * servers stream each topic to browsers over server-sent events, and the browser's @tutors/realtime
+ * gateway subscribes to those streams. The only package that imports `redis` for realtime, lazily,
+ * behind `connectValkey`.
  */
 export { connectValkey, type PubSubClient, type PubSubPair } from "./client.ts";
 export { CHANNEL_PREFIX, memoryRealtimeHub, realtimeHub, valkeyRealtimeHub, type HubListener, type HubMessage, type RealtimeHub } from "./hub.ts";
@@ -26,8 +25,3 @@ export { COURSE_NOTICES_ROUTE, isCourseNotice, noticeEvent, noticeTopic, valkeyC
 export { valkeyPlaygroundLive } from "./playground-live.ts";
 export { valkeyBrowserRealtime, type ValkeyBrowserRealtime } from "./browser-realtime.ts";
 export { assistanceCourseOf, assistanceTopic, sseAssistanceFeed, valkeyAssistanceFeed, type SseAssistanceFeedOptions } from "./assistance.ts";
-
-/** Which broker PUBLIC_REALTIME names; anything but `valkey` is Supabase, so the dual release keeps Supabase until a deployment opts in. */
-export function realtimeKindOf(env: { PUBLIC_REALTIME?: string }): "supabase" | "valkey" {
-  return env.PUBLIC_REALTIME?.trim().toLowerCase() === "valkey" ? "valkey" : "supabase";
-}

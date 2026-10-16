@@ -1,7 +1,6 @@
 import { vi } from "vitest";
 import type { TutorsId } from "../../../packages/jsr/model/src/tutors.ts";
 
-
 export const READER_ORIGIN = "https://reader.test";
 
 type Handler = (event: unknown) => Response | Promise<Response>;
@@ -25,7 +24,16 @@ export function setReaderSession(user: TutorsId | null): void {
   session = user;
 }
 
-export type ApiRequest = { method: string; url: string; credentials?: RequestCredentials; origin: string | null; sessionLogin: string | null; status: number };
+/** A request the reader's server answered: `body` is the JSON the browser sent, when it sent one. */
+export type ApiRequest = {
+  method: string;
+  url: string;
+  credentials?: RequestCredentials;
+  origin: string | null;
+  sessionLogin: string | null;
+  status: number;
+  body?: unknown;
+};
 
 export const apiRequests: ApiRequest[] = [];
 
@@ -98,6 +106,14 @@ function courseJsonResponse(url: URL): Response | null {
   return json === undefined ? new Response("Not Found", { status: 404 }) : new Response(JSON.stringify(json), { status: 200, headers: { "content-type": "application/json" } });
 }
 
+function parsed(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 export function installReaderFetch(): void {
   const current = globalThis.fetch as typeof fetch & { fallback?: typeof fetch };
   const previous = current.fallback ?? current;
@@ -118,7 +134,15 @@ export function installReaderFetch(): void {
     const answering = callReader(request, withSession);
     inFlight.add(answering);
     const response = await answering.finally(() => inFlight.delete(answering));
-    apiRequests.push({ method: request.method, url: url.pathname, credentials: init?.credentials, origin, sessionLogin: withSession ? (session?.login ?? null) : null, status: response.status });
+    apiRequests.push({
+      method: request.method,
+      url: url.pathname,
+      credentials: init?.credentials,
+      origin,
+      sessionLogin: withSession ? (session?.login ?? null) : null,
+      status: response.status,
+      ...(typeof init?.body === "string" ? { body: parsed(init.body) } : {})
+    });
     return response;
   };
   vi.stubGlobal("fetch", Object.assign(readerFetch, { fallback: previous }));

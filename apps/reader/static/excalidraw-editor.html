@@ -36,7 +36,6 @@
     import React, { createElement, useEffect, useRef, useState, useCallback } from "react";
     import { createRoot } from "react-dom/client";
     import { Excalidraw } from "https://esm.sh/@excalidraw/excalidraw@0.18.0?external=react,react-dom";
-    import { createClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
 
     const CURSOR_COLORS = [
       "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4",
@@ -53,14 +52,7 @@
 
     const loadingEl = document.getElementById("loading");
 
-    // The same Realtime budget as the reader's gateway (@tutors/realtime), which this page cannot import:
-    // a server-side event cap, and full-jitter reconnects so tabs do not all return at once after an outage.
-    const REALTIME_OPTIONS = {
-      params: { eventsPerSecond: 10 },
-      reconnectAfterMs: (tries) => Math.round(Math.random() * Math.min(30000, 1000 * 2 ** Math.max(0, tries - 1))),
-    };
-
-    // Every broadcast is billed once per receiver, so a room's cursor traffic grows with the square of its size.
+    // Every broadcast reaches every other editor, so a room's cursor traffic grows with the square of its size.
     // Larger rooms share cursors less often, and above 8 participants only Presence shows who is there.
     const SCENE_BATCH_MS = 250;
     const CURSOR_MIN_MOVE_PX = 4;
@@ -73,9 +65,8 @@
 
     // A shared board's room on Valkey (Rule 0580): the reader's server streams the room
     // (GET /api/realtime/stream) and publishes what this tab posts (POST /api/realtime/publish).
-    // It answers the few calls the editor makes of a Supabase channel, so the editor below is the
-    // same on either broker. Presence is each tab announcing itself every 15 seconds (and once, as a
-    // reply, to a newcomer), forgotten after 40 seconds of silence or when the tab says it is leaving.
+    // It answers the few calls the editor makes of a broadcast channel with presence. Presence is
+    // each tab announcing itself every 15 seconds (and once, as a reply, to a newcomer), forgotten after 40 seconds of silence or when the tab says it is leaving.
     // The server checks a presence or leave names the signed-in sender, and a peer is held under its
     // user and key together, so no one can take over or drop a slot another user's tab announced. A
     // viewer who is not signed in only watches: the server would refuse everything it posted.
@@ -177,16 +168,10 @@
       return { channel, close };
     }
 
-    /** The shared board's room on the broker the reader runs: Valkey, Supabase Realtime, or none (a personal board). */
+    /** The shared board's room, or none for a personal board. A viewer who is not signed in only watches. */
     function openRoom(config, presenceKey) {
-      const topic = `wb:${config.roomId}`;
-      if (config.realtime === "valkey") return valkeyRoom(topic, presenceKey, /^anon(-|$)/.test(String(config.user?.id ?? "anon")));
-      if (!config.supabaseUrl || !config.supabaseAnonKey) return null;
-      const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, { realtime: REALTIME_OPTIONS });
-      const channel = supabase.channel(topic, {
-        config: { broadcast: { self: false }, presence: { key: presenceKey } },
-      });
-      return { channel, close: () => void supabase.removeChannel(channel) };
+      if (!config.shared) return null;
+      return valkeyRoom(`wb:${config.roomId}`, presenceKey, /^anon(-|$)/.test(String(config.user?.id ?? "anon")));
     }
 
     function ExcalidrawEditor({ config }) {

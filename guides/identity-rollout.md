@@ -51,7 +51,7 @@ It is a source checkpoint, not a recorded or deployed image digest.
 - Keep GitHub's callback at `https://<reader-host>/api/auth/callback/github` and the scopes at
   `read:user user:email`. `/auth` and `/auth/<courseid>` remain sign-in pages.
 - GitHub's verified numeric id supplies `Actor.subject=github:<id>`. Login remains the existing
-  student-record, analytics and enrollment key. No rows, UUIDs, authorization policies, RLS,
+  student-record, analytics and enrollment key. No rows, UUIDs, authorization policies,
   SSO configuration or auth service are migrated by this upgrade.
 - Signed/encrypted stateless cookies, their names/attributes and the cookie-held OAuth
   state/account configuration stay unchanged. Both the signed token and encrypted claims must
@@ -106,8 +106,8 @@ session survives the Kit 3 upgrade and renews past its original expiry. Do not r
 from the new implementation: it must continue to represent the preceding deployment.
 
 GitHub is stubbed only by an explicit test-credential-guarded preload; production imports no
-fixture. Browser checks obtain real SDK cookies. Supabase writes go to an unshipped discard
-fixture. The protected-route fixture uses the reader's actual hooks; replace it with #320/#327's
+fixture. Browser checks obtain real SDK cookies. The reader runs with no database, so its data routes
+answer 503. The protected-route fixture uses the reader's actual hooks; replace it with #320/#327's
 production route when it lands. Local fixtures do not prove live GitHub or deployed rollback.
 
 The built-browser mode uses the real reader build behind a test proxy. It covers OAuth,
@@ -142,10 +142,9 @@ Auth.js sessions. Record the actual live commit/image and hosting branch before 
 repository release metadata alone does not establish what `tutors.dev` runs.
 
 This migration adds no SQL or identity database adapter. Normal sign-in/reconnect and course
-visits still write existing Supabase user/profile/learning data. Rehearsal and preview deployments
-must use an isolated Supabase project and test accounts; a preview using production environment
-values can write to production. Keep #320/#327's data API/RLS work separate and verify its guards
-when available. Do not change production OAuth callbacks, secrets, database policies or GitOps
+visits write the existing user/profile/learning data in the Postgres store. Rehearsal and preview
+deployments must use an isolated database (`PRIVATE_DATABASE_URL`) and test accounts; a preview
+using production environment values can write to production. Do not change production OAuth callbacks, secrets, database policies or GitOps
 configuration while preparing this stack.
 
 

@@ -90,6 +90,7 @@ export const LoRecordSchema = z.object({
   icon: z.record(z.string()).optional(),
 });
 
+/** A realtime topic a browser streams (GET /api/realtime/stream?topic=): the platform's activity or one course's. */
 export const RealtimeChannelSchema = z.object({
   channelName: z.string(),
   type: z.enum(["global", "course"]),
@@ -170,8 +171,8 @@ export const WhiteboardRoomSchema = z.object({
 
 export const WhiteboardInitEditorSchema = z.object({
   type: z.literal("init-editor"),
-  supabaseUrl: z.string().url(),
-  supabaseAnonKey: z.string().min(1),
+  /** A shared board collaborates in its room over the reader's realtime routes; a personal one opens no room. */
+  shared: z.boolean(),
   roomId: z.string(),
   user: z.object({
     name: z.string(),
@@ -210,7 +211,7 @@ export const CourseBroadcastSchema = z.object({
 // Ephemeral snippet sharing (issue #155)
 // ---------------------------------------------------------------------------
 
-/** One row of the `course_gists` table (supabase/migrations/20261018000000_create_course_gists.sql). */
+/** One row of the `course_gists` table. */
 export const CourseGistSchema = z.object({
   id: z.string().uuid(),
   created_at: z.string(),
@@ -227,7 +228,7 @@ export const CourseGistSchema = z.object({
 });
 
 /**
- * The content-free ping on the `snippets:<courseId>` topic. Strict: the anon key can read this
+ * The content-free ping on the `snippets:<courseId>` topic. Strict: any browser on the course can stream this
  * payload from any browser on the course, so the field list is a privacy boundary.
  */
 export const GistCreatedEventSchema = z

@@ -39,7 +39,7 @@ Feature: Course Discovery
   Rule: If the reader's server has no database configured, then the catalogue shall show an empty catalogue and a student count of 0 without logging an error.
 
     Scenario: Open the catalogue when the reader has no database
-      Given the reader's server has no service key
+      Given the reader's server has no database configured
       When a student opens the catalogue
       Then the catalogue shall display no courses
       And the catalogue shall show a student count of 0

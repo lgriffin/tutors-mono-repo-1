@@ -4,9 +4,6 @@ import { AUTH_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } from "../../tests
 
 const sessionEnv = {
   PUBLIC_ANON_MODE: "FALSE",
-  PUBLIC_SUPABASE_URL: "http://localhost:5178",
-  PUBLIC_SUPABASE_ANON_KEY: "fixture-anon-key",
-  PRIVATE_SUPABASE_SERVICE_ROLE_KEY: "fixture-service-role-key",
   PRIVATE_TUTORS_ADMINS: "lecturer",
   PRIVATE_AUTH_SECRET: AUTH_SECRET,
   PRIVATE_AUTH_GITHUB_ID: GITHUB_CLIENT_ID,
@@ -39,8 +36,8 @@ export default defineConfig({
   ],
   webServer: [
     { command: process.env.TEST_READER_BUILT === "1" ? "node tests/fixtures/reader-session/serve-built.mjs" : "pnpm dev --strictPort", cwd: fileURLToPath(new URL("../..", import.meta.url)), url: "http://localhost:5173/healthz/live", reuseExistingServer: false, env: oauthEnv },
-    { command: "node ../../tests/fixtures/reader-session/serve.mjs 5178", url: "http://localhost:5178/rest/v1/ready", reuseExistingServer: false, env: oauthEnv },
-    { command: "node ../../tests/fixtures/reader-session/serve.mjs 5179", url: "http://localhost:5179/rest/v1/ready", reuseExistingServer: false,
+    { command: "node ../../tests/fixtures/reader-session/serve.mjs 5178", url: "http://localhost:5178/ready", reuseExistingServer: false, env: oauthEnv },
+    { command: "node ../../tests/fixtures/reader-session/serve.mjs 5179", url: "http://localhost:5179/ready", reuseExistingServer: false,
       env: { ...sessionEnv, NODE_ENV: "production", NODE_OPTIONS: "", PRIVATE_AUTH_SECRET: "a-production-secret-distinct-from-the-test-fixture" } }
   ]
 });

@@ -1,7 +1,7 @@
 /**
  * The browser's broker adapter for the @tutors/realtime gateway when realtime is Valkey: joining a
  * topic opens an EventSource on a Tutors server's GET /api/realtime/stream?topic=, and a send is a
- * POST to the reader's /api/realtime/publish. Like the Supabase adapter it translates and holds no
+ * POST to the reader's /api/realtime/publish. It translates and holds no
  * policy: a failed stream is closed and reported, so the gateway's jittered backoff decides when to
  * rejoin, not the EventSource's fixed retry.
  */

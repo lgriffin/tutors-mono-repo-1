@@ -3,10 +3,9 @@
  * environment and nowhere else. `PUBLIC_ANON_MODE=TRUE` composes a reader that records nothing,
  * shows nobody present and offers no sign-in; otherwise the learner's record, presence snapshot,
  * locks, whiteboard scenes, SCORM state and playground hand-ins travel through the reader's own
- * data API (@tutors/data-api; the server reads and writes them with its service key,
- * guides/SERVER-WRITES.md), realtime is Supabase's channels on the browser's Supabase client (the
- * default) or, with PUBLIC_REALTIME=valkey, the reader server's server-sent event streams (no Supabase
- * client at all), and Better Auth the session. Both hooks files call this once, so the server and the browser run the same
+ * data API (@tutors/data-api; the server reads and writes them in the Postgres store,
+ * guides/SERVER-WRITES.md), realtime is the reader server's server-sent event streams over Valkey,
+ * and Better Auth the session. Both hooks files call this once, so the server and the browser run the same
  * wiring; tests call it with the environment they want.
  */
 import type { IdentityClient } from "@tutors/application/ports";
@@ -20,15 +19,12 @@ import { inProcessPublisher } from "@tutors/bus-inprocess";
 import { wasmCodeRuntime } from "@tutors/runtime-wasm";
 import { indexedDbWorkspaceStore } from "@tutors/workspace-indexeddb";
 import { httpLiveEventReporter } from "@tutors/live-events-http";
-import { createSupabaseClient } from "@tutors/store-supabase";
-import { realtimeClientOptions, supabaseCourseNotices, supabasePlaygroundLive, supabasePresence } from "@tutors/realtime-supabase";
-import { realtimeKindOf, valkeyBrowserRealtime } from "@tutors/realtime-valkey";
+import { valkeyBrowserRealtime } from "@tutors/realtime-valkey";
 import {
   readerApiAccessStore,
   readerApiCourseVisit,
   readerApiLearningEventSink,
   readerApiPlaygroundSnapshots,
-  readerApiLiveWatch,
   readerApiPresenceRoster,
   readerApiPresenceStore,
   readerApiProfile,
@@ -37,16 +33,12 @@ import {
   readerApiHelpDesk,
   readerApiFeedbackDesk
 } from "@tutors/data-api";
-import log, { withRequestId } from "@tutors/logger";
+import log from "@tutors/logger";
 
 export type ReaderEnv = {
   PUBLIC_ANON_MODE?: string;
-  PUBLIC_SUPABASE_URL?: string;
-  PUBLIC_SUPABASE_ANON_KEY?: string;
   /** Where Tutors Live's ingest endpoint is; unset, the reader reports nothing to it. */
   PUBLIC_LIVE_EVENTS_URL?: string;
-  /** `supabase` (the default) or `valkey`. */
-  PUBLIC_REALTIME?: string;
 };
 
 /** `PUBLIC_ANON_MODE=TRUE` turns the learner record, presence and sign-in off entirely. */
@@ -78,30 +70,7 @@ export function composeReader(env: ReaderEnv, options: { identityClient?: Identi
   };
 
   if (isAnonymous(env)) return anonymousAdapters(shared);
-  if (realtimeKindOf(env) === "valkey") return signedInAdapters(shared, publisher, valkeyRealtime());
-
-  const url = env.PUBLIC_SUPABASE_URL;
-  const key = env.PUBLIC_SUPABASE_ANON_KEY;
-  // The Realtime gateway's client, and nothing else: it reads and writes no table (Rule 0471). On the
-  // server, calls made while serving a request carry its x-request-id; in the browser this is plain fetch.
-  const client = createSupabaseClient(url, key, withRequestId(), realtimeClientOptions());
-  if (!client) {
-    log.warn("Supabase is not configured (PUBLIC_SUPABASE_URL / PUBLIC_SUPABASE_ANON_KEY missing); running without it");
-    return { ...anonymousAdapters(shared), anonymous: false };
-  }
-
-  // The presence snapshot is stored by the server (POST /api/presence); the channel itself stays in the browser.
-  const presence = supabasePresence(client, clock.now, {
-    store: readerApiPresenceStore(),
-    roster: readerApiPresenceRoster(),
-    watch: readerApiLiveWatch()
-  });
-  return signedInAdapters(shared, publisher, {
-    presence,
-    // TODO(budget): the live share is browser-published through the gateway; see realtime-supabase/src/playground-live.ts.
-    playgroundLive: supabasePlaygroundLive(presence.gateway),
-    notices: supabaseCourseNotices(client)
-  });
+  return signedInAdapters(shared, publisher, valkeyRealtime());
 }
 
 /**
@@ -113,7 +82,7 @@ function valkeyRealtime(): Pick<Adapters, "presence" | "playgroundLive" | "notic
   return valkeyBrowserRealtime({ presence: { store: readerApiPresenceStore(), roster: readerApiPresenceRoster() } });
 }
 
-/** A signed-in deployment: the data API for every write, and realtime over the broker PUBLIC_REALTIME picks. */
+/** A signed-in deployment: the data API for every write, and realtime over Valkey. */
 function signedInAdapters(
   shared: Partial<Adapters>,
   publisher: ReturnType<typeof inProcessPublisher>,
@@ -138,7 +107,7 @@ function signedInAdapters(
     // Snapshots have an owner: the server keeps them under the session's login and decides who may read them (Rule 0475).
     playgroundSnapshots: readerApiPlaygroundSnapshots(),
     playgroundLive: realtime.playgroundLive,
-    // A shared snippet goes to the reader's server, which keeps it with its service key; notices
+    // A shared snippet goes to the reader's server, which keeps it in the store; notices
     // (a lecturer's broadcast, a snippet ping) are posted to the server too and watched through the gateway.
     snippets: httpSnippetStore(),
     notices: realtime.notices,

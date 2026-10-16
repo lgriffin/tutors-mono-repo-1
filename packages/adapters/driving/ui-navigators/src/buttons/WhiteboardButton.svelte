@@ -2,7 +2,6 @@
   import { onMount, onDestroy } from "svelte";
   import { currentCourse, tutorsId } from "@tutors/svelte-state";
   import Icon from "@tutors/ui-primitives/components/Icon.svelte";
-  import * as env from "$app/env/public";
 
   import { t } from "@tutors/i18n";
   let { labelled = false } = $props();
@@ -40,10 +39,8 @@
           window.removeEventListener("message", handler);
           editorIframe?.contentWindow?.postMessage({
             type: "init-editor",
-            // The course's shared room: on Valkey through the reader's server (Rule 0580), else Supabase Realtime.
-            realtime: env.PUBLIC_REALTIME?.trim().toLowerCase(),
-            supabaseUrl: env.PUBLIC_SUPABASE_URL,
-            supabaseAnonKey: env.PUBLIC_SUPABASE_ANON_KEY,
+            // The course's shared room, through the reader's server over Valkey (Rule 0580).
+            shared: true,
             roomId: getWhiteboardRoomId(),
             user: {
               name: tutorsId.value?.name || "Anonymous",

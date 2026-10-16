@@ -1,8 +1,7 @@
 name: Snippet Cleanup
 
 # Purges expired course snippets (issue #155 — 48h ephemeral snippet sharing).
-# Snippets live entirely in the database (the Postgres store once PRIVATE_DATABASE_URL is set,
-# Supabase until then), so expiry is just a row delete: every row
+# Snippets live entirely in the Postgres store, so expiry is just a row delete: every row
 # where expires_at <= now() is removed, in batches. There is no GitHub call and
 # no stored access token, so there is no partial-failure state to reconcile.
 # Reads already filter on expires_at, so this job reclaims storage rather than
@@ -46,11 +45,7 @@ jobs:
 
       - name: Run purge
         env:
-          # The store the deployment runs on: Postgres once the DATA_STORE repository variable says so
-          # (guides/DATA-MOVE.md), so a database secret set early never purges the store nobody reads yet.
-          PRIVATE_DATABASE_URL: ${{ vars.DATA_STORE == 'postgres' && secrets.PRIVATE_DATABASE_URL || '' }}
-          SUPABASE_URL: ${{ vars.PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PRIVATE_DATABASE_URL: ${{ secrets.PRIVATE_DATABASE_URL }}
         run: pnpm tsx scripts/purge-course-gists.ts
 
       - name: Upload summary

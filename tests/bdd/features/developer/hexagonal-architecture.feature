@@ -36,7 +36,7 @@ Feature: Hexagonal architecture
       Then no violation of "application-imports-domain-only" is found
 
   @rule-0342 @ears-ubiquitous
-  Rule: Tutors shall import a vendor library (the Supabase client, the markdown renderers, Better Auth) only from the adapter that wraps it, outside the authoring toolchain.
+  Rule: Tutors shall import a vendor library (the Postgres and Valkey clients, the markdown renderers, Better Auth) only from the adapter that wraps it, outside the authoring toolchain.
 
     Scenario: A package other than the wrapping adapter importing a vendor library is a violation
       Given the architecture rules run over the fixture workspace
@@ -110,12 +110,12 @@ Feature: Hexagonal architecture
       Then ARCHITECTURE.md cites each of them in backticks
 
   @rule-0350 @ears-ubiquitous
-  Rule: Tutors shall name in ARCHITECTURE.md every Supabase table and channel a package reads or writes, with the adapter that owns it.
+  Rule: Tutors shall name in ARCHITECTURE.md every Postgres table and Valkey realtime topic a package reads or writes, with the adapter that owns it.
 
-    Scenario: Every table a package queries is in the data ownership table
-      Given the Supabase tables the adapters, the time library and the apps query
+    Scenario: Every table and topic a package uses is in the data ownership table
+      Given the Postgres tables and views the store's migrations create
       Then ARCHITECTURE.md has a data ownership row for each of them
-      And ARCHITECTURE.md has a data ownership row for the platform-wide presence channel
+      And ARCHITECTURE.md has a data ownership row for each topic the Valkey realtime adapter streams
 
   @rule-0351 @ears-ubiquitous
   Rule: Tutors shall keep the requirements table of ARCHITECTURE.md and the hexagonal-architecture feature in agreement, citing every Rule of the feature and no Rule id that exists in no feature.

@@ -1,19 +1,18 @@
 # Provisioned Postgres data sources for Tutors.
 # Grafana expands ${ENV_VARS} from the container environment (set in docker-compose.yml / .env).
 #
-# SECURITY: point these at a dedicated read-only role, NOT the Supabase service_role or a
-# superuser. A direct Postgres connection bypasses Supabase RLS, so the role you use here
-# defines the entire blast radius. See sql/grafana_reader.sql.
+# SECURITY: point these at a dedicated read-only role, NOT the servers' own database user or a
+# superuser. The role you use here defines the entire blast radius. See sql/grafana_reader.sql.
 apiVersion: 1
 
 datasources:
   # ---------------------------------------------------------------------------
-  # Local Supabase (`supabase start`) — Postgres exposed on the host at :54322.
-  # Default local Supabase superuser creds (postgres/postgres) are used so this
-  # works out of the box; for a hardened local setup, run sql/grafana_reader.sql
-  # and switch user/password to grafana_reader.
+  # Local Postgres store (`docker compose --profile store-postgres up` in the
+  # repo root) — exposed on the host at :5433. Its compose owner creds
+  # (tutors/tutors) are used so this works out of the box; for a hardened local
+  # setup, run sql/grafana_reader.sql and switch user/password to grafana_reader.
   # ---------------------------------------------------------------------------
-  - name: Tutors Local (Supabase)
+  - name: Tutors Local
     uid: tutors-local
     type: postgres
     access: proxy
@@ -30,11 +29,11 @@ datasources:
     editable: true
 
   # ---------------------------------------------------------------------------
-  # Staging Supabase — remote. Use the Supabase connection pooler host and a
-  # read-only grafana_reader role. Fill in values in .env; if STAGING_DB_HOST is
+  # Staging Postgres store — remote. Use its host and a read-only
+  # grafana_reader role. Fill in values in .env; if STAGING_DB_HOST is
   # empty this data source simply won't connect (harmless).
   # ---------------------------------------------------------------------------
-  - name: Tutors Staging (Supabase)
+  - name: Tutors Staging
     uid: tutors-staging
     type: postgres
     access: proxy

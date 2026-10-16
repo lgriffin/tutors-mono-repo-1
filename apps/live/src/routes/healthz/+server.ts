@@ -12,7 +12,7 @@ export const GET: RequestHandler = async () =>
     timestamp: now().toISOString(),
     app: "tutors-live",
     checks: {
-      supabase: { status: "skipped", latencyMs: 0, message: "reads through the reader's data API" }
+      store: { status: "skipped", latencyMs: 0, message: "reads through the reader's data API" }
     },
     errors: {
       last60min: []

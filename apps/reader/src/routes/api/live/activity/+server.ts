@@ -4,11 +4,8 @@ import { MAX_LIVE_ACTIVITY_BYTES } from "@tutors/domain/presence";
 import { readerServer } from "#lib/server/api/adapters.ts";
 
 /**
- * Tutors Live's activity feed: the reader posts each learning event here. On Supabase Realtime this
- * publishes it to the topics a Live tab is watching, within the day's budget, claimed with the
- * server's service client (the anon key can call no database function, Rule 0472; without one
- * nothing is published; see receiveLiveActivity). On Valkey it publishes to the course's and the
- * platform's activity topics with no budget (publishLiveActivity, Rule 0481).
+ * Tutors Live's activity feed: the reader posts each learning event here, and the server publishes
+ * it to the course's and the platform's activity topics on Valkey (publishLiveActivity, Rule 0481).
  */
 export const POST: RequestHandler = async ({ request }) => {
   // Refuse an oversized body before reading it, when the client says how big it is.

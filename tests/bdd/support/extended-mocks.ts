@@ -1,21 +1,3 @@
-import { MockSupabaseClient } from "./mocks";
-
-export class ExtendedMockSupabaseClient extends MockSupabaseClient {
-  private rpcHandlers: Map<string, (params: Record<string, unknown>) => unknown> = new Map();
-
-  registerRpc(name: string, handler: (params: Record<string, unknown>) => unknown): void {
-    this.rpcHandlers.set(name, handler);
-  }
-
-  async rpc(name: string, params: Record<string, unknown> = {}): Promise<{ data: unknown; error: null }> {
-    const handler = this.rpcHandlers.get(name);
-    if (handler) {
-      return { data: handler(params), error: null };
-    }
-    return { data: null, error: null };
-  }
-}
-
 export class MockAuthSession {
   private sessions: Map<string, { userId: string; provider: string; expiresAt: number }> = new Map();
   private authenticated = false;

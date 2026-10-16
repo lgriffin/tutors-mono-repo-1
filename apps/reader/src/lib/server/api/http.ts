@@ -1,9 +1,14 @@
 import { error, type RequestEvent } from "@sveltejs/kit";
-import type { SessionUser } from "@tutors/store-supabase";
 import { readerServer } from "./adapters.ts";
 import type { ReaderServerData } from "../compose.ts";
 
-export type { SessionUser };
+/** Who the session says the learner is: the row's name, email and avatar come from here, never from the request. */
+export interface SessionUser {
+  login: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
+}
 
 type Locals = RequestEvent["locals"];
 

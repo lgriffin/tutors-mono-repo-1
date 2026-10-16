@@ -83,7 +83,7 @@ or a step exists in the feature and not in the steps, or the other way round.
 
 Steps call product code — the model and time libraries, the course, theme, i18n, connect,
 presence and catalogue services — and assert on what it returns, writes or broadcasts. The
-stand-ins are at the edges only: `support/supabase-recorder.ts` for Supabase and realtime,
+stand-ins are at the edges only: `support/backend.ts` for the Postgres store (PGlite) and realtime,
 `support/runes-stub.ts` and `support/svelte-runes-shim.ts` for `$state` (the root config has no
 Svelte compiler), and a stand-in `fetch` for the course host. `support/course.ts` publishes a
 course as the generator would and loads it through the real `decorateCourseTree`.

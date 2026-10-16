@@ -11,7 +11,6 @@ import {
   readerApiAccessStore,
   readerApiCourseVisit,
   readerApiLearningEventSink,
-  readerApiLiveWatch,
   readerApiPlaygroundSnapshots,
   readerApiPresenceRoster,
   readerApiPresenceStore,
@@ -269,23 +268,15 @@ describe("readerApiPlaygroundSnapshots without a course or exercise", () => {
   });
 });
 
-describe("the realtime adapter's roster and watch options", () => {
-  it("read the stored roster and report a watcher through the server, answering null when the server cannot", async () => {
-    const { api, calls } = server({
-      "GET /api/presence/roster": { body: { rows: [{ payload: { courseId: "cs101" } }] } },
-      "POST /api/live/watch": { body: { tier: "paused" } }
-    });
+describe("the realtime adapter's roster", () => {
+  it("reads the stored roster through the server, answering null when the server cannot", async () => {
+    const { api, calls } = server({ "GET /api/presence/roster": { body: { rows: [{ payload: { courseId: "cs101" } }] } } });
 
     expect(await readerApiPresenceRoster(api)("cs101", "2026-09-17T09:58:00.000Z")).toEqual([{ payload: { courseId: "cs101" } }]);
-    expect(await readerApiLiveWatch(api)("course-activity:cs101", "tab-1")).toBe("paused");
-    expect(calls.map((call) => [call.method, call.path.split("?")[0], call.body])).toEqual([
-      ["GET", "/api/presence/roster", undefined],
-      ["POST", "/api/live/watch", { topic: "course-activity:cs101", watcher: "tab-1" }]
-    ]);
+    expect(calls.map((call) => [call.method, call.path.split("?")[0], call.body])).toEqual([["GET", "/api/presence/roster", undefined]]);
 
-    const down = server({ "GET /api/presence/roster": { status: 503 }, "POST /api/live/watch": { status: 503 } }).api;
+    const down = server({ "GET /api/presence/roster": { status: 503 } }).api;
     expect(await readerApiPresenceRoster(down)(undefined, "2026-09-17T09:58:00.000Z")).toBeNull();
-    expect(await readerApiLiveWatch(down)("platform-activity", "tab-1")).toBeNull();
   });
 });
 

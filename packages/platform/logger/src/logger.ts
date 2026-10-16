@@ -121,7 +121,7 @@ function isPlainObject(val: unknown): val is Record<string, unknown> {
 }
 
 /**
- * An error-shaped object (Supabase returns `{ message, code, details, hint }`) carries its
+ * An error-shaped object (a database driver's error, say `{ message, code, detail }`) carries its
  * text in `message`, which the entry's own `message` would overwrite. Keep it as `error`,
  * the key an Error instance is logged under.
  */

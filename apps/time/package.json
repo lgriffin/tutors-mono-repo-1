@@ -15,17 +15,14 @@
   "dependencies": {
     "@opentelemetry/api": "1.9.1",
     "@prometheus-io/client": "^0.16.1",
-    "@supabase/supabase-js": "^2.117.1",
     "@tutors/application": "workspace:*",
     "@tutors/course-http": "workspace:*",
     "@tutors/data-api": "workspace:*",
     "@tutors/domain": "workspace:*",
     "@tutors/identity-better-auth": "workspace:*",
     "@tutors/moodle": "workspace:*",
-    "@tutors/realtime-supabase": "workspace:*",
     "@tutors/realtime-valkey": "workspace:*",
     "@tutors/store-postgres": "workspace:*",
-    "@tutors/store-supabase": "workspace:*",
     "@tutors/svelte-state": "workspace:*",
     "isomorphic-dompurify": "^4.5.0",
     "pg": "^8.23.0"

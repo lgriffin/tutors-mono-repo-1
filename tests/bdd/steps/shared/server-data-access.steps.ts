@@ -1,33 +1,27 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
 
-// The seams: Supabase (by the path product code resolves, and by name for a hoisted install), the environments and SvelteKit.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
-  createClient: (await import("../../support/supabase-recorder.ts")).createClient
-}));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
+// The seams: the `pg` driver (the in-process store, backend.ts), the environments and SvelteKit.
+vi.mock("pg", async () => (await import("../../support/backend.ts")).pgModule);
 vi.mock("$app/env/public", async () => {
-  const { publicEnv } = await import("../../support/supabase-recorder.ts");
+  const { publicEnv } = await import("../../support/backend.ts");
   const { READER_ORIGIN } = await import("../../support/reader-api.ts");
   return Object.assign(publicEnv, { PUBLIC_READER_URL: READER_ORIGIN });
 });
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 vi.mock("$app/env", () => ({ browser: true, building: false, goto: vi.fn() }));
 
 import type { Course, Lo } from "../../../../packages/jsr/model/src/tutors.ts";
-import { readFileSync } from "node:fs";
 import { load as loadTimeCourse } from "../../../../apps/time/src/routes/[courseid]/(calendar-lab)/+layout.ts";
 import { load as loadCataloguePage } from "../../../../apps/catalogue/src/routes/+page.ts";
 import { scanBrowserCode } from "../../../../scripts/checks/browser-data-access.ts";
 import { freshBrowser, githubUser, labsOf, openLo, publishedCourse, signIn } from "../../support/connect.ts";
-import { anonPolicies, anyAnonPolicy, builtSchema, type Schema } from "../../support/migrations.ts";
 import { apiRequests, readerRequest, serveCourseJson, setReaderSession, takeCourseHostDown } from "../../support/reader-api.ts";
-import { privateEnv, recorder } from "../../support/supabase-recorder.ts";
+import { backend, privateEnv } from "../../support/backend.ts";
 import { tutorsId } from "../../../../packages/adapters/driving/svelte-state/src/index.svelte.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/server-data-access.feature");
 
-const ANON_KEY = "anon-key";
 const STUDENT_TABLES = ["learning_records", "calendar", "tutors-connect-users", "tutors-connect-latest", "tutors-connect-profiles", "whiteboard_scenes"];
 const capitalised = (login: string) => login[0].toUpperCase() + login.slice(1);
 
@@ -44,8 +38,7 @@ function personalRoom(course: Course, lo: Lo, login: string): string {
 const openCatalogue = () =>
   loadCataloguePage({ fetch: globalThis.fetch } as Parameters<typeof loadCataloguePage>[0]) as Promise<{ courseRecords: unknown[]; studentCount: number }>;
 
-const SERVICE_KEY = privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY;
-const CONTRACT_STEP = "supabase/contracts/revoke_anon_student_data.sql";
+const DATABASE_URL = privateEnv.PRIVATE_DATABASE_URL;
 
 type TimeData = { role: string; calendar: Record<string, unknown>[]; learningRecords: Record<string, unknown>[]; users: Record<string, unknown>[] };
 
@@ -53,8 +46,6 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
   let course: Course;
   let response: Response;
   let body: unknown;
-  let schema: Schema;
-  let anonCallsBefore = 0;
   let timeCourse: { calendarModel: { week: { rows: { full_name: string }[] } } } | null;
 
   const firstLab = () => labsOf(course)[0];
@@ -71,9 +62,9 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
   };
   const signedIn = (_ctx: unknown, name: string) => signIn(githubUser(name));
   const readerAnswers = (_ctx: unknown, status: number) => expect(response.status).toBe(status);
+  /** No statement reached the store since the scenario's Given steps (seeds go in directly, unlogged). */
   const nothingTouched = () => {
-    expect(recorder.tableCalls).toEqual([]);
-    expect(recorder.rpcCalls).toEqual([]);
+    expect(backend.queries).toEqual([]);
   };
 
   const postPageLoad = async (_ctx: unknown, courseId: string, named: string) => {
@@ -81,14 +72,14 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     await answer(await readerRequest("POST", "/api/analytics", { kind: "page-load", courseId, loId: firstLab().route, loType: "lab", day: today(), studentId: named }));
   };
 
-  function seedStudents(courseId: string, logins: string[]) {
+  async function seedStudents(courseId: string, logins: string[]) {
     expectCourse(courseId);
     for (const login of logins) {
-      recorder.seed("learning_records", [
+      await backend.seed("learning_records", [
         { course_id: courseId, student_id: login, lo_id: firstLab().route, duration: 4, count: 2, date_last_accessed: "2026-09-21T10:00:00Z", type: "lab" }
       ]);
-      recorder.seed("calendar", [{ id: "2026-09-21", studentid: login, courseid: courseId, timeactive: 10, pageloads: 3 }]);
-      recorder.seed("tutors-connect-users", [
+      await backend.seed("calendar", [{ id: "2026-09-21", studentid: login, courseid: courseId, timeactive: 10, pageloads: 3 }]);
+      await backend.seed("tutors-connect-users", [
         {
           github_id: login,
           full_name: capitalised(login),
@@ -119,11 +110,11 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     expectCourse(courseId);
     await answer(await readerRequest("PUT", "/api/locks", { courseId, loRoute: firstLab().route, locked: true }));
   };
-  const noLocks = (_ctx: unknown, courseId: string) => {
-    expect(recorder.rows("tutors_content_locks").filter((r) => r.course_id === courseId)).toEqual([]);
+  const noLocks = async (_ctx: unknown, courseId: string) => {
+    expect((await backend.rows("tutors_content_locks")).filter((r) => r.course_id === courseId)).toEqual([]);
   };
-  const lockedBy = (_ctx: unknown, courseId: string, login: string) => {
-    expect(recorder.rows("tutors_content_locks")).toMatchObject([{ course_id: courseId, lo_route: firstLab().route, locked: true, locked_by: login }]);
+  const lockedBy = async (_ctx: unknown, courseId: string, login: string) => {
+    expect(await backend.rows("tutors_content_locks")).toMatchObject([{ course_id: courseId, lo_route: firstLab().route, locked: true, locked_by: login }]);
   };
   const publishWithEducator = (_ctx: unknown, courseId: string, educator: string) => {
     course = publishedCourse(courseId, 1, {}, { educators: [educator], whitelist: [], students: [] });
@@ -142,13 +133,12 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
   const hostDown = (_ctx: unknown, courseId: string) => takeCourseHostDown(courseId);
 
   AfterEachScenario(() => {
-    privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = SERVICE_KEY;
+    privateEnv.PRIVATE_DATABASE_URL = DATABASE_URL;
   });
 
-  /** Forgets the calls the Given steps made, so a Then about the request under test sees only its own. */
+  /** Forgets the statements the Given steps made, so a Then about the request under test sees only its own. */
   const forgetCalls = () => {
-    recorder.tableCalls.length = 0;
-    recorder.rpcCalls.length = 0;
+    backend.queries.length = 0;
   };
   const scormRow = (login: string) => ({
     course_id: course.courseId,
@@ -169,11 +159,11 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     last_ok: null,
     updated_at: new Date().toISOString()
   });
-  const handInsOnFirstLab = () => recorder.rows("playground_snapshots").filter((r) => r.course_id === course.courseId && r.lo_id === firstLab().route);
+  const handInsOnFirstLab = async () => (await backend.rows("playground_snapshots")).filter((r) => r.course_id === course.courseId && r.lo_id === firstLab().route);
 
   Background(({ Given }) => {
-    Given("the course {string} is published with {number} labs and {string} as its educator", (_ctx, courseId: string, labs: number, educator: string) => {
-      freshBrowser();
+    Given("the course {string} is published with {number} labs and {string} as its educator", async (_ctx, courseId: string, labs: number, educator: string) => {
+      await freshBrowser();
       course = publishedCourse(courseId, labs, {}, { educators: [educator], whitelist: [], students: [] });
     });
   });
@@ -226,16 +216,16 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
           await answer(await readerRequest("POST", "/api/presence", { courseId, payload }));
           expect(response.status).toBe(204);
         });
-        Then("the learning record, calendar row and presence row are stored under {string}", (_ctx, login: string) => {
-          expect(recorder.rows("learning_records").map((r) => r.student_id)).toEqual([login]);
-          expect(recorder.rows("calendar").map((r) => r.studentid)).toEqual([login]);
-          expect(recorder.rows("tutors-connect-latest")).toMatchObject([{ course_id: course.courseId, student_id: login, payload: { user: { id: login } } }]);
+        Then("the learning record, calendar row and presence row are stored under {string}", async (_ctx, login: string) => {
+          expect((await backend.rows("learning_records")).map((r) => r.student_id)).toEqual([login]);
+          expect((await backend.rows("calendar")).map((r) => r.studentid)).toEqual([login]);
+          expect(await backend.rows("tutors-connect-latest")).toMatchObject([{ course_id: course.courseId, student_id: login, payload: { user: { id: login } } }]);
         });
-        And("the user row of {string} has the sentiment {string} and the online status {string}", (_ctx, login: string, sentiment: string, onlineStatus: string) => {
-          expect(recorder.rows("tutors-connect-users").find((r) => r.github_id === login)).toMatchObject({ sentiment, online_status: onlineStatus });
+        And("the user row of {string} has the sentiment {string} and the online status {string}", async (_ctx, login: string, sentiment: string, onlineStatus: string) => {
+          expect((await backend.rows("tutors-connect-users")).find((r) => r.github_id === login)).toMatchObject({ sentiment, online_status: onlineStatus });
         });
-        And("nothing is stored under {string}", (_ctx, login: string) => {
-          for (const table of STUDENT_TABLES) expect(JSON.stringify(recorder.rows(table)), table).not.toContain(`"${login}"`);
+        And("nothing is stored under {string}", async (_ctx, login: string) => {
+          for (const table of STUDENT_TABLES) expect(JSON.stringify(await backend.rows(table)), table).not.toContain(`"${login}"`);
         });
       });
 
@@ -245,13 +235,13 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
           expectCourse(courseId);
           await openLo(course, firstLab());
         });
-        Then("the learning record and calendar row are stored under {string}", (_ctx, login: string) => {
-          expect(recorder.rows("learning_records")).toMatchObject([{ course_id: course.courseId, student_id: login, lo_id: firstLab().route, type: "lab" }]);
-          expect(recorder.rows("calendar")).toMatchObject([{ studentid: login, courseid: course.courseId }]);
+        Then("the learning record and calendar row are stored under {string}", async (_ctx, login: string) => {
+          expect(await backend.rows("learning_records")).toMatchObject([{ course_id: course.courseId, student_id: login, lo_id: firstLab().route, type: "lab" }]);
+          expect(await backend.rows("calendar")).toMatchObject([{ studentid: login, courseid: course.courseId }]);
         });
-        And("no row was written with the browser's anon key", () => {
-          const writes = recorder.callsWith(ANON_KEY).filter((c) => ("op" in c ? c.op !== "select" : true));
-          expect(writes).toEqual([]);
+        And("the browser posted the lab visit to the reader's server with the session of {string}", (_ctx, login: string) => {
+          const visits = apiRequests.filter((r) => r.method === "POST" && r.url === "/api/analytics");
+          expect(visits).toMatchObject([{ origin: null, sessionLogin: login, status: 204, body: { kind: "page-load", courseId: course.courseId, loId: firstLab().route } }]);
         });
       });
     }
@@ -264,18 +254,14 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
         Given("{string} is signed in to the reader", signedIn);
         When("the browser asks the reader to lock the first lab of {string}", askToLock);
         Then("the reader answers {number}", readerAnswers);
-        And("{string} has no content locks", (_ctx, courseId: string) => {
-          expect(recorder.rows("tutors_content_locks").filter((r) => r.course_id === courseId)).toEqual([]);
-        });
+        And("{string} has no content locks", noLocks);
       });
 
       RuleScenario("The course's educator can lock its content", ({ Given, When, Then, And }) => {
         Given("{string} is signed in to the reader", signedIn);
         When("the browser asks the reader to lock the first lab of {string}", askToLock);
         Then("the reader answers {number}", readerAnswers);
-        And("the first lab of {string} is locked by {string}", (_ctx, courseId: string, login: string) => {
-          expect(recorder.rows("tutors_content_locks")).toMatchObject([{ course_id: courseId, lo_route: firstLab().route, locked: true, locked_by: login }]);
-        });
+        And("the first lab of {string} is locked by {string}", lockedBy);
       });
     }
   );
@@ -409,7 +395,6 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
         Given("{string} and {string} have learning records and calendar rows in {string}", (_ctx, a: string, b: string, courseId: string) => seedStudents(courseId, [a, b]));
         And("{string} is signed in to the reader", signedIn);
         When("{string} opens {string} in the time dashboard", async (_ctx, _name: string, courseId: string) => {
-          anonCallsBefore = recorder.callsWith(ANON_KEY).length;
           const data = (await loadTimeCourse({ params: { courseid: courseId } } as unknown as Parameters<typeof loadTimeCourse>[0])) as { course: typeof timeCourse };
           timeCourse = data.course;
         });
@@ -420,9 +405,6 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
         });
         And("the time dashboard's calendar lists {string} and {string}", (_ctx, a: string, b: string) => {
           expect(timeCourse?.calendarModel.week.rows.map((r) => r.full_name).sort()).toEqual([a, b]);
-        });
-        And("the time dashboard read nothing from the database directly", () => {
-          expect(recorder.callsWith(ANON_KEY).slice(anonCallsBefore)).toEqual([]);
         });
       });
     }
@@ -442,8 +424,8 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
         And("{string} saves a drawing on the whiteboard of the first lab of {string}", savesDrawing);
         Then(
           "the whiteboard of the first lab holds the drawing of {string} for {string} and the drawing of {string} for {string}",
-          (_ctx, a: string, aLogin: string, b: string, bLogin: string) => {
-            const scenes = recorder.rows("whiteboard_scenes");
+          async (_ctx, a: string, aLogin: string, b: string, bLogin: string) => {
+            const scenes = await backend.rows("whiteboard_scenes");
             expect(scenes.find((s) => s.room_id === personalRoom(course, firstLab(), aLogin))?.elements).toEqual([{ id: `${a}-rect`, type: "rectangle" }]);
             expect(scenes.find((s) => s.room_id === personalRoom(course, firstLab(), bLogin))?.elements).toEqual([{ id: `${b}-rect`, type: "rectangle" }]);
             expect(scenes).toHaveLength(2);
@@ -461,64 +443,49 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
           expect(response.status).toBe(200);
           expect(body).toEqual({ scene: null });
         });
-        And("the database gives the anon key no policy on whiteboard_scenes", () => {
-          expect(anyAnonPolicy(builtSchema(), "whiteboard_scenes")).toEqual([]);
-        });
       });
 
       RuleScenario("An anonymous visitor's whiteboard edits are not saved", ({ Given, When, Then, And }) => {
         Given("nobody is signed in to the reader", nobodySignedIn);
         When("the browser saves a drawing on the whiteboard of the first lab of {string}", (_ctx, courseId: string) => saveDrawing(null, courseId));
         Then("the reader answers {number}", readerAnswers);
-        And("no whiteboard scene is stored", () => {
-          expect(recorder.rows("whiteboard_scenes")).toEqual([]);
+        And("no whiteboard scene is stored", async () => {
+          expect(await backend.rows("whiteboard_scenes")).toEqual([]);
         });
       });
     }
   );
 
-  Rule("Tutors shall give the anon key no read access to the rows of app_errors.", ({ RuleScenario }) => {
-    RuleScenario("A browser can report an error but cannot read the error log", ({ When, Then, And }) => {
-      When("the database is built from supabase/migrations in order", () => {
-        schema = builtSchema();
-      });
-      Then("a policy lets the anon key insert into app_errors", () => {
-        expect(anonPolicies(schema, "app_errors", "INSERT").length).toBeGreaterThan(0);
-      });
-      And("no policy lets the anon key read app_errors", () => {
-        expect(anonPolicies(schema, "app_errors", "SELECT")).toEqual([]);
-      });
-      And("the error counts the health checks read run as the function's owner and return only app, level and count", () => {
-        const fn = schema.functions.get("get_error_counts");
-        expect(fn?.securityDefiner).toBe(true);
-        expect(fn?.header).toMatch(/returns table\s*\(\s*app text,\s*level text,\s*count bigint\s*\)/i);
-      });
-    });
-  });
-
   Rule("When a visitor opens the catalogue, the catalogue shall show the number of students without reading any student's profile.", ({ RuleScenario }) => {
     RuleScenario("The student count comes from a count, not from the profiles", ({ Given, When, Then, And }) => {
       let shown = 0;
-      Given("{number} students have course-visit profiles", (_ctx, count: number) => {
-        recorder.seed(
+      Given("{number} students have course-visit profiles", async (_ctx, count: number) => {
+        await backend.seed(
           "tutors-connect-profiles",
           Array.from({ length: count }, (_, i) => ({ tutorId: `student${i}`, profile: [] }))
         );
       });
       When("a visitor opens the catalogue", async () => {
+        forgetCalls();
         shown = (await openCatalogue()).studentCount;
       });
       Then("the catalogue shows {number} students", (_ctx, count: number) => {
         expect(shown).toBe(count);
       });
       And("no student's profile was read", () => {
-        expect(recorder.tableCalls.filter((c) => c.table === "tutors-connect-profiles")).toEqual([]);
+        // The profiles were only counted: one row (the count) came back, and no column of a profile was selected.
+        const onProfiles = backend.queriesOn("tutors-connect-profiles");
+        expect(onProfiles.length).toBeGreaterThan(0);
+        for (const query of onProfiles) {
+          expect(query.text).toMatch(/^\s*SELECT count\(\*\)(::\w+)?( AS \w+)? FROM "tutors-connect-profiles"\s*$/i);
+          expect(query.returned).toBe(1);
+        }
       });
     });
   });
 
   Rule("Tutors shall read and change data from the browser only through the reader's server, with no browser code calling a database table or function.", ({ RuleScenario }) => {
-    RuleScenario("A lab visit and a catalogue visit call nothing with the anon key", ({ Given, When, Then, And }) => {
+    RuleScenario("A lab visit and a catalogue visit go through the reader's server", ({ Given, When, Then, And }) => {
       Given("{string} is signed in to the reader", signedIn);
       When("she opens the first lab of {string}", async (_ctx, courseId: string) => {
         expectCourse(courseId);
@@ -527,10 +494,9 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
       And("a visitor opens the catalogue", async () => {
         await openCatalogue();
       });
-      Then("the anon key was used for no table and no database function", () => {
-        // The reader's server did the work, with the service key.
-        expect(recorder.rows("learning_records").length).toBeGreaterThan(0);
-        expect(recorder.callsWith(ANON_KEY)).toEqual([]);
+      Then("the reader's server recorded the lab visit and answered the catalogue", async () => {
+        expect((await backend.rows("learning_records")).length).toBeGreaterThan(0);
+        expect(apiRequests.filter((r) => r.status < 300).map((r) => `${r.method} ${r.url}`)).toEqual(expect.arrayContaining(["POST /api/analytics", "GET /api/catalogue"]));
       });
       And("no browser code in the reader, catalogue, live or time apps calls a table or a database function", () => {
         expect(scanBrowserCode()).toEqual([]);
@@ -538,53 +504,10 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     });
   });
 
-  Rule(
-    "If a browser presents the anon key to the database, then tutors shall give it no table, view, sequence or function in the public schema once the server-side contract step has run, and leave Realtime open to it.",
-    ({ RuleScenario }) => {
-      RuleScenario("The contract step closes the public schema to the browser roles", ({ When, Then, And }) => {
-        let sql = "";
-        const browserRoles = /FOREACH browser_role IN ARRAY ARRAY\['anon', 'authenticated'\]/;
-        When("the contract step supabase/contracts/revoke_anon_student_data.sql is read", () => {
-          // Comments out: only what the step runs counts.
-          sql = readFileSync(CONTRACT_STEP, "utf8").replace(/--.*$/gm, "");
-        });
-        Then("it drops every public-schema policy that names anon, authenticated or public", () => {
-          expect(sql).toMatch(/FROM pg_policies\s+WHERE schemaname = 'public' AND roles && ARRAY\['anon', 'authenticated', 'public'\]::name\[\]/);
-          expect(sql).toMatch(/DROP POLICY IF EXISTS %I ON public\.%I/);
-        });
-        And("it revokes every privilege on every public-schema table, view and sequence from anon and authenticated", () => {
-          expect(sql).toMatch(/WHERE n\.nspname = 'public' AND c\.relkind IN \('r', 'p', 'v', 'm', 'S'\)/);
-          expect(sql).toMatch(browserRoles);
-          expect(sql).toContain("REVOKE ALL PRIVILEGES ON TABLE public.%I FROM %I");
-          expect(sql).toContain("REVOKE ALL PRIVILEGES ON SEQUENCE public.%I FROM %I");
-          expect(sql).toContain("REVOKE ALL PRIVILEGES ON TABLE public.%I FROM PUBLIC");
-          // Nothing granted back to a browser role.
-          expect(sql).not.toMatch(/GRANT [^;]* TO (anon|authenticated|PUBLIC)\b/i);
-        });
-        And("it revokes execute on every public-schema function from anon and authenticated", () => {
-          expect(sql).toMatch(/FROM pg_proc p JOIN pg_namespace n ON n\.oid = p\.pronamespace\s+WHERE n\.nspname = 'public' AND p\.prokind = 'f'/);
-          expect(sql).toContain("REVOKE EXECUTE ON FUNCTION %s FROM %I");
-          expect(sql).toContain("REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC");
-          // Functions created later too: PUBLIC's EXECUTE is a global default, revoked globally.
-          expect(sql).toMatch(/ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;/);
-        });
-        And("it names nothing in the realtime schema", () => {
-          expect(sql).not.toMatch(/\brealtime\s*\./i);
-          expect(sql).not.toMatch(/nspname\s*=\s*'realtime'/i);
-        });
-        And("every policy supabase/migrations gives the anon key is on a public-schema table", () => {
-          const opened = builtSchema().policies.filter((p) => p.roles.some((r) => r === "anon" || r === "public" || r === "authenticated"));
-          expect(opened.length).toBeGreaterThan(0);
-          for (const policy of opened) expect(policy.table, policy.name).not.toContain(".");
-        });
-      });
-    }
-  );
-
   Rule("While a session is signed in, the reader shall answer each of its read routes with only what that session is allowed to see.", ({ RuleScenario }) => {
-    const savedScorm = (_ctx: unknown, name: string, courseId: string) => {
+    const savedScorm = async (_ctx: unknown, name: string, courseId: string) => {
       expectCourse(courseId);
-      recorder.seed("scorm_records", [scormRow(name.toLowerCase())]);
+      await backend.seed("scorm_records", [scormRow(name.toLowerCase())]);
     };
     const askScorm = async (_ctx: unknown, courseId: string) => {
       expectCourse(courseId);
@@ -612,11 +535,11 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     });
   });
 
-  Rule("If the reader's server has no service key, then the reader shall answer 503 to each of its data routes and read or write no row.", ({ RuleScenarioOutline }) => {
-    RuleScenarioOutline("A data route on a server without the service key", ({ Given, And, When, Then }, variables) => {
+  Rule("If the reader's server has no database URL, then the reader shall answer 503 to each of its data routes and read or write no row.", ({ RuleScenarioOutline }) => {
+    RuleScenarioOutline("A data route on a server without a database URL", ({ Given, And, When, Then }, variables) => {
       Given("{string} is signed in to the reader", signedIn);
-      And("the reader's server has no service key", () => {
-        privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = "";
+      And("the reader's server has no database URL", () => {
+        privateEnv.PRIVATE_DATABASE_URL = "";
         forgetCalls();
       });
       When("the browser calls the reader's <route> route for {string}", async (_ctx, courseId: string) => {
@@ -628,8 +551,7 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
           locks: () => readerRequest("GET", `/api/locks?${new URLSearchParams({ courseId })}`),
           SCORM: () => readerRequest("GET", `/api/scorm?${new URLSearchParams({ courseId, loId })}`),
           playground: () => readerRequest("GET", `/api/playground?${new URLSearchParams({ courseId, loId })}`),
-          errors: () => readerRequest("POST", "/api/errors", { app: "tutors-reader", entries: [{ level: "error", message: "boom", courseId }] }),
-          "live watch": () => readerRequest("POST", "/api/live/watch", { topic: courseId, watcher: "tab-1" })
+          errors: () => readerRequest("POST", "/api/errors", { app: "tutors-reader", entries: [{ level: "error", message: "boom", courseId }] })
         };
         const call = calls[String(variables.route)];
         expect(call, String(variables.route)).toBeDefined();
@@ -643,8 +565,8 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
   Rule(
     "When a browser hands in or withdraws playground work, the reader shall store or remove only the signed-in student's own hand-in, whoever the request names and whether or not the session teaches the course.",
     ({ RuleScenario }) => {
-      const onlyHandIn = (_ctx: unknown, login: string) => {
-        expect(handInsOnFirstLab().map((r) => r.student_id)).toEqual([login]);
+      const onlyHandIn = async (_ctx: unknown, login: string) => {
+        expect((await handInsOnFirstLab()).map((r) => r.student_id)).toEqual([login]);
       };
 
       RuleScenario("A hand-in naming another student is stored under the session's login", ({ Given, When, Then, And }) => {
@@ -667,9 +589,9 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
       });
 
       RuleScenario("An educator cannot withdraw a student's hand-in", ({ Given, And, When, Then }) => {
-        Given("{string} handed in playground work on the first lab of {string}", (_ctx, name: string, courseId: string) => {
+        Given("{string} handed in playground work on the first lab of {string}", async (_ctx, name: string, courseId: string) => {
           expectCourse(courseId);
-          recorder.seed("playground_snapshots", [handIn(name.toLowerCase())]);
+          await backend.seed("playground_snapshots", [handIn(name.toLowerCase())]);
         });
         And("{string} is signed in to the reader", signedIn);
         When("the browser withdraws the playground hand-in of {string} on the first lab of {string}", async (_ctx, login: string, courseId: string) => {

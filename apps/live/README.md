@@ -17,7 +17,7 @@ Activity across all Tutors courses, in three layers: **Now** (who is reading thi
 
 - `/` - the dashboard: stat tiles, heat maps, top courses, observations
 - `/course/[id]` - per-course drill-down
-- `/[courseid]` - the older Supabase presence view for one course
+- `/[courseid]` - the presence view for one course, streamed over Valkey, with its help queue
 - `/api/live/*` - the read API and the ingest endpoint (see below)
 
 ## The live API
@@ -52,8 +52,8 @@ Runs on http://localhost:5174
 - SvelteKit + Svelte 5
 - `@tutors/ui` components
 - `@tutors/svelte-state` for live presence tracking, over the `@tutors/domain` and `@tutors/application` rings
-- `@tutors/realtime-supabase` and `@tutors/store-supabase` (its Realtime client only) are the adapters `src/lib/compose.ts` puts behind the presence port; `@tutors/data-api` reads the stored roster and reports watchers and errors through the reader's `/api/presence/roster`, `/api/live/watch` and `/api/errors` at `PUBLIC_READER_URL`
-- `@tutors/realtime-valkey` replaces them when `PUBLIC_REALTIME=valkey`: the presence page streams a course's or the platform's activity from this app's own `/api/realtime/stream`, which subscribes to the Valkey at `PRIVATE_VALKEY_URL` that the reader's server publishes to
+- `@tutors/realtime-valkey` is the adapter `src/lib/compose.ts` puts behind the presence port: the presence page streams a course's or the platform's activity from this app's own `/api/realtime/stream`, which subscribes to the Valkey at `PRIVATE_VALKEY_URL` that the reader's server publishes to (unset, this server's memory carries it, which hears nothing the reader publishes)
+- `@tutors/data-api` reads the stored roster and reports errors through the reader's `/api/presence/roster` and `/api/errors` at `PUBLIC_READER_URL`
 - `@tutors/app-config` for the shared Vite-based SvelteKit configuration (build time only)
 - `@tutors/i18n` for interface text in the reader's six languages
 - `@tutors/clock` for the server clock seam (`HARNESS_NOW`) and the `GET /version` endpoint

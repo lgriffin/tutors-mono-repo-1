@@ -1,4 +1,4 @@
-/** Supabase `learning_records` table model (full_name added during enrichment) */
+/** Store `learning_records` table model (full_name added during enrichment) */
 export interface LearningRecord {
   course_id: string; // text not null
   student_id: string; // text not null (github_id, used for links)

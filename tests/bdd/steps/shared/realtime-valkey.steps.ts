@@ -1,19 +1,16 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
 
-// The seams: Supabase (as the other reader-server features mock it), the environments and SvelteKit.
-// With no PRIVATE_VALKEY_URL the servers share the process's memory hub, which stands in for Valkey;
+// The seams: the `pg` driver (the in-process store), the environments and SvelteKit. With no
+// PRIVATE_VALKEY_URL the servers share the process's memory hub, which stands in for Valkey;
 // everything between the routes and the hub is product code.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
-  createClient: (await import("../../support/supabase-recorder.ts")).createClient
-}));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
+vi.mock("pg", async () => (await import("../../support/backend.ts")).pgModule);
 vi.mock("$app/env/public", async () => {
-  const { publicEnv } = await import("../../support/supabase-recorder.ts");
+  const { publicEnv } = await import("../../support/backend.ts");
   const { READER_ORIGIN } = await import("../../support/reader-api.ts");
-  return Object.assign(publicEnv, { PUBLIC_READER_URL: READER_ORIGIN });
+  return { ...publicEnv, PUBLIC_READER_URL: READER_ORIGIN };
 });
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 vi.mock("$app/env", () => ({ browser: true, building: false, goto: vi.fn() }));
 
 import type { Course } from "../../../../packages/jsr/model/src/tutors.ts";
@@ -23,8 +20,9 @@ import { whiteboardRoomId } from "@tutors/domain/course";
 import { GET as liveStream } from "../../../../apps/live/src/routes/api/realtime/stream/+server.ts";
 import { freshBrowser, githubUser, labsOf, publishedCourse, signIn } from "../../support/connect.ts";
 import { readerRequest, setReaderSession } from "../../support/reader-api.ts";
-import { publicEnv, recorder } from "../../support/supabase-recorder.ts";
+import { backend } from "../../support/backend.ts";
 import { readStream, type OpenStream } from "../../support/sse-stream.ts";
+import { mountWhiteboardEditor } from "../../support/whiteboard-editor.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/realtime-valkey.feature");
 
@@ -46,6 +44,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   const streams: Record<string, OpenStream> = {};
   let sources: FakeEventSource[] = [];
   let tabSubscription: Subscription | undefined;
+  let editor: ReturnType<typeof mountWhiteboardEditor> | undefined;
 
   const hub = () => realtimeHub(undefined);
   const firstLab = () => labsOf(course)[0];
@@ -69,9 +68,6 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/event-stream");
     streams[name] = readStream(response);
-  };
-  const deployed = (_ctx: unknown, realtime: string) => {
-    publicEnv.PUBLIC_REALTIME = realtime;
   };
   const postsLearningEvent = async (_ctx: unknown, name: string) => {
     response = await readerRequest("POST", "/api/live/activity", learningEvent(name));
@@ -103,12 +99,13 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   };
 
   AfterEachScenario(async () => {
+    editor?.unmount();
+    editor = undefined;
     for (const stream of Object.values(streams)) await stream.close();
     for (const key of Object.keys(streams)) delete streams[key];
     await tabSubscription?.close();
     tabSubscription = undefined;
     sources = [];
-    publicEnv.PUBLIC_REALTIME = "";
     as(null);
     vi.useRealTimers();
     // The hub lives as long as the server process, as in production: closing the streams unsubscribed them.
@@ -116,18 +113,17 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   });
 
   Background(({ Given }) => {
-    Given("the course {string} is published with {number} labs and {string} as its educator", (_ctx, courseId: string, labs: number, educator: string) => {
-      freshBrowser();
+    Given("the course {string} is published with {number} labs and {string} as its educator", async (_ctx, courseId: string, labs: number, educator: string) => {
+      await freshBrowser();
       course = publishedCourse(courseId, labs, {}, { educators: [educator], whitelist: [], students: [] });
     });
   });
 
   Rule(
-    "Where a server is deployed with PUBLIC_REALTIME set to valkey, the reader shall publish each learning event it receives to the course's and the platform's activity topics on Valkey, without claiming the day's Live budget.",
+    "The reader shall publish each learning event it receives to the course's and the platform's activity topics on Valkey, without claiming a daily Live budget.",
     ({ RuleScenario }) => {
-      RuleScenario("A page view reaches the course and platform feeds on a Valkey deployment", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("a browser streams the activity of {string} from the reader", (_ctx, courseId: string) => streamFromReader("course", topics.courseActivity(courseId)));
+      RuleScenario("A page view reaches the course and platform feeds", ({ Given, And, When, Then }) => {
+        Given("a browser streams the activity of {string} from the reader", (_ctx, courseId: string) => streamFromReader("course", topics.courseActivity(courseId)));
         And("a browser streams the platform's activity from the reader", () => streamFromReader("platform", topics.platformActivity()));
         When("the reader posts the learning event of {string} opening the first lab", postsLearningEvent);
         Then("the reader answers 202 with the tier {string} and both activity topics", async (_ctx, tier: string) => {
@@ -136,17 +132,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         });
         And("the course stream receives the learning event of {string}", receivesEventOf("course"));
         And("the platform stream receives the learning event of {string}", receivesEventOf("platform"));
-        And("no database function was called", () => expect(recorder.rpcCalls).toEqual([]));
-      });
-
-      RuleScenario("A page view on a deployment without PUBLIC_REALTIME is claimed against the budget", ({ Given, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        When("the reader posts the learning event of {string} opening the first lab", postsLearningEvent);
-        Then("the reader claimed the day's Live budget for {string}", (_ctx, courseId: string) => {
-          expect(response.status).toBe(202);
-          expect(recorder.rpcCalls.map((call) => [call.fn, call.args])).toContainEqual(["realtime_claim_live_publish", { p_course_id: courseId }]);
-          expect(hub().subscribed()).toEqual([]);
-        });
+        And("the store was not queried", () => expect(backend.queries).toEqual([]));
       });
     }
   );
@@ -155,8 +141,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     "When a browser opens the realtime stream of a topic on the reader's or Tutors Live's server, tutors shall send each message published to that topic as a server-sent event until the browser closes the stream.",
     ({ RuleScenario }) => {
       RuleScenario("A lecturer's broadcast reaches a reader tab's stream", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} is signed in to the reader", (_ctx, name: string) => signIn(githubUser(name)));
+        Given("{string} is signed in to the reader", (_ctx, name: string) => signIn(githubUser(name)));
         And("a browser streams the broadcasts of {string} from the reader", (_ctx, courseId: string) => streamFromReader("broadcast", topics.courseBroadcasts(courseId)));
         When("{string} broadcasts {string} to {string}", async (_ctx, _name: string, title: string, courseId: string) => {
           response = await readerRequest("POST", "/api/notices", { courseId, title, description: "Head to the second lab" });
@@ -172,9 +157,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       });
 
       RuleScenario("Tutors Live's server streams what the reader's server published", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("Tutors Live's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("a Live tab streams the activity of {string} from Tutors Live's server", async (_ctx, courseId: string) => {
+        Given("a Live tab streams the activity of {string} from Tutors Live's server", async (_ctx, courseId: string) => {
           const url = new URL(`https://live.test/api/realtime/stream?topic=${encodeURIComponent(courseId)}`);
           const request = new Request(url);
           const answer = await liveStream({ request, url } as Parameters<typeof liveStream>[0]);
@@ -186,8 +169,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       });
 
       RuleScenario("A closed stream receives nothing more", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("a browser streams the activity of {string} from the reader", (_ctx, courseId: string) => streamFromReader("course", topics.courseActivity(courseId)));
+        Given("a browser streams the activity of {string} from the reader", (_ctx, courseId: string) => streamFromReader("course", topics.courseActivity(courseId)));
         When("the browser closes the stream", async () => {
           expect(hub().subscribed()).toEqual([course.courseId]);
           await streams.course.close();
@@ -203,7 +185,6 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
 
   Rule("If a browser asks for the realtime stream of a topic Tutors does not publish, then the reader shall answer 400 and subscribe to nothing.", ({ RuleScenario }) => {
     RuleScenario("An unknown topic is refused", ({ Given, When, Then, And }) => {
-      Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
       When("a browser asks the reader for the stream of the topic {string}", async (_ctx, topic: string) => {
         response = await readerRequest("GET", `/api/realtime/stream?topic=${encodeURIComponent(topic)}`);
       });
@@ -222,8 +203,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       const publishesOnPlayground = (_ctx: unknown, name: string, event: string, studentId: string) => publishes(name, event, playground(), studentId);
 
       RuleScenario("A browser cannot publish a lecturer's broadcast", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the broadcasts of {string} from the reader", (_ctx, name: string, courseId: string) => {
+        Given("{string} streams the broadcasts of {string} from the reader", (_ctx, name: string, courseId: string) => {
           as(name);
           return streamFromReader("broadcast", topics.courseBroadcasts(courseId));
         });
@@ -233,8 +213,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       });
 
       RuleScenario("A playground share's state reaches the lecturer's stream", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        Given("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
         When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", publishesOnPlayground);
         Then("the reader answers {number}", answers);
         And("the playground stream receives the state of {string}", async (_ctx, studentId: string) => {
@@ -243,16 +222,14 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       });
 
       RuleScenario("A browser cannot publish another event on a playground share", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        Given("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
         When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", publishesOnPlayground);
         Then("the reader answers {number}", answers);
         And("the playground stream receives nothing", receivesNothing("playground"));
       });
 
       RuleScenario("A signed-out browser cannot publish", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        Given("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
         When("a signed-out browser asks the reader to publish {string} for {string} on the playground share of the first lab", (_ctx, event: string, studentId: string) =>
           publishes(null, event, playground(), studentId)
         );
@@ -261,32 +238,28 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       });
 
       RuleScenario("A student cannot share another student's work", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        Given("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
         When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", publishesOnPlayground);
         Then("the reader answers {number}", answers);
         And("the playground stream receives nothing", receivesNothing("playground"));
       });
 
       RuleScenario("A student cannot announce they are watching", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
+        Given("{string} streams the playground share of the first lab of {string} from the reader", streamsPlayground);
         When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", publishesOnPlayground);
         Then("the reader answers {number}", answers);
         And("the playground stream receives nothing", receivesNothing("playground"));
       });
 
       RuleScenario("An editor cannot move someone else's cursor on a shared whiteboard", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
+        Given("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
         When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
         Then("the reader answers {number}", answers);
         And("the whiteboard stream receives nothing", receivesNothing("whiteboard"));
       });
 
       RuleScenario("A browser cannot publish another event on a shared whiteboard", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
+        Given("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
         When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
         Then("the reader answers {number}", answers);
         And("the whiteboard stream receives nothing", receivesNothing("whiteboard"));
@@ -298,8 +271,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     "When a browser that is not signed in as an educator of the course streams a playground share, the reader shall send it only the lecturers' watching announcements.",
     ({ RuleScenario }) => {
       RuleScenario("A sharing student hears the lecturer watching but sees no one's work", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the playground share of the first lab of {string} from the reader", (_ctx, name: string) => {
+        Given("{string} streams the playground share of the first lab of {string} from the reader", (_ctx, name: string) => {
           as(name);
           return streamFromReader("playground", playground());
         });
@@ -319,7 +291,6 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       });
 
       RuleScenario("A signed-out browser cannot stream a playground share", ({ Given, When, Then, And }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
         When("a signed-out browser asks the reader for the stream of the playground share of the first lab", async () => {
           as(null);
           response = await readerRequest("GET", `/api/realtime/stream?topic=${encodeURIComponent(playground())}`);
@@ -366,32 +337,69 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   );
 
   Rule(
-    "Where a server is deployed with PUBLIC_REALTIME set to valkey, the reader shall carry each shared whiteboard room's scene changes, cursors, presence and leaving between the browsers streaming it, from editors who are signed in.",
+    "The reader shall carry each shared whiteboard room's scene changes, cursors, presence and leaving between the browsers streaming it, from editors who are signed in.",
     ({ RuleScenario }) => {
       const receivesFrom = async (_ctx: unknown, event: string, name: string) => {
         await vi.waitFor(() => expect(streams.whiteboard.frames).toEqual([{ event, payload: whiteboardPayload(name), from: `tab-of-${name}` }]));
       };
 
       RuleScenario("A scene change reaches the other editors of a shared whiteboard", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
+        Given("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
         When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
         Then("the reader answers {number}", answers);
         And("the whiteboard stream receives the {string} of {string}'s tab", receivesFrom);
       });
 
       RuleScenario("An editor's presence reaches the other editors of a shared whiteboard", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        And("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
+        Given("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
         When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
         Then("the reader answers {number}", answers);
         And("the whiteboard stream receives the {string} of {string}'s tab", receivesFrom);
       });
 
-      RuleScenario("A deployment without PUBLIC_REALTIME carries no whiteboard room", ({ Given, When, Then }) => {
-        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
-        When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
-        Then("the reader answers {number}", answers);
+      // The editor page itself (excalidraw-editor.html), in the browser: what its tab posts to the room.
+      const editorInRoom = (_ctx: unknown, user: string, others: number) => {
+        vi.useFakeTimers();
+        editor = mountWhiteboardEditor(false, user);
+        editor.open();
+        editor.participants(others + 1);
+      };
+      const movesCursor = () => {
+        editor!.editor.onPointerUpdate({ pointer: { x: 10, y: 10 }, button: "up" });
+        vi.advanceTimersByTime(1000);
+      };
+
+      RuleScenario("An editor who is not signed in only watches a shared whiteboard", ({ Given, When, Then }) => {
+        Given("the shared whiteboard editor of {string} has its room open with {number} other editor", editorInRoom);
+        When("the editor moves its cursor", movesCursor);
+        Then("the editor has posted nothing to the reader", () => {
+          expect(editor!.published).toEqual([]);
+        });
+      });
+
+      RuleScenario("An editor answers a newcomer to a shared whiteboard once, and never answers an answer", ({ Given, When, And, Then }) => {
+        Given("the shared whiteboard editor of {string} has its room open with {number} other editors", editorInRoom);
+        When("{string} announces the tab {string} in the room twice", (_ctx, user: string, tab: string) => {
+          editor!.receive("presence", { userId: user }, tab);
+          editor!.receive("presence", { userId: user }, tab);
+        });
+        And("{string} answers the editor's presence from the tab {string}", (_ctx, user: string, tab: string) => {
+          editor!.receive("presence", { userId: user, reply: true }, tab);
+        });
+        Then("the editor has answered with its own presence once", () => {
+          expect(editor!.published.filter((m) => m.event === "presence" && m.payload.reply === true)).toHaveLength(1);
+        });
+      });
+
+      RuleScenario("Another user cannot drop an editor from a shared whiteboard room", ({ Given, When, And, Then }) => {
+        Given("the shared whiteboard editor of {string} has its room open with {number} other editor", editorInRoom);
+        When("{string} says the tab {string} is leaving the room", (_ctx, user: string, tab: string) => {
+          editor!.receive("leave", { userId: user }, tab);
+        });
+        And("the editor moves its cursor", movesCursor);
+        Then("the editor sends its cursor to the room", () => {
+          expect(editor!.broadcasts().map((m) => m.event)).toEqual(["cursor-update"]);
+        });
       });
     }
   );

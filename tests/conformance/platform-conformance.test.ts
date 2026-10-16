@@ -243,7 +243,7 @@ describe("platform conformance (runway tier J)", () => {
   describe("configuration completeness", () => {
     it("reads env access in every form the apps use", () => {
       const source = `
-        const a = env.PUBLIC_SUPABASE_URL;
+        const a = env.PUBLIC_READER_URL;
         const b = process.env.LOG_LEVEL;
         const c = (options.env ?? serverEnv()).METRICS_TOKEN;
         const d = env?.MOODLE_WS_URL;
@@ -257,7 +257,7 @@ describe("platform conformance (runway tier J)", () => {
         "MOODLE_WS_URL",
         "PRIVATE_X",
         "PUBLIC_PDF_KEY",
-        "PUBLIC_SUPABASE_URL",
+        "PUBLIC_READER_URL",
         "SYNC_INTERVAL_MINUTES"
       ]);
     });

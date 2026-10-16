@@ -1,6 +1,6 @@
 /**
- * Expand/contract check for supabase/migrations, the directory the release
- * harness reads (guides/MIGRATIONS.md).
+ * Expand/contract check for db/migrations, the Postgres store's schema
+ * (guides/MIGRATIONS.md).
  *
  *   pnpm check:migrations                  # migrations added since the merge base with origin/main (or main)
  *   pnpm check:migrations --base <ref>     # ... since another ref
@@ -43,9 +43,9 @@ import { pathToFileURL } from "node:url";
 import yaml from "js-yaml";
 import { REPO_ROOT } from "./lib/repo.ts";
 
-export const MIGRATIONS_DIR = "supabase/migrations";
+export const MIGRATIONS_DIR = "db/migrations";
 
-/** `<version>_<snake_case_name>.sql`: a date or timestamp, then what it does. Sorted by name, the way the harness and the Supabase CLI order them. */
+/** `<version>_<snake_case_name>.sql`: a date or timestamp, then what it does. Sorted by name, the way `pnpm db:migrate` applies them. */
 export const MIGRATION_NAME = /^\d{8,14}_[a-z0-9][a-z0-9_]*\.sql$/;
 
 export type Kind =

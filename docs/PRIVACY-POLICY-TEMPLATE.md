@@ -52,10 +52,10 @@ Your data is processed by the following third-party services:
 
 | Service | Purpose | Data shared |
 |---------|---------|-------------|
-| [Supabase](https://supabase.com) | Database and authentication | All stored data |
+| [Your Postgres host] | Database | All stored data |
 | [GitHub](https://github.com) | OAuth authentication | GitHub ID only |
 | [Netlify](https://netlify.com) | Application hosting | Server logs (IP addresses) |
-| [Supabase Realtime](https://supabase.com/docs/guides/realtime) | Real-time presence | Presence data (ephemeral) |
+| [Your Valkey host] | Real-time presence | Presence data (ephemeral) |
 
 ## 5. Your Rights (GDPR)
 
@@ -86,7 +86,7 @@ We will respond to all requests within 30 days.
 
 - All data is transmitted over HTTPS
 - Authentication uses OAuth 2.0 (no passwords stored)
-- Database access is controlled via Row Level Security policies
+- Only the application's servers connect to the database, and they check who is signed in before reading or writing anyone's data
 - Application security headers are enforced (CSP, X-Frame-Options, etc.)
 
 ## 8. Children's Data

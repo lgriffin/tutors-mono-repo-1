@@ -183,18 +183,6 @@ describe("migration check: a contract step never lands in the release of its exp
     ];
     for (const sql of expand) expect(evaluate([{ file: "m.sql", sql }], [], released).errors, sql).toEqual([]);
   });
-
-  it("keeps a written contract step out of supabase/migrations, refusing to run without tutors.contract_ok", () => {
-    const dir = join(REPO_ROOT, "supabase/contracts");
-    for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql"))) {
-      const sql = readFileSync(join(dir, file), "utf8");
-      expect(sql, file).toMatch(/current_setting\('tutors\.contract_ok', true\)/);
-      // One statement, so the guard's exception stops all of it even in a client that continues on error.
-      expect(splitStatements(sql).map((s) => s.text.slice(0, 5).toUpperCase()), file).toEqual(["DO $$"]);
-      // Promoted means moved, not copied: the same step must not also be a migration.
-      expect(readdirSync(join(REPO_ROOT, MIGRATIONS_DIR)).some((m) => m.endsWith(`_${file}`)), file).toBe(false);
-    }
-  });
 });
 
 describe("migration check: layout rules", () => {

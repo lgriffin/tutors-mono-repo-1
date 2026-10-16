@@ -2,9 +2,9 @@
 
 This document catalogues the data — including personally identifiable information (PII) — stored by the Tutors platform. It is intended for deploying institutions to support their GDPR compliance obligations.
 
-> **Source of truth & caveat.** Except for `app_errors`, none of these tables has a schema-defining migration in this repository. The columns below are therefore derived from how the application code actually reads and writes each table (via the Supabase client). Column sets are accurate for the fields the code touches but may not be exhaustive — a deployment's live database could contain additional columns (e.g. an internal `id`/`created_at`) not visible from the code. Verify against your Supabase instance. Note also the inconsistent naming conventions in the live schema: some tables are hyphenated (and must be double-quoted in SQL), `learning_records` uses `snake_case`, and `calendar`/`assignments` use `nounderscore`.
+> **Source of truth.** The tables live in the Postgres store the reader and time servers use (`@tutors/store-postgres`, at `PRIVATE_DATABASE_URL`). Their schema is defined by [`db/migrations`](../db/migrations), which is authoritative where it differs from the columns below. Note also the inconsistent naming conventions in the live schema: some tables are hyphenated (and must be double-quoted in SQL), `learning_records` uses `snake_case`, and `calendar`/`assignments` use `nounderscore`.
 
-## Supabase Tables
+## Postgres Tables
 
 ### `"tutors-connect-users"`
 Primary identity table, keyed on the user's GitHub login.
@@ -166,7 +166,7 @@ Excalidraw whiteboard persistence. Keyed on `room_id`.
 **Deletion impact:** Removes a user's personal whiteboard content (shared/board-level scenes may be retained)
 
 ### `app_errors`
-Client/server error aggregation for observability. Authoritative columns from `supabase/migrations/20260822_create_app_errors.sql`.
+Client/server error aggregation for observability. Authoritative columns from `db/migrations/20261019000000_create_tutors_store.sql`.
 
 | Field | Type | PII | Description |
 |-------|------|-----|-------------|
@@ -184,18 +184,15 @@ Client/server error aggregation for observability. Authoritative columns from `s
 **Legal basis:** Legitimate interest (platform reliability/observability)
 **Consent required:** No — but retention should be time-bounded given free-text/URL fields may capture personal data
 **Deletion impact:** Removes error records attributable to the user
-**Access:** browsers may insert rows with the anon key; since `20261017000100_restrict_app_errors_reads.sql` nobody holding the anon key can read them (Rule 0069). `/healthz` reads per-app counts only, through `get_error_counts`.
+**Access:** anyone may add rows through the reader's `POST /api/errors`, bounded by size and rate; no browser can read them (Rule 0069). `/healthz` reads per-app counts only.
 
 ### Who can reach student rows
-Every write and every read of a student's own data goes through the reader's `/api` routes, which check the verified identity (locals.actor) and use the service_role key ([guides/SERVER-WRITES.md](../guides/SERVER-WRITES.md)). The old anon access is removed by `supabase/contracts/revoke_anon_student_data.sql` in the release after that, once no older pod or tab uses it; until then the anon key can still reach these tables.
-
-### Legacy tables (unused)
-`students`, `studentsinteraction`, `course`, `learningobject`, `users` and `"tutors-connect_moodle"` predate Tutors Connect and are not read or written by any current app, nor are the 19 functions over them (`get_lab_data`, `get_topic_data`, `get_learner_records` and others). They may still hold student data from earlier deployments. Since `supabase/migrations/20260924_enable_rls_public_tables.sql` they have RLS on with no policy, so the anon key cannot reach them; only `service_role` or a direct Postgres role can. Export anything worth keeping before a later contract migration drops them.
+Every write and every read of a student's own data goes through the reader's `/api` routes, which check the verified identity (locals.actor) and reach the database with the server's `PRIVATE_DATABASE_URL` ([guides/SERVER-WRITES.md](../guides/SERVER-WRITES.md)). No browser connects to the database, and it has no row-level security: the servers decide who reads what.
 
 ## Ephemeral Data (Not Persisted)
 
-### Supabase Realtime Presence
-Real-time presence data (which users are online and what they are viewing) is transmitted via WebSocket through Supabase Realtime. This data is ephemeral and is not written to any database. It exists only for the duration of a user's active session.
+### Realtime Presence
+Real-time presence data (which users are online and what they are viewing) is published by the reader's server to Valkey pub/sub and streamed to browsers over server-sent events. This data is ephemeral and is not written to any database. It exists only for the duration of a user's active session.
 
 **PII involved:** User identity (name, avatar) and current page location
 **Consent required:** Yes (live collaboration features)
@@ -210,7 +207,7 @@ User browses course → learning_records          (per-LO activity)
                     → calendar                   (daily aggregates)
                     → "tutors-connect-latest"    (most recent visit)
                     → whiteboard_scenes          (personal whiteboard content)
-                    → Supabase Realtime          (ephemeral presence)
+                    → Valkey pub/sub             (ephemeral presence)
 
 Errors             → app_errors                  (observability)
 Moodle sync        → assignments, assignments_submissions (assessment)

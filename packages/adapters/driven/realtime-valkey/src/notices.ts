@@ -3,9 +3,7 @@ import { topics, type RealtimeGateway, type Topic } from "@tutors/realtime";
 import log from "@tutors/logger";
 
 /**
- * Course notices on Valkey: the application's CourseNotices port. The topics, event names and
- * payloads are the ones realtime-supabase uses (a dashboard cannot tell which broker carried a
- * notice); S4 deletes that copy. The browser publishes nothing: `post` hands the notice to the
+ * Course notices on Valkey: the application's CourseNotices port. The browser publishes nothing: `post` hands the notice to the
  * reader's server (POST /api/notices), which publishes it with `publishNotice` (server.ts).
  */
 

@@ -1,18 +1,27 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
-import { supabaseCatalogue } from "../../../../packages/adapters/driven/store-supabase/src/index.ts";
+import { postgresCatalogue, recordCourseVisit, type SqlClient } from "@tutors/store-postgres";
 import { courseService } from "../../../../packages/adapters/driving/svelte-state/src/course/services/course.svelte.ts";
-import { MockSupabaseClient } from "../../support/mocks.ts";
+import { pgliteDatabase } from "../../../support/postgres-store.ts";
 import { captureLogs, courseHost, publishedCourseJson, type CourseHost, type LogCapture } from "../../support/reader-loading.ts";
 import { anonymousReader } from "../../../support/reader-adapters.ts";
 
 // `rune()` needs the Svelte compiler; see the stub for why a plain box is a faithful stand-in.
 vi.mock("../../../../packages/adapters/driving/svelte-state/src/index.svelte.ts", () => import("../../support/runes-stub.ts"));
-// Supabase is the network: the in-memory client stands in for it as the client the reader's server
-// hands the catalogue store, and the catalogue service under test is the real one.
+// The database is the network: PGlite (with db/migrations applied) stands in for the Postgres the
+// reader's server hands the catalogue store, and the catalogue service under test is the real one.
 anonymousReader();
-const supabase = new MockSupabaseClient();
-const catalogueService = supabaseCatalogue(supabase as never);
+const database = await pgliteDatabase();
+/** Tables whose every query fails, as a database that lost them would. */
+const failing = new Map<string, string>();
+const sql: SqlClient = {
+  async query(text, params) {
+    for (const [table, message] of failing) if (text.includes(`"${table}"`)) throw new Error(message);
+    return database.sql.query(text, params);
+  },
+  end: async () => {}
+};
+const catalogueService = postgresCatalogue(sql);
 
 const feature = await loadFeature("tests/bdd/features/shared/error-handling.feature");
 
@@ -104,19 +113,16 @@ describeFeature(feature, ({ BeforeEachScenario, AfterEachScenario, Scenario, Sce
     And("the reader shall not cache a course for {string}", notCached);
   });
 
-  Scenario("Supabase query failure", ({ Given, And, When, Then }) => {
-    const client = supabase as unknown as MockSupabaseClient;
+  Scenario("Database query failure", ({ Given, And, When, Then }) => {
     let catalogue: unknown[];
 
-    Given("the catalogue holds {number} courses", (_ctx, count: number) => {
-      client.clearAllErrors();
-      client.setTableData(
-        "tutors-connect-courses",
-        Array.from({ length: count }, (_, i) => ({ course_id: `course-${i + 1}`, visited_at: `2026-07-0${i + 1}T00:00:00Z`, visit_count: 1 }))
-      );
+    Given("the catalogue holds {number} courses", async (_ctx, count: number) => {
+      failing.clear();
+      await database.reset();
+      for (let i = 0; i < count; i++) await recordCourseVisit(sql, `course-${i + 1}`, { title: `Course ${i + 1}` }, new Date(`2026-07-0${i + 1}T00:00:00Z`));
     });
-    And("Supabase answers queries on {string} with the error {string}", (_ctx, table: string, message: string) => {
-      client.setTableError(table, { message, code: "08006", details: null, hint: null });
+    And("the database answers queries on {string} with the error {string}", (_ctx, table: string, message: string) => {
+      failing.set(table, message);
     });
     When("the catalogue is read", async () => {
       catalogue = await catalogueService.getCatalogue();
@@ -127,10 +133,10 @@ describeFeature(feature, ({ BeforeEachScenario, AfterEachScenario, Scenario, Sce
     And("the course count shall fall back to {number}", async (_ctx, count: number) => {
       expect(await catalogueService.getCatalogueCount()).toBe(count);
     });
-    // The entry's message only: the logger drops the Supabase error's own text (see guides/specifications/error-handling.md).
+    // The entry's message only: the logger drops the database error's own text (see guides/specifications/error-handling.md).
     And("the catalogue service shall log the error {string}", logged);
-    When("Supabase recovers and the catalogue is read again", async () => {
-      client.clearAllErrors();
+    When("the database recovers and the catalogue is read again", async () => {
+      failing.clear();
       catalogue = await catalogueService.getCatalogue();
     });
     Then("the catalogue shall list {number} courses", (_ctx, count: number) => {

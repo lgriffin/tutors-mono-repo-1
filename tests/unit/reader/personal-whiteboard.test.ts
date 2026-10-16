@@ -11,8 +11,8 @@ describe("personal whiteboard editing without Realtime", () => {
     mounted.editor.onChange(elements);
     mounted.editor.onPointerUpdate({ pointer: { x: 10, y: 20 }, button: "up" });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(mounted.supabase.channel).not.toHaveBeenCalled();
-    expect(mounted.channel.send).not.toHaveBeenCalled();
+    expect(mounted.sources).toEqual([]);
+    expect(mounted.published).toEqual([]);
     expect(mounted.postMessage).toHaveBeenCalledExactlyOnceWith({ type: "scene-changed", elements }, "https://reader.invalid");
     mounted.unmount();
   });

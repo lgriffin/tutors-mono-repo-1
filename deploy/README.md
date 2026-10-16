@@ -195,7 +195,7 @@ builds nothing, so `IMAGE_TAG` selects exactly what to run (default `main`):
 
 ```bash
 cd deploy/staging
-cp .env.example .env               # Supabase, OAuth, Moodle, origins
+cp .env.example .env               # Postgres, Valkey, OAuth, Moodle, origins
 IMAGE_TAG=16.3.0-rc.1 docker compose up -d
 docker compose pull && docker compose up -d   # roll forward
 ```
@@ -216,7 +216,7 @@ docker compose up --build reader proxy # one app
 
 Compose reads an optional `.env` in the repo root (see `.env.example`).
 Without one the apps start in anonymous mode (`PUBLIC_ANON_MODE=TRUE`), which
-needs no Supabase project. If a host port is taken, override it, for example
+needs no database. If a host port is taken, override it, for example
 `READER_PORT=3010 docker compose up reader proxy`.
 
 ## Image contract
@@ -227,7 +227,7 @@ needs no Supabase project. If a host port is taken, override it, for example
 | User | UID `1001`, GID `0` (OpenShift arbitrary-UID compatible) |
 | Filesystem | read-only safe; nothing is written at runtime |
 | Liveness | `GET /healthz/live` returns `{"status":"ok"}` with no dependencies |
-| Readiness | `GET /healthz` also reports Supabase reachability |
+| Readiness | `GET /healthz` also reports Postgres store reachability (reader and time) |
 | Metrics | `GET /metrics` in Prometheus text format (request histogram/counter, in-flight gauge, Node process metrics) |
 | Build identity | `GET /version` returns `{"app","version","revision","built","clock"}`; the only route that answers the commit or build date |
 | Request id | `x-request-id` response header (echoes a well-formed incoming one); the only per-request value in any header besides `Date` |
@@ -240,11 +240,11 @@ Runtime configuration and overlay metadata:
 | `TUTORS_ORIGIN` | Overlay metadata for the Route/Ingress host; request origins come from trusted proxy headers |
 | `PUBLIC_READER_ORIGIN`, `PUBLIC_CATALOGUE_ORIGIN`, `PUBLIC_LIVE_ORIGIN`, `PUBLIC_TIME_ORIGIN` | Destinations for links between the four apps |
 | `PROTOCOL_HEADER`, `HOST_HEADER`, `ADDRESS_HEADER`, `XFF_DEPTH` | Trust proxy headers when behind a Route or Ingress |
-| `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY` | Supabase project; omit both to run without it |
 | `PUBLIC_ANON_MODE` | `TRUE` disables authentication and analytics |
 | `PRIVATE_AUTH_GITHUB_ID`, `PRIVATE_AUTH_GITHUB_SECRET`, `PRIVATE_AUTH_SECRET` | GitHub OAuth for the reader app |
-| `PRIVATE_SUPABASE_SERVICE_ROLE_KEY` | Reader and time: the Supabase service_role key the reader's `/api` routes and the Moodle sync use. It bypasses Row-Level Security; a Secret only ([guides/SERVER-WRITES.md](../guides/SERVER-WRITES.md)) |
-| `PRIVATE_API_ALLOWED_ORIGINS` | Reader: the catalogue, live and time origins; time reads `/api/time` with the reader's session cookie, all three post `/api/errors`, live posts `/api/live/watch` |
+| `PRIVATE_DATABASE_URL` | Reader and time: the Postgres store (`postgres://user:password@host:5432/tutors`) the reader's `/api` routes and the Moodle sync use; schema in `db/migrations`, applied with `pnpm db:migrate`. It reaches every table; a Secret only ([guides/SERVER-WRITES.md](../guides/SERVER-WRITES.md)). Unset, the data API answers 503 |
+| `PRIVATE_VALKEY_URL` | Reader and live: the Valkey (`redis://host:6379`, the same for both) the reader's server publishes realtime to and both servers stream to browsers from at `/api/realtime/stream`; a Secret. Unset, one process's memory carries realtime |
+| `PRIVATE_API_ALLOWED_ORIGINS` | Reader: the catalogue, live and time origins; time reads `/api/time` with the reader's session cookie, all three post `/api/errors` |
 | `PRIVATE_TUTORS_ADMINS`, `PRIVATE_COURSE_HOSTS` | Reader: logins that are educators of every course; hosts besides `*.netlify.app` that serve courses |
 | `PUBLIC_READER_URL` | Catalogue, live and time: the reader whose data API they read through |
 | `MOODLE_WS_URL`, `MOODLE_WS_TOKEN`, `MOODLE_WS_REST_FORMAT`, `SYNC_INTERVAL_MINUTES` | Moodle sync for the time app |
@@ -429,8 +429,8 @@ and otherwise generates a UUID. It stores the id on `event.locals.requestId`,
 sets it exactly once on the response, and runs the rest of the request inside
 an `AsyncLocalStorage` context, so every line logged while serving the request
 carries the id, including lines from workspace packages that know nothing
-about requests. Server-side Supabase calls made during a request forward the
-id in `x-request-id` (`withRequestId`). `/healthz` probes get the header but no
+about requests. Outbound `fetch` calls wrapped with `withRequestId` forward the
+id in `x-request-id` while a request is being served. `/healthz` probes get the header but no
 log line.
 
 ## Kubernetes / OpenShift

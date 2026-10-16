@@ -1,8 +1,8 @@
 /**
  * The store-postgres adapters behind the application's ports, run through the same contract suites
- * as store-supabase and the in-memory adapters, on a real Postgres (TEST_DATABASE_URL, in CI) or
+ * as the in-memory adapters, on a real Postgres (TEST_DATABASE_URL, in CI) or
  * PGlite, with db/migrations applied. Beside the contracts: the reads and writes the reader's routes
- * call directly, in the shapes the Supabase adapter hands back, and what each does when the database
+ * call directly, in the shapes the ports promise, and what each does when the database
  * refuses.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -89,7 +89,7 @@ describe("learning records", () => {
   const sink = () => postgresLearningEventSink(db.sql);
   const lab = { kind: "page-load" as const, courseId: "cs101", loId: "/lab/cs101/week-01", loType: "lab", day: "2026-09-21" };
 
-  it("counts each page load as a visit and a 30-second block, and each tick as a block, as the Supabase functions do", async () => {
+  it("counts each page load as a visit and a 30-second block, and each tick as a block", async () => {
     await sink().record(lab, "ann");
     await sink().record(lab, "ann");
     await sink().record({ kind: "tick", courseId: "cs101", loId: lab.loId, day: lab.day }, "ann");
@@ -257,6 +257,35 @@ describe("the catalogue, presence and the error log", () => {
     expect((await checkPostgres(db.sql)).status).toBe("ok");
     expect(await checkPostgres(null)).toEqual({ status: "skipped", latencyMs: 0, message: "no database client on this server" });
     expect(await checkPostgres(refusing)).toMatchObject({ status: "error", message: "connection refused" });
+  });
+});
+
+describe("SCORM records", () => {
+  beforeEach(() => db.reset());
+
+  it("keeps the summary columns Tutors reports on beside the whole data model", async () => {
+    await postgresScormRecords(db.sql).save({
+      courseId: "cs101",
+      learnerId: "ada",
+      loId: "/scorm/cs101/quiz",
+      version: "2004",
+      cmi: { "cmi.location": "p3" },
+      summary: { completionStatus: "completed", successStatus: "passed", totalTime: 90, location: "p3", scoreRaw: 8, scoreMax: 10, scoreScaled: 0.8 }
+    });
+    const { rows } = await db.sql.query<Record<string, unknown>>("SELECT * FROM scorm_records");
+    expect(rows).toHaveLength(1);
+    expect({ ...rows[0], score_raw: Number(rows[0].score_raw), score_max: Number(rows[0].score_max), score_scaled: Number(rows[0].score_scaled), total_time: Number(rows[0].total_time) }).toMatchObject({
+      course_id: "cs101",
+      student_id: "ada",
+      lo_id: "/scorm/cs101/quiz",
+      scorm_version: "2004",
+      completion_status: "completed",
+      success_status: "passed",
+      score_raw: 8,
+      score_max: 10,
+      score_scaled: 0.8,
+      total_time: 90
+    });
   });
 });
 

@@ -1,11 +1,11 @@
 /**
- * The plain Postgres store adapter: every table the Tutors servers read and write, behind the same
- * ports as store-supabase (LearningEventSink, LearningRecords, ProfilePort, AccessStore,
+ * The plain Postgres store adapter: every table the Tutors servers read and write, behind the
+ * application's ports (LearningEventSink, LearningRecords, ProfilePort, AccessStore,
  * WhiteboardStore, SnippetStore, ScormRecords, the playground's snapshot rows) and the help requests
  * of the Assistance context (AssistanceStore) and the annotations and reflections of the Feedback
  * context (FeedbackStore), the Insights context's read-only views of both (InsightsRead), plus the catalogue,
- * the presence roster, Tutors Time's Moodle assignments, the error log and the health check. A server composes it when
- * DATA_STORE=postgres, over PRIVATE_DATABASE_URL. The schema is the plain SQL of db/migrations,
+ * the presence roster, Tutors Time's Moodle assignments, the error log and the health check. The reader's and
+ * time's servers compose it over PRIVATE_DATABASE_URL. The schema is the plain SQL of db/migrations,
  * applied by `migrate` (`pnpm db:migrate`); `pg` is imported here, lazily, and in live-postgres.
  */
 export { postgresClient, StoreError, type SqlClient } from "./client.ts";
@@ -17,13 +17,13 @@ export { postgresProfile, upsertUser } from "./profile.ts";
 export { postgresAccessStore } from "./access-store.ts";
 export { postgresWhiteboardStore } from "./whiteboard-scenes.ts";
 export { postgresScormRecords } from "./scorm-records.ts";
-export { postgresPlaygroundSnapshotRows } from "./playground-snapshots.ts";
+export { postgresPlaygroundSnapshotRows, type PlaygroundSnapshotRows } from "./playground-snapshots.ts";
 export { postgresSnippetStore, purgeExpiredSnippets } from "./snippets.ts";
 export { postgresAssistanceStore } from "./assistance.ts";
 export { postgresFeedbackStore } from "./feedback.ts";
 export { postgresInsightsRead } from "./insights.ts";
-export { postgresCatalogue, recordCourseVisit } from "./catalogue.ts";
+export { postgresCatalogue, recordCourseVisit, type CatalogueService } from "./catalogue.ts";
 export { upsertLatest, readRoster } from "./presence-rows.ts";
-export { insertAppErrors, recentErrorCounts } from "./app-errors.ts";
+export { insertAppErrors, recentErrorCounts, type AppErrorRow } from "./app-errors.ts";
 export { checkPostgres } from "./health-check.ts";
 export { postgresAssignmentRows, type AssignmentRow, type SubmissionRow } from "./assignments.ts";

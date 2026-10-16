@@ -49,10 +49,10 @@ steps file loads, and a Rule title no steps file binds.
   placeholder stays in the step text you bind; read the row through the `variables` argument of
   `RuleScenarioOutline("...", ({ Given }, variables) => ...)`.
 - A step used by several scenarios is a named function declared once in the describe block.
-- Steps call product code: the model library, the time library, a service with a mocked Supabase
-  client, the catalogue's real `load`. They never assert on a fixture they built. Shared
+- Steps call product code: the model library, the time library, a service over the in-process
+  backend (PGlite and the memory realtime hub), the catalogue's real `load`. They never assert on a fixture they built. Shared
   helpers are in `tests/bdd/support/` (`course.ts`, `reader.ts`, `connect.ts`, `time.ts`,
-  `mocks.ts`, `supabase-recorder.ts`). Survey them before writing a new one.
+  `mocks.ts`, `backend.ts`). Survey them before writing a new one.
 - Do not use `Rule.skip`, `Rule.only`, `@ignore` or `Scenario.skip`: the audit and suite-health
   fail them.
 - A `Background` step cannot be `While`, `Where` or `If`; the parser drops such a line.

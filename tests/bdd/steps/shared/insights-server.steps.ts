@@ -5,19 +5,15 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
 
-// The seams: Supabase (as the other reader-server features mock it), the environments, SvelteKit,
-// and the `pg` driver, whose Pool is the PGlite database below. Every query the routes make is
+// The seams: the environments (a signed-in deployment, backend.ts), SvelteKit, and the `pg`
+// driver, whose Pool is the PGlite database below. Every query the routes make is
 // recorded, so a scenario can say which ones read the insights views.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
-  createClient: (await import("../../support/supabase-recorder.ts")).createClient
-}));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
 vi.mock("$app/env/public", async () => {
-  const { publicEnv } = await import("../../support/supabase-recorder.ts");
+  const { publicEnv } = await import("../../support/backend.ts");
   const { READER_ORIGIN } = await import("../../support/reader-api.ts");
   return Object.assign(publicEnv, { PUBLIC_READER_URL: READER_ORIGIN });
 });
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 vi.mock("$app/env", () => ({ browser: true, building: false, goto: vi.fn() }));
 const database = vi.hoisted(() => ({ sql: undefined as unknown, queries: [] as { text: string; params: unknown[] }[] }));
 vi.mock("pg", () => {
@@ -41,7 +37,6 @@ import { createDataApi, readerApiInsightsDesk } from "@tutors/data-api";
 import { migrate } from "@tutors/store-postgres";
 import { freshBrowser, githubUser, labsOf, publishedCourse } from "../../support/connect.ts";
 import { readerRequest, setReaderSession } from "../../support/reader-api.ts";
-import { privateEnv } from "../../support/supabase-recorder.ts";
 import { committedMigrations, pgliteDatabase } from "../../../support/postgres-store.ts";
 import { t } from "../../../../packages/adapters/driving/i18n/src/index.ts";
 import { REFUSAL_MESSAGES } from "../../../../apps/time/src/lib/components/insights/format.ts";
@@ -62,21 +57,15 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   const insightsQueries = () => database.queries.filter((q) => /\binsights_/.test(q.text));
 
   AfterEachScenario(() => {
-    privateEnv.DATA_STORE = "";
-    privateEnv.PRIVATE_DATABASE_URL = "";
     as(null);
   });
 
-  Background(({ Given, And }) => {
+  Background(({ Given }) => {
     Given("the course {string} is published with {number} lab and {string} as its educator", async (_ctx, courseId: string, labs: number, educator: string) => {
-      freshBrowser();
+      await freshBrowser();
       course = publishedCourse(courseId, labs, {}, { educators: [educator], whitelist: [], students: [] });
       await db.sql.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
       await migrate(db.sql, committedMigrations());
-    });
-    And("the reader's server keeps help requests and feedback in Postgres", () => {
-      privateEnv.DATA_STORE = "postgres";
-      privateEnv.PRIVATE_DATABASE_URL = "postgres://tutors@db.invalid/tutors";
     });
   });
 

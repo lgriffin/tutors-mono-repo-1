@@ -1,6 +1,6 @@
 # Ephemeral Snippet Sharing (Issue #155)
 
-Tutors includes a lightweight **pastebin-style snippet sharing** feature. A signed-in student can share a code/output snippet with their course educators; the snippet is stored in Supabase and **auto-deletes after 48 hours**.
+Tutors includes a lightweight **pastebin-style snippet sharing** feature. A signed-in student can share a code/output snippet with their course educators; the snippet is stored in the Postgres store and **auto-deletes after 48 hours**.
 
 This is deliberately ephemeral: it is a "here's the error I'm hitting" tool for labs and talks, not a versioned collaborative editor.
 
@@ -22,7 +22,7 @@ An earlier revision of this feature stored each snippet as a secret GitHub gist 
 - **Token retention.** Deleting the gist at expiry meant storing the student's OAuth access token server-side for 48 hours. A snippet-sharing feature should not be a credential store.
 - **Secret is not private.** A secret gist is only unguessable, not access-controlled. Anyone holding the URL can read it, and the URL was being broadcast over a channel students can join (see below).
 
-Snippets now live in a single Supabase row. The scope stays at `read:user user:email`, no token is retained, and access is decided server-side.
+Snippets live in a single Postgres row. The scope stays at `read:user user:email`, no token is retained, and access is decided server-side.
 
 ## Where it lives in the rings
 
@@ -31,7 +31,7 @@ Snippets now live in a single Supabase row. The scope stays at `read:user user:e
 | Domain | `courseJsonUrl(courseId)`: where a course id's `tutors.json` is served | `packages/domain/src/course/utils/course-url.ts` |
 | Application ports | `SnippetStore` (keep, read active, count recent); `CourseNotices` (post and watch a `gist-created` ping or a `course:broadcast`) | `packages/application/src/ports/snippet-store.ts`, `course-notices.ts` |
 | Application use cases | `shareSnippet`, `activeSnippets`, `broadcastToCourse`, `courseEducators` + `isCourseEducator` | `packages/application/src/snippets/`, `access/educators.ts` |
-| Driven adapters | `supabaseSnippetStore` over `course_gists` (service key); `httpSnippetStore` (the browser, posts to the reader's server); `supabaseCourseNotices` (subscribe through the `@tutors/realtime` gateway, post to the reader's server) and `publishCourseNotice` (the server's HTTP send) | `store-supabase/src/snippets.ts`, `course-http`, `realtime-supabase/src/notices.ts` |
+| Driven adapters | `postgresSnippetStore` over `course_gists` (the reader's and time's servers); `httpSnippetStore` (the browser, posts to the reader's server); `valkeyCourseNotices` (subscribe through the `@tutors/realtime` gateway, post to the reader's server) and `publishNotice` (the server's publish to Valkey) | `store-postgres/src/snippets.ts`, `course-http`, `realtime-valkey/src/notices.ts`, `realtime-valkey/src/server.ts` |
 | Driving adapters | `snippetService`, `noticeService`; `ShareSnippet`, `BroadcastPanel`, `BroadcastListener` | `svelte-state/src/community/services/`, `ui-navigators/src/panels/` |
 | Reader app | `POST /api/gists`, `POST /api/notices`, composed in `lib/server/snippets.ts` | `apps/reader/src/routes/api/` |
 | Time app | `/[courseid]/gists` page, `SnippetListener`, `SnippetsTable`, composed in `lib/server/snippets.ts` | `apps/time/src/` |
@@ -47,19 +47,19 @@ Student (reader)                         Server (reader)                       E
 2. Fills in snippet
 3. POST /api/gists ───────────────────►  4. Reads the actor (server only)
                                          5. Rate-limit + size checks (shareSnippet)
-                                         6. INSERT course_gists (service key)
+                                         6. INSERT course_gists (server only)
                                             content stored in the row
                                          7. Content-free `gist-created` ping
-                                            on `snippets:<courseId>` (HTTP send) ──►  8. SnippetListener toasts
+                                            on `snippets:<courseId>` (Valkey)    ──►  8. SnippetListener toasts
                                                                                  "New snippet shared"
                                                                               9. Educator opens /gists
                                                                              10. Server load re-checks
                                                                                  educator status, then
-                                                                                 reads with service key
+                                                                                 reads it server-side
                                         11. (later, cron) Deletes expired rows
 ```
 
-The realtime ping and the data path are deliberately separate. The ping says only *that* something was shared; the dashboard then reads the actual snippets through an authorised server route. **Browsers publish nothing on Realtime**: both the ping and a lecturer's broadcast are published by the reader's server, and every browser only subscribes, through the `@tutors/realtime` gateway (ARCHITECTURE.md section 9.3).
+The realtime ping and the data path are deliberately separate. The ping says only *that* something was shared; the dashboard then reads the actual snippets through an authorised server route. **Browsers publish neither**: both the ping and a lecturer's broadcast are published by the reader's server to Valkey, and every browser only subscribes, streaming the topic from the reader's `GET /api/realtime/stream` through the `@tutors/realtime` gateway (ARCHITECTURE.md section 9.3).
 
 ### Auth
 
@@ -84,12 +84,12 @@ It **fails closed**: a course with no enrollment data grants access to nobody. T
 
 1. **Rejects** anonymous mode (403), anonymous users (401) and oversized payloads (413, 400 kB cap).
 2. **Rate limits** to 3 snippets per student per course per rolling hour (429).
-3. Inserts a `course_gists` row with the snippet body, using the service-role key. `expires_at = now + 48h` is computed **server-side** and never client-supplied.
+3. Inserts a `course_gists` row with the snippet body, in the Postgres store. `expires_at = now + 48h` is computed **server-side** and never client-supplied.
 4. Publishes the content-free `gist-created` ping on `snippets:<courseId>`.
 
 ### Educator notification
 
-- **The payload carries no snippet data.** Supabase broadcast rides the public anon key, so anyone, including any student, can join a course topic and read every message on it. The event is therefore only `{ type, id, courseId, sentAt }`: no student login or name, no title, no learning object, no body. `tests/contract/realtime/gist-created-protocol.contract.test.ts` asserts the exact field list against what `publishCourseNotice` actually emits, so re-adding an identifying field fails CI.
+- **The payload carries no snippet data.** The reader streams the course's topic to anyone who asks for it, so anyone, including any student, can read every message on it. The event is therefore only `{ type, id, courseId, sentAt }`: no student login or name, no title, no learning object, no body. `tests/contract/realtime/gist-created-protocol.contract.test.ts` asserts the exact field list against what `publishNotice` actually emits, so re-adding an identifying field fails CI.
 - **Receiver** (time app): `SnippetListener.svelte` shows a content-free toast ("A student shared a snippet with this course") linking to the dashboard. It is mounted from `(calendar-lab)/+layout.svelte` and rendered only when the **server-side** `isEducator` check passed. Each tab shows each ping once (`noticeService`).
 
 ### Educator dashboard
@@ -109,7 +109,7 @@ The same `CourseNotices` port carries a lecturer's broadcast. `BroadcastPanel` (
 Two layers guarantee the 48h cap:
 
 1. **Read-time filtering**: the authorised read filters `expires_at > now()`, so an expired snippet is invisible well before physical deletion.
-2. **Physical deletion**: the **`gist-cleanup.yml`** GitHub Actions workflow (cron, twice daily) runs `scripts/purge-course-gists.ts`, which batch-deletes expired rows through `expired_course_gists()`. With `PRIVATE_DATABASE_URL` set it deletes them from the Postgres store instead (`purgeExpiredSnippets`).
+2. **Physical deletion**: the **`gist-cleanup.yml`** GitHub Actions workflow (cron, twice daily) runs `scripts/purge-course-gists.ts`, which batch-deletes expired rows from the Postgres store at `PRIVATE_DATABASE_URL` (`purgeExpiredSnippets`).
 
    Dry-run locally: `DRY_RUN=1 pnpm tsx scripts/purge-course-gists.ts`.
 
@@ -117,9 +117,9 @@ Two layers guarantee the 48h cap:
 
 - **No extra OAuth scope**: sharing a snippet does not touch the student's GitHub content.
 - **No token retention**: nothing credential-shaped is stored.
-- **RLS**: `course_gists` has RLS enabled and **no policies at all**. It is closed to the anon role in both directions; the anon key ships in every client bundle, so an anon `SELECT` policy would make every snippet in every course world-readable. Reads and writes both go through server routes holding the service-role key. *Do not add an anon policy to this table.*
+- **Server only**: no browser connects to the database. Reads and writes of `course_gists` both go through the reader's and time's servers, which hold `PRIVATE_DATABASE_URL`.
 - **Authorisation**: reads are gated on `enrollment.yaml` educator membership, verified server-side, failing closed.
-- **Realtime**: the topics are anon-readable by design, so they carry no snippet data (see above), and only the server publishes.
+- **Realtime**: the topics are readable by anyone by design, so they carry no snippet data (see above), and only the server publishes.
 - **Abuse**: rate-limited to 3 per student per course per hour; 400 kB body cap; one broadcast per course per minute.
 - **Content**: students are warned not to paste secrets or credentials.
 
@@ -127,25 +127,23 @@ Two layers guarantee the 48h cap:
 
 | Env var | Where | Purpose |
 |---------|-------|---------|
-| `PRIVATE_SUPABASE_SERVICE_ROLE_KEY` | reader, time | Service-role key for the insert and the authorised read (never exposed to the browser). Leave empty to run without the feature. |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | cleanup job | What `scripts/purge-course-gists.ts` reads (GitHub Actions secrets). |
+| `PRIVATE_DATABASE_URL` | reader, time, cleanup job | The Postgres store for the insert, the authorised read and the purge (never exposed to the browser; a GitHub Actions secret for the cleanup job). Leave empty to run without the feature. |
 | `PRIVATE_AUTH_GITHUB_ID` / `PRIVATE_AUTH_GITHUB_SECRET` | reader, time | GitHub OAuth App credentials; the time app's callback URL must be registered too. |
 | `PRIVATE_AUTH_SECRET` | reader, time | Better Auth session secret (32+ chars). |
-| `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_ANON_KEY` | reader, time | Existing Supabase config; the anon client only subscribes. |
+| `PRIVATE_VALKEY_URL` | reader | The Valkey the pings and broadcasts are published to; unset, one reader process's memory carries them. |
 | `PUBLIC_ANON_MODE` | reader, time | When `"TRUE"` the whole feature is off and `POST /api/gists` returns 403. |
 
 All four apps read the single `.env` at the repository root; `.env.example` lists every key, and `deploy/k8s/overlays/{reader,time}/secrets.yaml.example` the secrets each deployment needs.
 
 ## Data model
 
-See `supabase/migrations/20261018000000_create_course_gists.sql`. One table:
+See `db/migrations/20261019000000_create_tutors_store.sql`. One table:
 
-- **`course_gists`**: course id, student login/name, `filename`, `content`, optional title and learning-object labels, `created_at`, `expires_at`. RLS on, no policies.
+- **`course_gists`**: course id, student login/name, `filename`, `content`, optional title and learning-object labels, `created_at`, `expires_at`.
 
-The row shape is locked by `tests/contract/supabase/course-gists.contract.test.ts`.
+The row shape is locked by `tests/contract/supabase/course-gists.contract.test.ts`, and `postgresSnippetStore` is held to the `SnippetStore` contract suite in `tests/unit/adapters/store-postgres-ports.test.ts`.
 
 ## Open notes
 
 - The table is still named `course_gists` although nothing about it is a gist any more; renaming it to `course_snippets` is left as a follow-up.
 - The cleanup cadence (twice a day) is well inside the 48h cap, so a single failed run always has a retry window.
-- The notice publishes are bounded by the application's rate limits rather than claimed against the day's Live budget (`TODO(budget)` in `realtime-supabase/src/notices.ts`).

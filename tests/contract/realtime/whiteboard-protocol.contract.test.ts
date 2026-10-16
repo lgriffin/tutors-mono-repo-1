@@ -276,8 +276,7 @@ describe("Whiteboard room schema", () => {
 describe("Whiteboard init-editor postMessage", () => {
   const validInit = {
     type: "init-editor" as const,
-    supabaseUrl: "https://test-project.supabase.co",
-    supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test-anon-key",
+    shared: true,
     roomId: "wb-cs101-whiteboard-01",
     user: {
       name: "Alice Smith",
@@ -304,15 +303,19 @@ describe("Whiteboard init-editor postMessage", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("missing supabaseUrl fails", () => {
-    const { supabaseUrl, ...record } = validInit;
+  it("a personal board is not shared", () => {
+    const result = validateAgainstSchema({ ...validInit, shared: false }, WhiteboardInitEditorSchema);
+    expect(result.valid).toBe(true);
+  });
+
+  it("missing shared fails", () => {
+    const { shared, ...record } = validInit;
     const result = validateAgainstSchema(record, WhiteboardInitEditorSchema);
     expect(result.valid).toBe(false);
   });
 
-  it("missing supabaseAnonKey fails", () => {
-    const { supabaseAnonKey, ...record } = validInit;
-    const result = validateAgainstSchema(record, WhiteboardInitEditorSchema);
+  it("shared must be a boolean", () => {
+    const result = validateAgainstSchema({ ...validInit, shared: "true" }, WhiteboardInitEditorSchema);
     expect(result.valid).toBe(false);
   });
 
@@ -354,7 +357,7 @@ describe("Whiteboard set-theme postMessage", () => {
   it("rejects any other theme, and init-editor accepts the same optional theme", () => {
     expect(validateAgainstSchema({ type: "set-theme", theme: "sepia" }, WhiteboardSetThemeSchema).valid).toBe(false);
     expect(validateAgainstSchema({ type: "set-theme" }, WhiteboardSetThemeSchema).valid).toBe(false);
-    const init = { type: "init-editor", supabaseUrl: "https://x.supabase.co", supabaseAnonKey: "k", roomId: "wb-1", user: { name: "A", id: "a", avatar: "" }, initialScene: null };
+    const init = { type: "init-editor", shared: true, roomId: "wb-1", user: { name: "A", id: "a", avatar: "" }, initialScene: null };
     expect(validateAgainstSchema({ ...init, theme: "dark" }, WhiteboardInitEditorSchema).valid).toBe(true);
     expect(validateAgainstSchema({ ...init, theme: "sepia" }, WhiteboardInitEditorSchema).valid).toBe(false);
   });

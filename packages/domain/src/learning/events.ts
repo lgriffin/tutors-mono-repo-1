@@ -1,7 +1,7 @@
 /**
  * Events Tutors records as a learner moves through a course, as plain data.
  *
- * Transport details (Supabase RPCs, Realtime channels) stay in the adapters; these are the
+ * Transport details (SQL statements, realtime streams) stay in the adapters; these are the
  * payloads they carry. What a learner is looking at right now is a presence event
  * (../presence/events.ts), not a learning event.
  */

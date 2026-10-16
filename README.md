@@ -22,7 +22,7 @@ pnpm dev
 
 Then open **http://localhost:5173/course/reference-course**.
 
-That is it. `pnpm dev` builds the three UI packages in the right order and starts the reader. The copied `.env` sits at the repository root and all four apps read it. It has `PUBLIC_ANON_MODE=TRUE`, so no Supabase project, GitHub OAuth app or other backend is needed; the reader fetches the course straight from `https://reference-course.netlify.app/tutors.json`. Any published Tutors course works the same way: `http://localhost:5173/course/<course-id>`.
+That is it. `pnpm dev` builds the three UI packages in the right order and starts the reader. The copied `.env` sits at the repository root and all four apps read it. It has `PUBLIC_ANON_MODE=TRUE`, so no database, GitHub OAuth app or other backend is needed; the reader fetches the course straight from `https://reference-course.netlify.app/tutors.json`. Any published Tutors course works the same way: `http://localhost:5173/course/<course-id>`.
 
 New here? Read [docs/COURSE-PAGE-WALKTHROUGH.md](docs/COURSE-PAGE-WALKTHROUGH.md) next. It follows that URL through the code to the rendered cards, naming every file on the way. Then pick something from the [`good first issue`](https://github.com/tutors-sdk/tutors-mono-repo/labels/good%20first%20issue) list.
 
@@ -64,8 +64,8 @@ Each wraps one technology behind a port and imports no other adapter.
 
 | Directory | Package | Port it implements |
 |---|---|---|
-| `store-supabase` | `@tutors/store-supabase` | LearningEventSink, LearningRecords, ProfilePort, AccessStore and the catalogue, over Supabase |
-| `realtime-supabase` | `@tutors/realtime-supabase` | PresencePort over Supabase Realtime, the `@tutors/realtime` broker adapter and the reader server's Tutors Live publishing; the only package that drives a Realtime channel |
+| `store-postgres` | `@tutors/store-postgres` | LearningEventSink, LearningRecords, ProfilePort, AccessStore, snippets and the catalogue, over plain Postgres; used by the reader's and time's servers only |
+| `realtime-valkey` | `@tutors/realtime-valkey` | The `@tutors/realtime` broker adapter, PresencePort and the reader server's Tutors Live publishing: the servers publish to Valkey pub/sub and stream each topic to browsers over server-sent events |
 | `course-http` | `@tutors/course-http` | CourseSource: reads a published `tutors.json` over HTTP |
 | `render-markdown` | `@tutors/render-markdown` | ContentRenderer: markdown-it, Shiki and KaTeX |
 | `profile-localstorage` | `@tutors/profile-localstorage` | ProfilePort in the browser, for a visitor who is not signed in |
@@ -218,7 +218,7 @@ Tutors is a hexagonal architecture. [ARCHITECTURE.md](ARCHITECTURE.md) is the au
 1. **Domain** (`@tutors/domain`) imports nothing.
 2. **Application** (`@tutors/application`) imports the domain only, and defines the ports.
 3. **Adapters** (`packages/adapters/driven`, `packages/adapters/driving`) import the ports, the domain and their one technology, never another adapter. Svelte runes live in `@tutors/svelte-state` only.
-4. **Apps** compose the adapters in `src/lib/compose.ts`; `PUBLIC_ANON_MODE=TRUE` composes the in-memory, localStorage and no-op adapters instead of Supabase and Better Auth.
+4. **Apps** compose the adapters in `src/lib/compose.ts`; `PUBLIC_ANON_MODE=TRUE` composes the in-memory, localStorage and no-op adapters instead of Postgres, Valkey and Better Auth.
 
 `.dependency-cruiser.cjs` enforces this (`pnpm architecture-report` draws the graph); the edges that predate the rules are in `tests/architecture/known-violations.txt`, which may only shrink. Rules 0340-0346 in `tests/bdd/features/developer/hexagonal-architecture.feature` state the same as requirements.
 
@@ -228,7 +228,7 @@ The reader uses the GitHub-only Better Auth stateless adapter. See [identity rol
 
 The three UI packages follow a strict one-directional dependency flow: `ui-components → ui-navigators → ui-primitives`.
 
-Browser packages reach personal data only through the typed data API, `@tutors/data-api` (a core package): never through the database client, which only the Realtime/public-read factory and server code may import. See [guides/SERVER-WRITES.md](guides/SERVER-WRITES.md#the-data-api-the-seam).
+Browser packages reach personal data only through the typed data API, `@tutors/data-api` (a core package): never through the database client, which only server code may import. See [guides/SERVER-WRITES.md](guides/SERVER-WRITES.md#the-data-api-the-seam).
 
 That is the vertical view, which answers "what may depend on what". [docs/COURSE-PAGE-WALKTHROUGH.md](docs/COURSE-PAGE-WALKTHROUGH.md) is the horizontal view, which answers "where does this pixel come from". Most changes need the second one.
 

@@ -14,7 +14,7 @@
  *
  * Env:
  *   SOURCE_DATABASE_URL    (required) the Supabase database, as postgres:// (Project settings > Database)
- *   PRIVATE_DATABASE_URL   (required) the Postgres store the servers use with DATA_STORE=postgres
+ *   PRIVATE_DATABASE_URL   (required) the Postgres store the servers use
  *   PG_BIN_DIR             (optional) where pg_dump, pg_restore and psql live; their major version must be
  *                          at least the Supabase server's
  *   MOVE_ARCHIVE           (optional) where the archive is written

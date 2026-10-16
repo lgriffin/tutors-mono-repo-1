@@ -1,12 +1,12 @@
 /**
  * Playground snapshots, the only part of a playground that leaves the browser, on both sides of the
  * data API: the browser's adapter over /api/playground (which only asks: the server decides whose
- * rows the session may see, Rule 0475), and the server's rows over the service client.
+ * rows the session may see, Rule 0475), and the server's rows in the Postgres store.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, it, expect, vi } from "vitest";
 import { createDataApi, readerApiPlaygroundSnapshots } from "@tutors/data-api";
-import { supabasePlaygroundSnapshotRows } from "@tutors/store-supabase";
-import { MockSupabaseClient } from "../../bdd/support/mocks";
+import { postgresPlaygroundSnapshotRows, type SqlClient } from "@tutors/store-postgres";
+import { testDatabase, type TestDatabase } from "../../support/postgres-store.ts";
 
 vi.mock("@tutors/logger", () => ({ default: { error: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn() } }));
 
@@ -97,41 +97,67 @@ describe("the browser's snapshots over /api/playground", () => {
 });
 
 describe("the server's snapshot rows", () => {
-  let client: MockSupabaseClient;
-  beforeEach(() => {
-    client = new MockSupabaseClient();
-    client.setTableData("playground_snapshots", []);
-  });
-  const rows = () => supabasePlaygroundSnapshotRows(client as never);
+  let db: TestDatabase;
+  beforeAll(async () => {
+    db = await testDatabase();
+  }, 60_000);
+  afterAll(() => db.close());
+  beforeEach(() => db.reset());
+  const rows = (sql: SqlClient = db.sql) => postgresPlaygroundSnapshotRows(sql);
+  const stored = async () => (await db.sql.query<Record<string, unknown>>("SELECT * FROM playground_snapshots")).rows;
+  const insert = (r: Record<string, unknown>) =>
+    db.sql.query(
+      `INSERT INTO playground_snapshots (student_id, student_name, course_id, lo_id, runtime, entry, files, last_output, last_ok, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)`,
+      [r.student_id, r.student_name, r.course_id, r.lo_id, r.runtime, r.entry, JSON.stringify(r.files), r.last_output, r.last_ok, r.updated_at]
+    );
 
   it("keeps the whole workspace and what it printed", async () => {
     await rows().save(snapshot);
-    const [stored] = client.getTableData("playground_snapshots") as Array<Record<string, unknown>>;
-    expect(stored).toMatchObject({ student_id: "ada", student_name: "Ada Lovelace", course_id: "course.test", runtime: "python", entry: "main.py", last_output: "1\n", last_ok: true });
-    expect(stored.files).toEqual([{ path: "main.py", content: "print(1)" }]);
+    const [row] = await stored();
+    expect(row).toMatchObject({ student_id: "ada", student_name: "Ada Lovelace", course_id: "course.test", runtime: "python", entry: "main.py", last_output: "1\n", last_ok: true });
+    expect(row.files).toEqual([{ path: "main.py", content: "print(1)" }]);
   });
 
   it("truncates a runaway loop's output rather than storing megabytes of it", async () => {
     await rows().save({ ...snapshot, lastOutput: "x".repeat(50_000) });
-    const [stored] = client.getTableData("playground_snapshots") as Array<Record<string, unknown>>;
-    expect((stored.last_output as string).length).toBe(20_000);
+    const [row] = await stored();
+    expect((row.last_output as string).length).toBe(20_000);
   });
 
   it("reads one exercise's rows back as snapshots, leaving nothing undefined", async () => {
-    client.setTableData("playground_snapshots", [{ ...row, student_name: null, files: null, last_output: null, last_ok: null }]);
+    // The schema keeps `files` (default []) but lets a row lack a name, output and result.
+    await insert({ ...row, student_name: null, files: [], last_output: null, last_ok: null });
     expect(await rows().list("course.test", row.lo_id, null)).toEqual([
       { studentId: "ada", studentName: "ada", courseId: "course.test", loId: row.lo_id, runtime: "python", entry: "main.py", files: [], lastOutput: "", lastOk: null, updatedAt: row.updated_at }
     ]);
   });
 
-  it("reads only one student's row when asked for them", async () => {
-    client.setTableData("playground_snapshots", [row, { ...row, student_id: "bob" }]);
+  it("reads only one student's row when asked for them, newest first, with the last hand-in winning", async () => {
+    await rows().save(snapshot);
+    await new Promise((done) => setTimeout(done, 2));
+    await rows().save({ ...snapshot, studentId: "bob", studentName: "Bob" });
+    await new Promise((done) => setTimeout(done, 2));
+    await rows().save({ ...snapshot, lastOutput: "2" });
+    expect((await rows().list("course.test", row.lo_id, null)).map((s) => [s.studentId, s.lastOutput])).toEqual([
+      ["ada", "2"],
+      ["bob", "1\n"]
+    ]);
     expect((await rows().list("course.test", row.lo_id, "bob")).map((s) => s.studentId)).toEqual(["bob"]);
+    expect(await rows().list("course.test", "other", null)).toEqual([]);
+  });
+
+  it("removes one student's row", async () => {
+    await rows().save(snapshot);
+    await rows().save({ ...snapshot, studentId: "bob", studentName: "Bob" });
+    await rows().remove("course.test", row.lo_id, "ada");
+    expect((await rows().list("course.test", row.lo_id, null)).map((s) => s.studentId)).toEqual(["bob"]);
   });
 
   it("fails loudly when the database refuses, so the route answers 500", async () => {
-    client.setTableError("playground_snapshots", { message: "permission denied" });
-    await expect(rows().list("course.test", "lo", null)).rejects.toThrow("playground_snapshots select: permission denied");
-    await expect(rows().save(snapshot)).rejects.toThrow("playground_snapshots upsert");
+    const refusing: SqlClient = { query: async () => Promise.reject(new Error("permission denied")), end: async () => {} };
+    await expect(rows(refusing).list("course.test", "lo", null)).rejects.toThrow("playground_snapshots select: permission denied");
+    await expect(rows(refusing).save(snapshot)).rejects.toThrow("playground_snapshots upsert");
+    await expect(rows(refusing).remove("course.test", "lo", "ada")).rejects.toThrow("playground_snapshots delete: permission denied");
   });
 });
