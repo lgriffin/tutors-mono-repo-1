@@ -3,7 +3,7 @@ import { runInNewContext } from "node:vm";
 import { vi } from "vitest";
 
 /** What the editor posted to the reader's POST /api/realtime/publish. */
-export type PublishedMessage = { topic: string; event: string; payload: Record<string, unknown>; from: string };
+type PublishedMessage = { topic: string; event: string; payload: Record<string, unknown>; from: string };
 
 /** The room's own bookkeeping, as opposed to the collaboration broadcasts the editor sends. */
 const ROOM_EVENTS = new Set(["presence", "leave"]);
