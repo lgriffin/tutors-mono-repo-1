@@ -8,6 +8,11 @@ import { MIGRATIONS_DIR, pgliteClient, pgliteDatabase, type TestDatabase } from 
 
 const feature = await loadFeature("tests/bdd/features/shared/supabase-move.feature");
 
+// PGlite compiles its WebAssembly on first use; warm it at import so no scenario's step waits on it.
+const warm = new PGlite();
+await warm.waitReady;
+await warm.close();
+
 /** The Supabase project as the move meets it: the store's first schema, then what only Supabase has. */
 const SUPABASE_SQL = [
   readFileSync(join(MIGRATIONS_DIR, "20261019000000_create_tutors_store.sql"), "utf8"),
