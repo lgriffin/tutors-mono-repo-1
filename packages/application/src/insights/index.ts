@@ -1,1 +1,1 @@
-export { dayPeriod, helpResponseTimes, stepDiagnostics, studentProgress } from "./insights.ts";
+export { courseInsights, dayPeriod, educatorInsights, helpResponseTimes, insightsPeriod, stepDiagnostics, studentProgress, type InsightsDeps } from "./insights.ts";

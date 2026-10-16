@@ -16,6 +16,7 @@ import type {
   FeedbackDesk,
   HelpDesk,
   IdentityClient,
+  InsightsDesk,
   LearningEventSink,
   PlaygroundLive,
   PlaygroundSnapshots,
@@ -48,7 +49,8 @@ import {
   RecordingPublisher,
   ScriptedCodeRuntimePort,
   SignedOutFeedbackDesk,
-  SignedOutHelpDesk
+  SignedOutHelpDesk,
+  SignedOutInsightsDesk
 } from "@tutors/application/testing";
 
 export type Adapters = {
@@ -102,6 +104,12 @@ export type Adapters = {
    * only asks; the reader's server keeps annotations. With nobody to sign in, there is nothing.
    */
   feedbackDesk: FeedbackDesk;
+  /**
+   * A course's insights as the educator signed in to Tutors Time: steps ranked by the help they
+   * needed, help response times and one student's part. The reader's server computes them; with
+   * nobody to sign in, every ask is refused.
+   */
+  insightsDesk: InsightsDesk;
 };
 
 const systemClock: Clock = { now: () => new Date(), nowMs: () => Date.now() };
@@ -135,6 +143,7 @@ export function anonymousAdapters(overrides: Partial<Adapters> = {}): Adapters {
     assistanceFeed: new InMemoryAssistanceFeed(false),
     helpDesk: new SignedOutHelpDesk(),
     feedbackDesk: new SignedOutFeedbackDesk(),
+    insightsDesk: new SignedOutInsightsDesk(),
     ...overrides
   };
 }

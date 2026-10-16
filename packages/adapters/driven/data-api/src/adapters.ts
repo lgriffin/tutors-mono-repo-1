@@ -14,6 +14,10 @@ import type {
   HelpDesk,
   HelpDeskRefusal,
   HelpDeskResult,
+  InsightsAnswer,
+  InsightsDesk,
+  InsightsPeriod,
+  InsightsRefusal,
   LearningEventSink,
   PlaygroundSnapshots,
   ProfilePort,
@@ -24,6 +28,7 @@ import type { HelpRequest } from "@tutors/domain/assistance";
 import type { Annotation, Reflection } from "@tutors/domain/feedback";
 import log from "@tutors/logger";
 import { dataApi, type DataApi } from "./client.ts";
+import type { CourseInsightsRead, StudentInsightsRead } from "./contract.ts";
 
 /** POST /api/analytics for each learning event; the learner is the session, so `learnerId` is not sent. */
 export function readerApiLearningEventSink(api: DataApi = dataApi): LearningEventSink {
@@ -297,5 +302,30 @@ export function readerApiFeedbackDesk(api: DataApi = dataApi): FeedbackDesk {
       );
       return answer.ok ? { ok: true, reflection: answer.value } : { ok: false, reason: answer.reason };
     }
+  };
+}
+
+const INSIGHTS_REFUSALS: readonly InsightsRefusal[] = ["signed-out", "forbidden", "not-kept", "not-ready", "invalid", "unavailable"];
+
+async function insightsAnswer<T>(response: Response | null, pick: (body: Record<string, unknown>) => T | undefined): Promise<InsightsAnswer<T>> {
+  if (!response) return { ok: false, reason: "unavailable" };
+  const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  const value = body ? pick(body) : undefined;
+  if (response.ok && value && body?.period) return { ok: true, period: body.period as InsightsPeriod, value };
+  if (response.status === 401) return { ok: false, reason: "signed-out" };
+  const named = INSIGHTS_REFUSALS.find((r) => r === body?.reason);
+  if (named) return { ok: false, reason: named };
+  return { ok: false, reason: response.status === 400 ? "invalid" : "unavailable" };
+}
+
+/**
+ * Insights through GET /api/insights: the reader's server runs the Insights use cases for the
+ * session's educator; from Tutors Time's origin the call carries the lecturer's session.
+ */
+export function readerApiInsightsDesk(api: DataApi = dataApi): InsightsDesk {
+  return {
+    course: async (courseId, span, day) => insightsAnswer(await api.getInsights({ courseId, span, day }), (body) => body.insights as CourseInsightsRead["insights"] | undefined),
+    student: async (courseId, learnerId, span, day) =>
+      insightsAnswer(await api.getInsights({ courseId, span, day, learnerId }), (body) => body.progress as StudentInsightsRead["progress"] | undefined)
   };
 }

@@ -6,3 +6,4 @@ export * from "./statistics.ts";
 export * from "./step-diagnostic.ts";
 export * from "./student-progress.ts";
 export * from "./response-times.ts";
+export * from "./course-insights.ts";

@@ -21,6 +21,12 @@
     { label: "classTime.assignments", path: "assignments", icon: "lucide:clipboard-list" },
     { label: "classTime.snippets", path: "gists", icon: "lucide:file-code" }
   ];
+
+  /** The Insights section: read-only views of the course's help requests and feedback (Rules 0412, 0413). */
+  const insightLinks: { label: MessageKey; path: string; icon: string }[] = [
+    { label: "insights.steps", path: "insights/steps", icon: "lucide:mountain" },
+    { label: "insights.response", path: "insights/response", icon: "lucide:timer" }
+  ];
 </script>
 
 {#if !courseId}
@@ -29,6 +35,11 @@
 <nav class="time-navigation" aria-label={t("shell.classActivity")}>
   <p class="nav-section">{t("shell.classActivity")}</p>
   {#each navLinks as item (item.path)}
+    {@const href = `/${courseId}/${item.path}`}
+    <a class="nav-row" {href} aria-current={page.url.pathname === href ? "page" : undefined}><Icon icon={item.icon} height="24" /><span>{t(item.label)}</span></a>
+  {/each}
+  <p class="nav-section">{t("insights.eyebrow")}</p>
+  {#each insightLinks as item (item.path)}
     {@const href = `/${courseId}/${item.path}`}
     <a class="nav-row" {href} aria-current={page.url.pathname === href ? "page" : undefined}><Icon icon={item.icon} height="24" /><span>{t(item.label)}</span></a>
   {/each}

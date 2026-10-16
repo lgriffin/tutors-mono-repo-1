@@ -11,7 +11,7 @@ import type { AssistanceStore } from "../ports/assistance-store.ts";
 import { RECEIVED_LIMIT, type FeedbackStore } from "../ports/feedback-store.ts";
 import type { FeedbackDesk, FeedbackDeskResult, ReflectionDeskResult, StepFeedbackView } from "../ports/feedback-desk.ts";
 import type { HelpDesk, HelpDeskResult } from "../ports/help-desk.ts";
-import type { InsightsPeriod, InsightsRead } from "../ports/insights-read.ts";
+import { InsightsNotReadyError, type InsightsPeriod, type InsightsRead } from "../ports/insights-read.ts";
 import type { NotesStore } from "../ports/notes-store.ts";
 import type { Unsubscribe } from "../ports/presence.ts";
 
@@ -166,9 +166,16 @@ export class InMemoryNotesStore implements NotesStore {
 
 const within = (iso: string, period: InsightsPeriod) => iso >= period.from && iso < period.to;
 
+function failWith(failure: InMemoryInsightsRead["failure"]): void {
+  if (failure === "not-ready") throw new InsightsNotReadyError();
+  if (failure) throw new Error("the insights read failed");
+}
+
 /** Answers insights from the rows it was given, and counts the reads it served. */
 export class InMemoryInsightsRead implements InsightsRead {
   reads = 0;
+  /** Set to make every read reject: as a database with no insights views (Rule 0416), or one that failed. */
+  failure: "not-ready" | "unavailable" | null = null;
   constructor(
     private readonly requests: readonly HelpRequest[] = [],
     private readonly annotationRows: readonly Annotation[] = [],
@@ -176,14 +183,17 @@ export class InMemoryInsightsRead implements InsightsRead {
   ) {}
   async helpRequests(courseId: string, period: InsightsPeriod): Promise<HelpRequest[]> {
     this.reads++;
+    failWith(this.failure);
     return this.requests.filter((r) => r.ref.courseId === courseId && within(r.requestedAt, period)).map(copy);
   }
   async annotations(courseId: string, period: InsightsPeriod): Promise<Annotation[]> {
     this.reads++;
+    failWith(this.failure);
     return this.annotationRows.filter((a) => a.anchor.ref.courseId === courseId && within(a.createdAt, period)).map(copy);
   }
   async reflections(courseId: string, period: InsightsPeriod): Promise<Reflection[]> {
     this.reads++;
+    failWith(this.failure);
     return this.reflectionRows.filter((r) => r.ref.courseId === courseId && within(r.sharedAt, period)).map(copy);
   }
 }

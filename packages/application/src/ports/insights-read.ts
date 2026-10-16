@@ -16,3 +16,15 @@ export interface InsightsRead {
   /** The course's reflections shared in the period. */
   reflections(courseId: string, period: InsightsPeriod): Promise<Reflection[]>;
 }
+
+/**
+ * What an InsightsRead rejects with when the database has no insights views yet (a deployment whose
+ * migrations have not run): Tutors Time then shows its insights pages empty with one message and
+ * keeps everything else working (Rule 0416).
+ */
+export class InsightsNotReadyError extends Error {
+  constructor(message = "The insights views are not in the database yet") {
+    super(message);
+    this.name = "InsightsNotReadyError";
+  }
+}

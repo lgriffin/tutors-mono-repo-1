@@ -10,13 +10,15 @@
  * pub/sub at PRIVATE_VALKEY_URL that the realtime stream routes fan out over server-sent events
  * (realtime-valkey, Rule 0481). Help requests are kept only on Postgres and their queue changes
  * travel only on Valkey (PR B of the learning plan), and so do lecturer feedback and shared reflections
- * (PR E): no Supabase table or channel is added for them.
+ * (PR E): no Supabase table or channel is added for them. Insights read both through Postgres views
+ * only (PR F).
  */
 import type {
   AccessStore,
   AssistanceFeed,
   AssistanceStore,
   FeedbackStore,
+  InsightsRead,
   LearningEventSink,
   LearningRecords,
   ProfilePort,
@@ -35,6 +37,7 @@ import {
   postgresCatalogue,
   postgresClient,
   postgresFeedbackStore,
+  postgresInsightsRead,
   postgresLearningEventSink,
   postgresLearningRecords,
   postgresPlaygroundSnapshotRows,
@@ -127,6 +130,8 @@ export type ReaderServerData = {
   assistance: AssistanceStore | null;
   /** Lecturer feedback and shared reflections (/api/feedback): Postgres only, as no new Supabase table is added; null on Supabase, where the routes answer 503. */
   feedback: FeedbackStore | null;
+  /** The read-only views insights are computed from (GET /api/insights): Postgres only; null on Supabase, where the route answers 503. */
+  insights: InsightsRead | null;
 };
 
 /** What the server publishes to browsers, over the broker PUBLIC_REALTIME picks. */
@@ -195,7 +200,8 @@ function supabaseData(db: SupabaseClient): ReaderServerData {
     playground: supabasePlaygroundSnapshotRows(db),
     recordErrors: (rows) => insertAppErrors(db, rows),
     assistance: null,
-    feedback: null
+    feedback: null,
+    insights: null
   };
 }
 
@@ -217,7 +223,8 @@ function postgresData(sql: SqlClient): ReaderServerData {
     playground: postgresPlaygroundSnapshotRows(sql),
     recordErrors: (rows) => insertPostgresAppErrors(sql, rows),
     assistance: postgresAssistanceStore(sql),
-    feedback: postgresFeedbackStore(sql)
+    feedback: postgresFeedbackStore(sql),
+    insights: postgresInsightsRead(sql)
   };
 }
 

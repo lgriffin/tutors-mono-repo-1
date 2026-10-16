@@ -6,7 +6,9 @@ Feature: Learning insights
 
   Insights are read-only aggregations of the stored learning, assistance and feedback records of
   a bounded period, through one read port. These Rules drive the Insights use cases over the
-  in-memory read port; the views in Tutors Time come in a later pull request.
+  in-memory read port, and Tutors Time's insights pages through its insights service over the
+  in-memory insights desk, which runs the same use cases as the educator signed in. The reader's
+  server and the Postgres views are in shared/insights-server.feature.
 
   Background:
     Given the course "cs101" with the lab "/lab/cs101/lab-01"
@@ -39,3 +41,108 @@ Feature: Learning insights
       And the diagnostic shall count 2 acknowledged
       And the diagnostic's median wait shall be 120 seconds and its 90th percentile wait 300 seconds
       And the diagnostic shall count 1 helped by a hint and 2 annotations
+
+  @rule-0412 @ears-event-driven
+  Rule: When an educator opens a course's insights, tutors shall rank its lab steps by requests and waiting time for the chosen day, week or month.
+
+    Scenario: The step most students asked about comes first, and the week reaches further back than the day
+      Given "ellen" teaches the course
+      And 5 students each asked for help at the step "03" on "2026-01-05", acknowledged after 1 to 5 minutes
+      And "alice" asked for help at the step "02" on "2026-01-05", acknowledged after 30 seconds
+      And "frank" asked for help at the step "04" on "2026-01-01", acknowledged after 10 minutes
+      When "ellen" opens the course's insights for the day "2026-01-05"
+      Then the steps shall be ranked "03, 02"
+      And the step "03" shall show 5 requests with a median wait of 180 seconds
+      When "ellen" chooses 7 days
+      Then the steps over the 7 days shall be ranked "03, 04, 02"
+
+    Scenario: Equal requests rank the longer wait first
+      Given "ellen" teaches the course
+      And these students asked for help on "2026-01-05"
+        | learner | step | waited |
+        | alice   | 02   | 30     |
+        | bob     | 05   | 300    |
+        | carol   | 06   | 60     |
+        | dan     | 07   | 90     |
+        | erin    | 08   | 120    |
+      When "ellen" opens the course's insights for the day "2026-01-05"
+      Then the steps shall be ranked "05, 08, 07, 06, 02"
+
+    Scenario: A student cannot open the course's insights
+      Given "ellen" teaches the course
+      And "alice" asked for help at the step "02" on "2026-01-05", acknowledged after 30 seconds
+      When "alice" opens the course's insights for the day "2026-01-05"
+      Then the insights page shall say "forbidden" and rank no step
+
+  @rule-0413 @ears-ubiquitous
+  Rule: Tutors shall report time to acknowledge and time to resolve as median and 90th percentile per day and per kind of help.
+
+    Scenario: Each day and kind has its own times
+      Given "ellen" teaches the course
+      And 5 students each asked for help at the step "03" on "2026-01-05", acknowledged after 1 to 5 minutes
+      And "frank" asked for a hint at the step "04" on "2026-01-04", answered with a hint after 4 minutes
+      When "ellen" opens the course's insights for 7 days ending "2026-01-05"
+      Then the response times of "2026-01-04" for "hint" shall be 1 resolved, its percentiles withheld for one student
+      And the response times of "2026-01-05" for "stuck" shall be 5 acknowledged with a median of 180 seconds and a 90th percentile of 300 seconds
+      And the response times of "2026-01-05" shall have none for "hint"
+
+  @rule-0414 @ears-ubiquitous
+  Rule: Tutors shall show on a student's page their requests raised, hints read, annotations received and reflections shared beside the existing calendar and lab analytics.
+
+    Scenario: A student's part in the course
+      Given "ellen" teaches the course
+      And "frank" asked for a hint at the step "04" on "2026-01-04", answered with a hint after 4 minutes
+      And "frank" asked for help at the step "02" on "2026-01-05", acknowledged after 30 seconds
+      And "ellen" wrote an annotation to "frank" at the step "02" on "2026-01-05"
+      And "frank" shared a reflection at the step "02" on "2026-01-05"
+      When "ellen" opens the student page of "frank" for 30 days ending "2026-01-05"
+      Then the page shall show 2 requests raised, 1 hint read, 1 annotation received and 1 reflection shared
+      And the student page shall carry the help and feedback panel after the calendar and lab analytics
+
+  @rule-0415 @ears-state-driven
+  Rule: While a course has fewer than 5 students with records in the chosen period, tutors shall show counts and withhold percentiles.
+
+    @active
+    Scenario: Four students: counts only
+      Given "ellen" teaches the course
+      And 4 students each asked for help at the step "03" on "2026-01-05", acknowledged after 1 to 4 minutes
+      When "ellen" opens the course's insights for the day "2026-01-05"
+      Then the step "03" shall show 4 requests and no median or 90th percentile wait
+      And the response times shall show counts and no percentiles
+      And the page shall say that only counts are shown
+
+    @inactive
+    Scenario: Five students: percentiles are shown
+      Given "ellen" teaches the course
+      And 5 students each asked for help at the step "03" on "2026-01-05", acknowledged after 1 to 5 minutes
+      When "ellen" opens the course's insights for the day "2026-01-05"
+      Then the step "03" shall show 5 requests with a median wait of 180 seconds
+      And the page shall not say that only counts are shown
+
+  @rule-0418 @ears-ubiquitous
+  Rule: Tutors shall name every new table, view, channel and port of these contexts in ARCHITECTURE.md with its owning adapter, as Rules 0347 to 0352 require.
+
+    Scenario: The insights views and ports are in the architecture document
+      Given the architecture document
+      Then it shall name "insights_help_requests", "insights_annotations" and "insights_reflections" with "store-postgres"
+      And its ports table shall name "InsightsRead" with "postgresInsightsRead" and "InsightsDesk" with "readerApiInsightsDesk"
+
+  @rule-0419 @ears-ubiquitous
+  Rule: Tutors shall keep the assistance, feedback and insights contexts from importing each other's use cases, reacting to each other only through application events and the Learning context's shared types.
+
+    Scenario: No context's use cases import another's
+      Given the use cases of the assistance, feedback and insights contexts
+      Then none of them shall import another of those contexts' use case modules
+
+  @rule-0571 @ears-ubiquitous
+  Rule: Tutors shall withhold the median and 90th percentile of a step, or of a kind of help on a day, whose requests came from fewer than 5 students, whatever the size of the course's cohort.
+
+    Scenario: One student's step and kind show counts only beside five who asked
+      Given "ellen" teaches the course
+      And 5 students each asked for help at the step "03" on "2026-01-05", acknowledged after 1 to 5 minutes
+      And "frank" asked for a hint at the step "04" on "2026-01-05", answered with a hint after 4 minutes
+      When "ellen" opens the course's insights for the day "2026-01-05"
+      Then the step "03" shall show 5 requests with a median wait of 180 seconds
+      And the step "04" shall show 1 requests and no median or 90th percentile wait
+      And the response times of "2026-01-05" for "hint" shall be 1 resolved, its percentiles withheld for one student
+      And the page shall not say that only counts are shown

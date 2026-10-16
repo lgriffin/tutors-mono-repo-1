@@ -42,6 +42,8 @@ import {
   InMemoryInsightsRead,
   InMemoryNotesStore,
   insightsReadContract,
+  insightsDeskContract,
+  InMemoryInsightsDesk,
   notesStoreContract,
   type ContractCase
 } from "@tutors/application/testing";
@@ -187,4 +189,11 @@ contract(
 contract(
   "InsightsRead: in memory",
   insightsReadContract(({ requests, annotations, reflections }) => new InMemoryInsightsRead(requests, annotations, reflections))
+);
+contract(
+  "InsightsDesk: in memory",
+  insightsDeskContract(({ requests, annotations, reflections }) => {
+    const educator = new InMemoryInsightsDesk({ read: new InMemoryInsightsRead(requests, annotations, reflections), educators: { cs101: ["ellen"] }, actor: "ellen" });
+    return { educator, student: educator.as("alice"), visitor: educator.as(null) };
+  })
 );

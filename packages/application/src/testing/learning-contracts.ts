@@ -10,6 +10,7 @@ import type { AssistanceStore } from "../ports/assistance-store.ts";
 import type { FeedbackStore } from "../ports/feedback-store.ts";
 import type { FeedbackDesk, FeedbackDeskResult, ReflectionDeskResult } from "../ports/feedback-desk.ts";
 import type { HelpDesk, HelpDeskResult } from "../ports/help-desk.ts";
+import type { InsightsAnswer, InsightsDesk } from "../ports/insights-desk.ts";
 import type { InsightsRead } from "../ports/insights-read.ts";
 import type { NotesStore } from "../ports/notes-store.ts";
 import { assert, assertEqual, type ContractCase } from "./contracts.ts";
@@ -370,6 +371,134 @@ export function insightsReadContract(
           ["r1"],
           "reflections"
         );
+      }
+    },
+    {
+      name: "the period is half-open: a row at its start is read, one at its end is not",
+      run: async () => {
+        const read = await make({
+          requests: [
+            { ...ask("cs101", "alice", period.from), id: "h1" },
+            { ...ask("cs101", "bob", period.to), id: "h2" }
+          ],
+          annotations: [
+            { ...annotation("cs101", "02"), id: "a1", createdAt: period.from, revokedAt: null },
+            { ...annotation("cs101", "02"), id: "a2", createdAt: period.to, revokedAt: null }
+          ],
+          reflections: [
+            { ...reflection("alice"), id: "r1", sharedAt: period.from },
+            { ...reflection("bob"), id: "r2", sharedAt: period.to }
+          ]
+        });
+        assertEqual((await read.helpRequests("cs101", period)).map((r) => r.id), ["h1"], "requests");
+        assertEqual((await read.annotations("cs101", period)).map((a) => a.id), ["a1"], "annotations");
+        assertEqual((await read.reflections("cs101", period)).map((r) => r.id), ["r1"], "reflections");
+      }
+    },
+    {
+      name: "a request reads back with what the numbers are made of: kind, step, learner, acknowledgement and closure",
+      run: async () => {
+        const answered: HelpRequest = {
+          ...ask("cs101", "alice", "2026-01-05T09:00:00.000Z"),
+          id: "h1",
+          kind: "hint",
+          state: "resolved",
+          acknowledged: { by: "ellen", at: "2026-01-05T09:01:00.000Z" },
+          closed: { by: "ellen", at: "2026-01-05T09:03:00.000Z", reason: "hint" },
+          helped: true
+        };
+        const revoked = { ...annotation("cs101", "03"), id: "a1", revokedAt: "2026-01-05T11:00:00.000Z" };
+        const read = await make({ requests: [answered], annotations: [revoked], reflections: [] });
+        const [r] = await read.helpRequests("cs101", period);
+        assertEqual(
+          r && [r.ref, r.learnerId, r.kind, r.state, r.requestedAt, r.acknowledged, r.closed, r.helped],
+          [answered.ref, "alice", "hint", "resolved", answered.requestedAt, answered.acknowledged, answered.closed, true],
+          "request"
+        );
+        const [a] = await read.annotations("cs101", period);
+        assertEqual(a && [a.anchor.ref, a.audience, a.revokedAt], [revoked.anchor.ref, revoked.audience, revoked.revokedAt], "a revoked annotation is read too");
+      }
+    }
+  ];
+}
+
+/** Three desks over the same rows: the course's educator, a student, and a visitor nobody signed in as. */
+export type InsightsDesks = { educator: InsightsDesk; student: InsightsDesk; visitor: InsightsDesk };
+
+/**
+ * What every InsightsDesk must do over the stored rows of the course "cs101", whose educator is
+ * "ellen": only she reads its insights, for a bounded span ending with a real day, ranked and
+ * withheld as the domain says; a student and a visitor are refused.
+ */
+export function insightsDeskContract(make: (rows: { requests: HelpRequest[]; annotations: Annotation[]; reflections: Reflection[] }) => InsightsDesks | Promise<InsightsDesks>): ContractCase[] {
+  const at = (learner: string, stepId: string, time: string, ackSeconds: number | null): HelpRequest => ({
+    ...openRequest(step("cs101", stepId), { login: learner, name: null }, "stuck", time),
+    id: `${learner}-${stepId}-${time}`,
+    state: ackSeconds === null ? "open" : "acknowledged",
+    acknowledged: ackSeconds === null ? null : { by: "ellen", at: new Date(Date.parse(time) + ackSeconds * 1000).toISOString() }
+  });
+  const learners = ["alice", "bob", "carol", "dan", "erin"];
+  const busy = learners.map((l, i) => at(l, "03", `2026-01-05T09:0${i}:00.000Z`, 60 * (i + 1)));
+  const quiet = [at("alice", "02", "2026-01-05T10:00:00.000Z", 30)];
+  const lastWeek = [at("frank", "04", "2025-12-30T09:00:00.000Z", 10)];
+  const rows = { requests: [...busy, ...quiet, ...lastWeek], annotations: [], reflections: [{ ...reflection("alice"), id: "r1", sharedAt: "2026-01-05T11:00:00.000Z" }] };
+  const value = <T>(answer: InsightsAnswer<T>, what: string): T => {
+    assert(answer.ok, `${what}: refused as ${answer.ok ? "" : answer.reason}`);
+    return (answer as Extract<InsightsAnswer<T>, { ok: true }>).value;
+  };
+  const refusal = (answer: InsightsAnswer<unknown>) => (answer.ok ? "ok" : answer.reason);
+  return [
+    {
+      name: "an educator reads the course's steps hardest first over the day, with its cohort and response times; a one-student step shows counts only",
+      run: async () => {
+        const { educator } = await make(rows);
+        const answer = await educator.course("cs101", "day", "2026-01-05");
+        const insights = value(answer, "day");
+        assertEqual(answer.ok && answer.period, { from: "2026-01-05T00:00:00.000Z", to: "2026-01-06T00:00:00.000Z" }, "the day");
+        assertEqual(
+          insights.steps.map((s) => [s.ref.stepId, s.total, s.medianWaitSeconds, s.p90WaitSeconds]),
+          [
+            ["03", 5, 180, 300],
+            ["02", 1, null, null]
+          ],
+          "ranked"
+        );
+        assertEqual([insights.cohort.students, insights.cohort.percentilesShown], [5, true], "cohort");
+        assertEqual(
+          insights.responseTimes.map((d) => [d.day, d.times.stuck.acknowledge.count, d.times.stuck.acknowledge.median]),
+          [["2026-01-05", 6, 120]],
+          "response times"
+        );
+      }
+    },
+    {
+      name: "a week reaches back seven days, and a small cohort's percentiles are withheld",
+      run: async () => {
+        const { educator } = await make({ ...rows, requests: [...quiet, ...lastWeek] });
+        const week = value(await educator.course("cs101", "week", "2026-01-05"), "week");
+        assertEqual(week.steps.map((s) => [s.ref.stepId, s.total, s.medianWaitSeconds]), [["02", 1, null], ["04", 1, null]], "counts, no percentiles");
+        assertEqual(week.cohort.percentilesShown, false, "withheld");
+        const day = value(await educator.course("cs101", "day", "2026-01-05"), "day");
+        assertEqual(day.steps.map((s) => s.ref.stepId), ["02"], "the day alone");
+      }
+    },
+    {
+      name: "an educator reads one student's requests, hints, annotations and reflections",
+      run: async () => {
+        const { educator } = await make(rows);
+        const alice = value(await educator.student("cs101", "alice", "month", "2026-01-05"), "alice");
+        assertEqual([alice.learnerId, alice.requestsRaised, alice.hintsRead, alice.reflectionsShared], ["alice", 2, 0, 1], "alice");
+      }
+    },
+    {
+      name: "a student and a visitor are refused, and an ask with no real day is invalid",
+      run: async () => {
+        const { educator, student, visitor } = await make(rows);
+        assertEqual(refusal(await student.course("cs101", "day", "2026-01-05")), "forbidden", "a student");
+        assertEqual(refusal(await student.student("cs101", "alice", "day", "2026-01-05")), "forbidden", "even about themselves");
+        assertEqual(refusal(await visitor.course("cs101", "day", "2026-01-05")), "signed-out", "a visitor");
+        assertEqual(refusal(await educator.course("cs101", "day", "2026-02-30")), "invalid", "no such day");
+        assertEqual(refusal(await educator.course("cs102", "day", "2026-01-05")), "forbidden", "another course");
       }
     }
   ];

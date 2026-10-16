@@ -8,3 +8,4 @@ export * from "./learning-contexts.ts";
 export * from "./learning-contracts.ts";
 export * from "./help-desk.ts";
 export * from "./feedback-desk.ts";
+export * from "./insights-desk.ts";
