@@ -15,7 +15,7 @@
         "label": "Data source",
         "type": "datasource",
         "query": "postgres",
-        "current": { "text": "Tutors Local (Supabase)", "value": "tutors-local" },
+        "current": { "text": "Tutors Local", "value": "tutors-local" },
         "hide": 0
       }
     ]

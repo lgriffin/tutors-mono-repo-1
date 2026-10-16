@@ -1,5 +1,8 @@
 // Proves the production reader's identity seam over HTTP; only GitHub and time are test preloads.
 // Run after SVELTEKIT_ADAPTER=node pnpm build: pnpm test:identity:built
+// With TEST_DATABASE_URL naming an empty Postgres database, db/migrations is applied to it and the
+// reader runs against it (PRIVATE_DATABASE_URL), so the signed-in data routes answer from the store;
+// without it the reader has no store and those routes answer 503 once past the 401 gate.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -26,6 +29,13 @@ const port = listener.address().port;
 await new Promise((resolve) => listener.close(resolve));
 let server;
 let logs = "";
+const database = process.env.TEST_DATABASE_URL || "";
+if (database) {
+  const root = fileURLToPath(new URL("../../../", import.meta.url));
+  const migrate = spawn("pnpm", ["db:migrate"], { cwd: root, env: { ...process.env, PRIVATE_DATABASE_URL: database }, stdio: "inherit" });
+  const [code] = await once(migrate, "exit");
+  if (code !== 0) throw new Error(`pnpm db:migrate failed (${code}) against TEST_DATABASE_URL`);
+}
 const expected = { subject: "github:1001", login: "student", name: "Student", email: "student@example.com", image: "https://avatars.example/student.png" };
 
 async function stop() {
@@ -49,8 +59,7 @@ async function start(overrides = {}) {
     PROTOCOL_HEADER: "x-forwarded-proto",
     HOST_HEADER: "x-forwarded-host",
     PUBLIC_ANON_MODE: "FALSE",
-    PUBLIC_SUPABASE_URL: "",
-    PUBLIC_SUPABASE_ANON_KEY: "",
+    PRIVATE_DATABASE_URL: database,
     PRIVATE_AUTH_SECRET: AUTH_SECRET,
     PRIVATE_AUTH_GITHUB_ID: GITHUB_CLIENT_ID,
     PRIVATE_AUTH_GITHUB_SECRET: GITHUB_CLIENT_SECRET,
@@ -87,9 +96,9 @@ function checkHeaders(response) {
 
 class Browser {
   jar = new Map();
-  async send(path, body, headers = {}) {
+  async send(path, body, headers = {}, method = body === undefined ? "GET" : "POST") {
     const response = await fetch(`http://127.0.0.1:${port}${path}`, {
-      method: body === undefined ? "GET" : "POST",
+      method,
       redirect: "manual",
       signal: AbortSignal.timeout(15000),
       headers: {
@@ -191,8 +200,18 @@ try {
   await check("verified Better Auth session reaches protected data routes", async () => {
     for (const path of ["/api/me", "/api/profile", "/api/time/reference-course"]) {
       assert.equal((await new Browser().send(path)).status, 401, path);
-      // This fixture has no database key: 503 proves the verified actor passed the 401 gate.
-      assert.equal((await browser.send(path)).status, 503, path);
+      // Without a database, 503 proves the verified actor passed the 401 gate; with one, the store answers.
+      // The time route also reads who teaches the course from the course's host, which no fixture serves.
+      const response = await browser.send(path);
+      const served = database && !path.startsWith("/api/time/");
+      assert.equal(response.status, served ? 200 : 503, `${path}: ${await response.clone().text()}`);
+    }
+    if (database) {
+      // The learner's record goes to Postgres and comes back under the session's login (Rule 0072).
+      assert.equal((await browser.send("/api/me", {}, {}, "PUT")).status, 204);
+      assert.equal((await browser.send("/api/me", { onlineStatus: "online" }, {}, "PATCH")).status, 204);
+      assert.equal((await (await browser.send("/api/me")).json()).online_status, "online");
+      assert.equal((await new Browser().send("/api/me")).status, 401);
     }
   });
   const initialJar = new Map(browser.jar);

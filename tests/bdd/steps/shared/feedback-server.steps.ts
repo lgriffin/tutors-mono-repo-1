@@ -5,20 +5,16 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
 
-// The seams: Supabase (as the other reader-server features mock it), the environments, SvelteKit,
-// and the `pg` driver, whose Pool is the PGlite database below, read on every query so a scenario
+// The seams: the environments (a signed-in deployment, backend.ts), SvelteKit, and the `pg`
+// driver, whose Pool is the PGlite database below, read on every query so a scenario
 // can take the database down. With no PRIVATE_VALKEY_URL the reader's server publishes on the
 // process's memory hub, which stands in for Valkey; everything between the routes and them is product code.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
-  createClient: (await import("../../support/supabase-recorder.ts")).createClient
-}));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
 vi.mock("$app/env/public", async () => {
-  const { publicEnv } = await import("../../support/supabase-recorder.ts");
+  const { publicEnv } = await import("../../support/backend.ts");
   const { READER_ORIGIN } = await import("../../support/reader-api.ts");
   return Object.assign(publicEnv, { PUBLIC_READER_URL: READER_ORIGIN });
 });
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 vi.mock("$app/env", () => ({ browser: true, building: false, goto: vi.fn() }));
 const database = vi.hoisted(() => ({ sql: undefined as unknown, down: false }));
 vi.mock("pg", () => {
@@ -42,7 +38,6 @@ import type { Annotation } from "@tutors/domain/feedback";
 import { assistanceTopic, noticeTopic, realtimeHub } from "@tutors/realtime-valkey";
 import { freshBrowser, githubUser, labsOf, publishedCourse } from "../../support/connect.ts";
 import { READER_ORIGIN, readerRequest, serveCourseJson, setReaderSession } from "../../support/reader-api.ts";
-import { privateEnv, publicEnv } from "../../support/supabase-recorder.ts";
 import { readStream, type OpenStream } from "../../support/sse-stream.ts";
 import { committedMigrations, pgliteDatabase } from "../../../support/postgres-store.ts";
 import { migrate } from "@tutors/store-postgres";
@@ -96,24 +91,16 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     await stream?.close();
     stream = undefined;
     database.down = false;
-    privateEnv.DATA_STORE = "";
-    privateEnv.PRIVATE_DATABASE_URL = "";
-    publicEnv.PUBLIC_REALTIME = "";
     as(null);
     await vi.waitFor(() => expect(realtimeHub(undefined).subscribed()).toEqual([]));
   });
 
-  Background(({ Given, And }) => {
+  Background(({ Given }) => {
     Given("the course {string} is published with {number} labs and {string} as its educator", async (_ctx, courseId: string, labs: number, educator: string) => {
-      freshBrowser();
+      await freshBrowser();
       course = publishedCourse(courseId, labs, {}, { educators: [educator], whitelist: [], students: [] });
       await db.sql.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
       await migrate(db.sql, committedMigrations());
-    });
-    And("the reader's server keeps feedback in Postgres and publishes realtime on Valkey", () => {
-      privateEnv.DATA_STORE = "postgres";
-      privateEnv.PRIVATE_DATABASE_URL = "postgres://tutors@db.invalid/tutors";
-      publicEnv.PUBLIC_REALTIME = "valkey";
     });
   });
 

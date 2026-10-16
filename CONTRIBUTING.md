@@ -61,7 +61,7 @@ Open **http://localhost:5173/course/reference-course**. You should see a rendere
 What just happened:
 
 - `pnpm install` resolves the whole workspace. It is large (over a gigabyte of `node_modules`); a devcontainer that avoids the local install is tracked in [#236](https://github.com/tutors-sdk/tutors-mono-repo/issues/236).
-- The copied `.env` sits at the repository root and every app reads it: each app's Vite config sets `envDir` there, and its SvelteKit config sets `kit.env.dir` to match, so the `$env` modules resolve from the same file. It has `PUBLIC_ANON_MODE=TRUE`, which turns off authentication, presence and analytics. No Supabase project or GitHub OAuth app is needed. The other values in the file are placeholders and are ignored in anon mode.
+- The copied `.env` sits at the repository root and every app reads it: each app's Vite config sets `envDir` there, and its SvelteKit config sets `kit.env.dir` to match, so the `$env` modules resolve from the same file. It has `PUBLIC_ANON_MODE=TRUE`, which turns off authentication, presence and analytics. No database, Valkey or GitHub OAuth app is needed. The other values in the file are placeholders and are ignored in anon mode.
 - If you set up Tutors before the root `.env` change, delete any leftover per-app files such as `apps/reader/.env`. No app reads them, so editing one has no effect.
 - `pnpm dev` builds `ui-primitives`, `ui-navigators` and `ui-components` in that order and then starts the reader. The order matters because `ui-components` compiles the stylesheet the apps import.
 - `reference-course` is a published Tutors course. The reader fetches `https://reference-course.netlify.app/tutors.json` and renders it. Any published course id works in the same URL.
@@ -176,7 +176,7 @@ Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `security`, `perf`
 | `metrics` | a series on `/metrics` |
 | `logs` | the shape or volume of the server's log lines |
 | `timing` | response or load-time distributions |
-| `persistence` | what a page writes to Supabase |
+| `persistence` | what a page writes to the store |
 | `bus` | messages on the live bus, per journey and topic |
 | `migration` | a contract migration, see [guides/MIGRATIONS.md](guides/MIGRATIONS.md) |
 | `upgrade` | what survives an upgrade from the production release (the upgrade rehearsal) |
@@ -202,7 +202,7 @@ Rules of thumb:
 - The claim's `reason` is `CHANGELOG <version>: <the entry text>`, or a Rule reference such as `Rule 0031` where the change implements one. TODO(#214): the final Rule id format and a matching `@artefact:<name>` tag on a Rule follow that issue; this section only fixes the artefact vocabulary, which is the harness's.
 - The same words help in the commit subject and PR title (`fix(reader): raise nav contrast (axe, dom)`), so the entry is easy to write from them.
 
-Database changes follow their own rules: read [guides/MIGRATIONS.md](guides/MIGRATIONS.md) before adding a file under `supabase/migrations/`.
+Database changes follow their own rules: read [guides/MIGRATIONS.md](guides/MIGRATIONS.md) before adding a file under `db/migrations/`.
 
 ## Pull Request Process
 
@@ -249,7 +249,7 @@ tutors-mono-repo/
 │   ├── domain/              # Domain ring: course, learning, presence, access, quiz → @tutors/domain
 │   ├── application/         # Ports and use cases; /testing has in-memory adapters → @tutors/application
 │   ├── adapters/
-│   │   ├── driven/          # One technology behind a port each → @tutors/store-supabase, realtime-supabase,
+│   │   ├── driven/          # One technology behind a port each → @tutors/store-postgres, realtime-valkey,
 │   │   │                    #   course-http, render-markdown, profile-localstorage, notes-localstorage, bus-inprocess,
 │   │   │                    #   identity-better-auth, moodle, clock
 │   │   └── driving/         # Svelte state and UI → @tutors/svelte-state, themes, i18n, a11y, tour,

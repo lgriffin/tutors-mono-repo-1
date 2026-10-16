@@ -108,14 +108,3 @@ Feature: Realtime gateway
       And 1 activity event is published
       Then "web-dev-101" counts 2 sent and 3 received
       And "tutors-all-course-access" counts 1 sent and 0 received
-
-  @rule-0316 @ears-event-driven
-  Rule: When the Realtime connection drops, tutors shall reconnect the reader and the whiteboard editor after a jittered exponential delay of at most 30 seconds.
-
-    Scenario: The reader's connection backs off with jitter
-      Given the jitter draw is 0.5
-      Then the reader's reconnect delays for 7 tries are "500, 1000, 2000, 4000, 8000, 15000, 15000" milliseconds
-
-    Scenario: The whiteboard editor's connection backs off with jitter
-      Given the jitter draw is 0.5
-      Then the whiteboard editor's reconnect delays for 7 tries are "500, 1000, 2000, 4000, 8000, 15000, 15000" milliseconds

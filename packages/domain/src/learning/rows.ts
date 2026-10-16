@@ -1,9 +1,9 @@
 /**
  * Rows of the tables Tutors reads and writes, as stored.
  *
- * These are written by hand from the code that uses them; only `app_errors` has a migration in
- * supabase/migrations. When the schema is in migrations, generated types replace this file (step
- * 5 of guides/SHARED-TYPES.md). Tables with no row type here yet:
+ * These are written by hand from the code that uses them; the schema they mirror is the plain SQL
+ * of db/migrations. Generated types from that schema can replace this file (step 5 of
+ * guides/SHARED-TYPES.md). Tables with no row type here yet:
  * `tutors_content_locks`, `tutors-connect-profiles`, `assignments`, `assignments_submissions`,
  * `whiteboard_scenes`.
  *
@@ -67,7 +67,7 @@ export interface LearningRecordRow {
   type: string | null;
 }
 
-/** `app_errors`, from supabase/migrations/20260822_create_app_errors.sql. */
+/** `app_errors`, from db/migrations/20261019000000_create_tutors_store.sql. */
 export interface AppErrorRow {
   id: string; // uuid
   created_at: string; // timestamptz

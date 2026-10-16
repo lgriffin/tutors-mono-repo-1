@@ -1,10 +1,10 @@
 -- ============================================================================
 -- Read-only role for Grafana
 -- ============================================================================
--- Grafana connects as a direct Postgres role, which BYPASSES Supabase RLS. This
--- role is therefore the entire security boundary for what Grafana can see. Grant
--- it access ONLY to the reporting views, not raw PII tables, and never point
--- Grafana at the service_role or a superuser.
+-- Grafana connects as a direct Postgres role. This role is therefore the entire
+-- security boundary for what Grafana can see. Grant it access ONLY to the
+-- reporting views, not raw PII tables, and never point Grafana at the servers'
+-- own database user or a superuser.
 --
 -- Run AFTER reporting_views.sql, against each database Grafana points at:
 --   psql "$CONN" -f grafana_reader.sql

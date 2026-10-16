@@ -1,8 +1,8 @@
 /**
  * The one place this adapter touches the driver.
  *
- * `pg` is loaded lazily, so a deployment on the Supabase store (the default) never pays for it and
- * never fails to start because it is missing. Every adapter here talks to the one-method slice
+ * `pg` is loaded lazily, so a process that never opens the store never pays for it and never fails
+ * to start because it is missing. Every adapter here talks to the one-method slice
  * below, the same seam as live-postgres's, so a test can hand it any Postgres that answers a query
  * (a real server, or PGlite in the unit tests).
  */
@@ -24,7 +24,7 @@ async function loadPool(): Promise<PoolConstructor> {
     const loaded = (await import(/* @vite-ignore */ specifier)) as { Pool: PoolConstructor; default?: { Pool: PoolConstructor } };
     return (loaded.default ?? loaded).Pool;
   } catch (cause) {
-    throw new Error('DATA_STORE=postgres needs the `pg` package (importing "pg" failed)', { cause });
+    throw new Error('The Postgres store needs the `pg` package (importing "pg" failed)', { cause });
   }
 }
 
@@ -69,7 +69,7 @@ export async function run<T>(what: string, query: () => Promise<T>): Promise<T> 
   }
 }
 
-/** A timestamp column as the ISO string the Supabase adapter hands back (drivers differ: a Date or a string). */
+/** A timestamp column as the ISO string the ports promise (drivers differ: a Date or a string). */
 export function iso(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const date = value instanceof Date ? value : new Date(String(value));

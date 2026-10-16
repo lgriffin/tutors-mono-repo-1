@@ -14,7 +14,7 @@
   let { quiz, fallbackTitle }: Props = $props();
 
   // Answers are held in memory only: leaving the page discards them. Recording
-  // them is a separate concern, and needs a Supabase session to write with.
+  // them is a separate concern, and needs a signed-in session to write with.
   let answers = $state<QuizAnswers>({});
   let currentIndex = $state(0);
   let submitted = $state(false);

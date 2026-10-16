@@ -1,5 +1,5 @@
 # Literal (no env vars) Postgres data source for a NATIVELY-installed Grafana
-# pointed at a local `supabase start` instance. Symlink this into Grafana's
+# pointed at the local Postgres store (`docker compose --profile store-postgres up`). Symlink this into Grafana's
 # provisioning dir (see README "Quick start — native Grafana"):
 #
 #   sudo ln -s "$PWD/native/datasource-local.yml" \
@@ -10,18 +10,18 @@
 apiVersion: 1
 
 datasources:
-  - name: Tutors Local (Supabase)
+  - name: Tutors Local
     uid: tutors-local
     type: postgres
     access: proxy
-    url: localhost:54322
-    user: postgres
+    url: localhost:5433
+    user: tutors
     isDefault: true
     jsonData:
-      database: postgres
+      database: tutors
       sslmode: disable
       postgresVersion: 1500
       timescaledb: false
     secureJsonData:
-      password: postgres
+      password: tutors
     editable: true

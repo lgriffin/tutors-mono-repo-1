@@ -181,7 +181,7 @@ module.exports = {
         path: "^apps/[^/]+/src/",
         pathNot: "^apps/[^/]+/src/(lib/server/|hooks\\.server\\.ts$)|^apps/[^/]+/src/routes/.*\\+(server|page\\.server|layout\\.server)\\.ts$|\\.server\\.ts$"
       },
-      to: { path: "(^|/)@supabase/", dependencyTypesNot: ["type-only"] }
+      to: { path: "(^|/)(@supabase/|(pg|pg-[^/]+|redis|@redis/[^/]+|@electric-sql/pglite)(/|$))", dependencyTypesNot: ["type-only"] }
     },
     {
       name: "no-app-to-app",

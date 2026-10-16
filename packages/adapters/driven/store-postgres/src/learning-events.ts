@@ -1,8 +1,7 @@
 /**
- * Learning records in Postgres: a page load and a 30-second tick, each one statement, as the
- * Supabase functions record_page_view and record_heartbeat do (supabase/migrations/
- * 20261014_record_page_view_and_heartbeat.sql). The reader's server writes them for the login its
- * session verified (Rule 0072); `postgresLearningEventSink` is the application's LearningEventSink.
+ * Learning records in Postgres: a page load and a 30-second tick, each one statement. The reader's
+ * server writes them for the login its session verified (Rule 0072); `postgresLearningEventSink` is
+ * the application's LearningEventSink.
  */
 import type { LearningEventSink } from "@tutors/application/ports";
 import { run, type SqlClient } from "./client.ts";

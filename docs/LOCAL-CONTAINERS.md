@@ -8,7 +8,7 @@ For the image contract, environment variables and the Kubernetes/OpenShift manif
 
 - Docker Desktop 4.x or Docker Engine 23+ with Compose v2 (`docker compose version` should print `v2` or later). BuildKit is on by default in these versions and is required for the cache mounts the Dockerfile uses.
 - About 4 GB of free disk for the build cache and images.
-- No `.env` is needed. Without one the apps start in anonymous mode, which needs no Supabase project or GitHub OAuth app.
+- No `.env` is needed. Without one the apps start in anonymous mode, which needs no database, Valkey or GitHub OAuth app.
 
 You do not need Node or pnpm installed; everything is built inside the image.
 
@@ -52,7 +52,7 @@ The reader is then at http://localhost:3010. The local Caddy proxy preserves tha
 Every app exposes two endpoints:
 
 - `GET /healthz/live` returns `{"status":"ok"}` with no dependencies. Compose and Kubernetes use it for liveness.
-- `GET /healthz` also reports Supabase reachability and recent error counts. Kubernetes uses it for readiness.
+- `GET /healthz` also reports Postgres store reachability and recent error counts (reader and time). Kubernetes uses it for readiness.
 
 ```bash
 curl http://localhost:3000/healthz/live
@@ -74,13 +74,19 @@ docker compose up -d
 
 Prometheus is at http://localhost:9090 and Grafana at http://localhost:3004 (admin / admin). The Prometheus data source and the alert rules are provisioned automatically. If you changed the app ports, edit `observability/prometheus/prometheus.yml` to match.
 
-## Running with a real Supabase project and GitHub login
+## Running with a database, realtime and GitHub login
+
+Two Compose profiles serve the backend: `store-postgres` is the Postgres store the reader and time keep student data in (applying `db/migrations` on its first start; from the host it is `postgres://tutors:tutors@localhost:5433/tutors`), and `realtime-valkey` is the Valkey the reader and live carry realtime over (`redis://localhost:6379` from the host). The reader, time and live containers reach them over the Compose network by themselves:
+
+```bash
+docker compose --profile store-postgres --profile realtime-valkey up --build
+```
+
+Apply later migrations from the host with `PRIVATE_DATABASE_URL=postgres://tutors:tutors@localhost:5433/tutors pnpm db:migrate`.
 
 Copy `.env.example` to `.env` in the repository root and fill in the values. Compose reads it automatically for every service. At minimum:
 
 ```
-PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-PUBLIC_SUPABASE_ANON_KEY=...
 PUBLIC_ANON_MODE=
 PRIVATE_AUTH_GITHUB_ID=...
 PRIVATE_AUTH_GITHUB_SECRET=...

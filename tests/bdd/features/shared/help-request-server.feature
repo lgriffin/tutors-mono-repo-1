@@ -4,16 +4,14 @@ Feature: Help requests on the reader's server
   I want help requests kept and changed only by the reader's server, as the person signed in
   So that nobody can ask, answer or watch the queue as someone else
 
-  Help requests are kept in Postgres (DATA_STORE=postgres, assistance_requests) and their changes
-  travel on Valkey (PUBLIC_REALTIME=valkey) on the course's help queue topic; no Supabase table or
-  channel is added for them. The browser posts to /api/assistance; the reader's server runs the
+  Help requests are kept in Postgres (assistance_requests) and their changes travel on Valkey on
+  the course's help queue topic. The browser posts to /api/assistance; the reader's server runs the
   Assistance use cases as the session's actor. Tutors Live's course page reads and streams the
   queue from the reader's origin with the lecturer's session. These Rules drive the reader's routes
   over a Postgres database (PGlite) and the process's memory hub, which stands in for Valkey.
 
   Background:
     Given the course "cs101" is published with 2 labs and "ellen" as its educator
-    And the reader's server keeps help requests in Postgres and publishes realtime on Valkey
 
   @rule-0390 @ears-ubiquitous
   Rule: Tutors shall accept a help request, acknowledgement or resolution only on the reader's server from the signed-in actor, refusing a visitor who is not signed in with 401 and a student acting as the lecturer with 403.

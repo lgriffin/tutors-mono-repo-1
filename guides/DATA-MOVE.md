@@ -1,9 +1,10 @@
 # Moving the data out of Supabase
 
-The last step of the Supabase exit (S4) copies every row the Postgres store keeps out of the
-Supabase project, switches the deployment to `DATA_STORE=postgres` and `PUBLIC_REALTIME=valkey`,
-and, one release later, deletes the Supabase adapters. `pnpm db:move` does the copy and proves it
-(Rules 0486 to 0489); this page is the order to run it in.
+Tutors keeps its rows in the Postgres store and carries realtime over Valkey; the Supabase
+adapters are gone. `pnpm db:move` copies every row the store keeps out of a Supabase project into
+the store and proves the copy (Rules 0486 to 0489): it is how the deployment's rows left Supabase,
+and how rows come back from the paused project's backups if they are ever needed. This page is
+the order to run it in.
 
 ## What moves and what does not
 
@@ -55,21 +56,18 @@ Pick a quiet hour; the reader serves courses throughout, but nothing is recorded
    `SOURCE_DATABASE_URL=… PRIVATE_DATABASE_URL=… pnpm db:move run`. Add `--replace` only when the
    store holds rows from an earlier attempt; without it a store table that already holds rows
    refuses the whole move. Every line must read `ok` and the last `all N tables match`.
-3. **Switch.** In the reader's and time's ConfigMap set `DATA_STORE: postgres`, and in the reader's
-   and Live's set `PUBLIC_REALTIME: valkey` (with `PRIVATE_VALKEY_URL` in their Secrets), then scale
-   the reader and time back up. Check a lab visit lands in `learning_records` in the store.
+3. **Start the servers again.** Scale the reader and time back up, with `PRIVATE_DATABASE_URL`
+   (reader and time) and `PRIVATE_VALKEY_URL` (reader and Live) in their Secrets. Check a lab visit
+   lands in `learning_records` in the store.
 4. **Keep the evidence.** Keep the `pnpm db:move run` output with the release notes. The archive it
    names (`supabase-move-<time>.dump`) holds student data: keep it outside git, and delete it once
    the release is signed off.
 
-**Rolling back.** Until the Supabase adapters are deleted, setting `DATA_STORE` and
-`PUBLIC_REALTIME` back to empty returns the deployment to Supabase, which still holds every row up
-to the freeze; rows written to the store after the switch stay in the store.
+**Rolling back.** The Supabase project still holds every row up to the freeze, but no release
+reads it any more: rolling back means restoring the Supabase adapters from git (the release before
+they were deleted). Rows written to the store after the move stay in the store.
 
-## Afterwards: deleting Supabase
+## Afterwards
 
-The release after the switch deletes `store-supabase`, `realtime-supabase`, the `supabase/`
-directory and the `DATA_STORE` and `PUBLIC_REALTIME` switches. Merge it only once the deployment
-has run on Postgres and Valkey for a release; after it, rolling back means restoring the Supabase
-adapters from git. The Supabase project itself can be paused once that release is out, and deleted
-when nobody needs its backups.
+Pause the Supabase project once the release is signed off, and delete it when nobody needs its
+backups.

@@ -1,18 +1,15 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
 
-// The seams: Supabase (as server-data-access mocks it), the environments, SvelteKit, and the `pg`
-// driver, whose Pool is the PGlite database below, so the reader composes store-postgres for real.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({
-  createClient: (await import("../../support/supabase-recorder.ts")).createClient
-}));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
+// The seams: the environments (a signed-in deployment, backend.ts), SvelteKit, and the `pg` driver,
+// whose Pool is the PGlite database below (its own, so a scenario can rebuild the schema), so the
+// reader composes store-postgres for real.
 vi.mock("$app/env/public", async () => {
-  const { publicEnv } = await import("../../support/supabase-recorder.ts");
+  const { publicEnv } = await import("../../support/backend.ts");
   const { READER_ORIGIN } = await import("../../support/reader-api.ts");
   return Object.assign(publicEnv, { PUBLIC_READER_URL: READER_ORIGIN });
 });
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 vi.mock("$app/env", () => ({ browser: true, building: false, goto: vi.fn() }));
 const store = vi.hoisted(() => ({ sql: undefined as unknown, pools: [] as string[] }));
 vi.mock("pg", () => {
@@ -58,7 +55,7 @@ import {
 } from "@tutors/store-postgres";
 import { freshBrowser, githubUser, labsOf, publishedCourse, signIn } from "../../support/connect.ts";
 import { readerRequest } from "../../support/reader-api.ts";
-import { privateEnv, recorder } from "../../support/supabase-recorder.ts";
+import { privateEnv } from "../../support/backend.ts";
 import { committedMigrations, pgliteDatabase } from "../../../support/postgres-store.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/postgres-store.feature");
@@ -106,7 +103,9 @@ const STORE_TABLES = [
   "assistance_requests"
 ];
 
-const DATABASE_URL = "postgres://tutors@db.invalid/tutors";
+/** The database URL backend.ts deploys with; each scenario that deploys names its own, so the reader composes afresh. */
+const DEPLOYED_URL = privateEnv.PRIVATE_DATABASE_URL;
+let deployments = 0;
 
 // Opened before any scenario stubs the browser's globals (PGlite would take a stubbed `window` for a browser).
 const db = await pgliteDatabase();
@@ -131,19 +130,12 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     store.pools.length = 0;
   };
   const applyCommitted = () => migrate(db.sql, committedMigrations());
-  const supabaseUntouched = () => {
-    expect(recorder.tableCalls).toEqual([]);
-    expect(recorder.rpcCalls).toEqual([]);
+  let databaseUrl = DEPLOYED_URL;
+  const deployed = () => {
+    databaseUrl = `postgres://tutors@db.invalid/tutors?deployment=${++deployments}`;
+    privateEnv.PRIVATE_DATABASE_URL = databaseUrl;
   };
-  const deployed = (_ctx: unknown, dataStore: string) => {
-    privateEnv.DATA_STORE = dataStore;
-    privateEnv.PRIVATE_DATABASE_URL = DATABASE_URL;
-  };
-  const signedIn = async (_ctx: unknown, name: string) => {
-    await signIn(githubUser(name));
-    recorder.tableCalls.length = 0;
-    recorder.rpcCalls.length = 0;
-  };
+  const signedIn = (_ctx: unknown, name: string) => signIn(githubUser(name));
   const postPageLoad = async (_ctx: unknown, courseId: string) => {
     expect(course.courseId).toBe(courseId);
     response = await readerRequest("POST", "/api/analytics", { kind: "page-load", courseId, loId: firstLab().route, loType: "lab", day: today() });
@@ -152,13 +144,12 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
   const tables = async () => (await db.sql.query<{ name: string }>(`SELECT tablename AS name FROM pg_tables WHERE schemaname = current_schema()`)).rows.map((r) => r.name);
 
   AfterEachScenario(() => {
-    privateEnv.DATA_STORE = "";
-    privateEnv.PRIVATE_DATABASE_URL = "";
+    privateEnv.PRIVATE_DATABASE_URL = DEPLOYED_URL;
   });
 
   Background(({ Given }) => {
     Given("the course {string} is published with {number} labs and {string} as its educator", async (_ctx, courseId: string, labs: number, educator: string) => {
-      freshBrowser();
+      await freshBrowser();
       course = publishedCourse(courseId, labs, {}, { educators: [educator], whitelist: [], students: [] });
       await freshDatabase();
     });
@@ -193,10 +184,10 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
   );
 
   Rule(
-    "Where a server is deployed with DATA_STORE set to postgres, the reader shall read and write student data in the Postgres database at PRIVATE_DATABASE_URL instead of Supabase.",
+    "The reader's server shall read and write student data in the Postgres database at PRIVATE_DATABASE_URL.",
     ({ RuleScenario }) => {
       RuleScenario("A lab visit on a Postgres deployment is stored in Postgres", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with DATA_STORE {string} and a database URL", deployed);
+        Given("the reader's server is deployed with a database URL", deployed);
         And("{string} is signed in to the reader", signedIn);
         When("the browser posts a page load of the first lab of {string}", postPageLoad);
         Then("the Postgres database holds the learning record and calendar row of {string}", async (_ctx, login: string) => {
@@ -205,26 +196,13 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
           expect(Number(records.rows[0].count)).toBe(1);
           const calendar = await db.sql.query(`SELECT studentid, courseid, id::text AS day FROM calendar`);
           expect(calendar.rows).toEqual([{ studentid: login, courseid: course.courseId, day: today() }]);
-          expect(store.pools).toContain(DATABASE_URL);
-        });
-        And("nothing was read from or written to Supabase's tables", supabaseUntouched);
-      });
-
-      RuleScenario("A lab visit on a deployment without DATA_STORE is stored in Supabase", ({ Given, And, When, Then }) => {
-        Given("the reader's server is deployed with DATA_STORE {string} and a database URL", deployed);
-        And("{string} is signed in to the reader", signedIn);
-        When("the browser posts a page load of the first lab of {string}", postPageLoad);
-        Then("Supabase recorded the page load of {string}", (_ctx, login: string) => {
-          expect(recorder.rpcCalls.filter((c) => c.fn === "record_page_view").map((c) => c.args.p_student_id)).toEqual([login]);
-        });
-        And("the Postgres database holds no learning record", async () => {
-          expect((await db.sql.query(`SELECT 1 FROM learning_records`)).rows).toEqual([]);
+          expect(store.pools).toEqual([databaseUrl]);
         });
       });
     }
   );
 
-  Rule("Tutors shall hold the Postgres store to the same contract suites as the Supabase and in-memory stores for every store port.", ({ RuleScenario }) => {
+  Rule("Tutors shall hold the Postgres store to the same contract suites as the in-memory stores for every store port.", ({ RuleScenario }) => {
     RuleScenario("The Postgres store keeps every store port's contract", ({ When, Then }) => {
       const failures: string[] = [];
       When(
@@ -265,12 +243,11 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
   });
 
   Rule(
-    "If a server is deployed with DATA_STORE set to postgres but without PRIVATE_DATABASE_URL, then the reader shall answer 503 to each of its data routes and read or write no row.",
+    "If a server is deployed without PRIVATE_DATABASE_URL, then the reader shall answer 503 to each of its data routes and read or write no row.",
     ({ RuleScenario }) => {
       RuleScenario("A Postgres deployment with no database URL", ({ Given, And, When, Then }) => {
         Given("{string} is signed in to the reader", signedIn);
-        And("the reader's server is deployed with DATA_STORE {string} and no database URL", (_ctx, dataStore: string) => {
-          privateEnv.DATA_STORE = dataStore;
+        And("the reader's server is deployed with no database URL", () => {
           privateEnv.PRIVATE_DATABASE_URL = "";
           store.pools.length = 0;
         });
@@ -279,9 +256,10 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
         });
         Then("the reader answers {int}", (_ctx, status: number) => {
           expect(response.status).toBe(status);
+        });
+        And("the reader opened no connection to a database", () => {
           expect(store.pools).toEqual([]);
         });
-        And("nothing was read from or written to Supabase's tables", supabaseUntouched);
       });
     }
   );

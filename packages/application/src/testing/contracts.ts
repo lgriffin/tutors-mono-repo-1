@@ -1,7 +1,7 @@
 /**
  * Contract suites: the behaviour every adapter of a port must show, as plain async cases with no
  * test framework in them. A test file runs them against the in-memory adapter and against a real
- * one (recorded Supabase, a fixture server), so the two cannot drift.
+ * one (a real Postgres or PGlite, a fixture server), so the two cannot drift.
  */
 import type { PresenceEvent } from "@tutors/domain/presence";
 import type { AccessStore } from "../ports/access-store.ts";

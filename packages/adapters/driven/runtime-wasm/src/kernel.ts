@@ -4,7 +4,7 @@
  * The kernel lives in an iframe carrying `sandbox="allow-scripts"` and nothing else. That
  * frame has an opaque origin, which is the point: student code — and course-author code,
  * which arrives from a third-party repository and runs in every student's browser — can
- * reach neither the reader's storage nor its Supabase session. Inside the frame the code
+ * reach neither the reader's storage nor its signed-in session. Inside the frame the code
  * runs in a worker, so a runaway loop is stopped by discarding the worker rather than by
  * freezing the tab.
  *

@@ -1,11 +1,10 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { afterAll, expect, vi } from "vitest";
 
-// The seams: Supabase (by the path product code resolves, and by name for a hoisted install) and the environments.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("$app/env/public", async () => (await import("../../support/supabase-recorder.ts")).publicEnv);
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
+// The seams: the `pg` driver (the in-process store, backend.ts) and the environments.
+vi.mock("pg", async () => (await import("../../support/backend.ts")).pgModule);
+vi.mock("$app/env/public", async () => (await import("../../support/backend.ts")).publicEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 vi.mock("$app/env", () => ({ browser: true, building: false, dev: false }));
 
 import * as fs from "node:fs";
@@ -16,7 +15,7 @@ import { mergeWorkspace } from "../../../../packages/domain/src/course/playgroun
 import { readerApiPlaygroundSnapshots } from "../../../../packages/adapters/driven/data-api/src/index.ts";
 import type { PlaygroundSnapshot, PlaygroundSnapshots } from "../../../../packages/application/src/ports/index.ts";
 import { installReaderFetch, readerRequest, resetReaderApi, serveCourseJson, setReaderSession } from "../../support/reader-api.ts";
-import { privateEnv, recorder } from "../../support/supabase-recorder.ts";
+import { backend, privateEnv } from "../../support/backend.ts";
 import type { Lo, Playground, Topic } from "../../../../packages/domain/src/course/types/learning-objects";
 
 /**
@@ -32,8 +31,6 @@ vi.mock("@tutors/logger", async (importOriginal) => ({ ...(await importOriginal<
 
 const feature = await loadFeature("tests/bdd/features/instructor/playground-authoring.feature");
 
-const MIGRATION = path.join(process.cwd(), "supabase/migrations/20261018000200_create_playground_snapshots.sql");
-
 function write(file: string, contents: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, contents);
@@ -41,7 +38,7 @@ function write(file: string, contents: string): void {
 
 /** The course the review scenarios hand work in to; Grace teaches it. */
 const COURSE = "playground-course";
-const SERVICE_KEY = privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY;
+const DATABASE_URL = privateEnv.PRIVATE_DATABASE_URL;
 
 const person = (name: string) => {
   const login = name.toLowerCase();
@@ -105,11 +102,11 @@ describeFeature(feature, ({ Background, Rule }) => {
   let submissions: PlaygroundSnapshot[];
 
   /** The browser's snapshot store over the reader's data API, with `name` signed in to the reader. */
-  const signedIn = (name: string) => {
-    recorder.reset();
+  const signedIn = async (name: string) => {
+    await backend.reset();
     resetReaderApi();
     installReaderFetch();
-    privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = SERVICE_KEY;
+    privateEnv.PRIVATE_DATABASE_URL = DATABASE_URL;
     serveCourseJson(COURSE, { title: "Programming", enrollment: { educators: ["grace"] } });
     setReaderSession(person(name));
     snapshots = readerApiPlaygroundSnapshots();
@@ -123,9 +120,9 @@ describeFeature(feature, ({ Background, Rule }) => {
   const paths = (name: string) => playground(name).files.map((file) => file.path);
 
   Background(({ Given }) => {
-    Given("an instructor has authored a course with playground folders", () => {
+    Given("an instructor has authored a course with playground folders", async () => {
       if (!scratch) scratch = authorCourse();
-      signedIn("Ada");
+      await signedIn("Ada");
     });
   });
 
@@ -231,8 +228,8 @@ describeFeature(feature, ({ Background, Rule }) => {
   Rule("While an instructor teaches a course, the reader shall list the submissions handed in for an exercise with the output each student last saw.", ({ RuleScenario }) => {
     RuleScenario("Reviewing what students handed in", ({ Given, And, When, Then }) => {
       Given("an educator of the course is signed in to the reader", () => signedIn("Grace"));
-      And("{string} handed in {string} that printed {string} and failed", (_ctx, name: string, _file: string, output: string) => {
-        recorder.seed("playground_snapshots", [snapshotRow(name, output, false)]);
+      And("{string} handed in {string} that printed {string} and failed", async (_ctx, name: string, _file: string, output: string) => {
+        await backend.seed("playground_snapshots", [snapshotRow(name, output, false)]);
       });
       When("the instructor opens the exercise's submissions", opensSubmissions);
       Then("the instructor reviews the course", () => expect(reviews).toBe(true));
@@ -255,29 +252,23 @@ describeFeature(feature, ({ Background, Rule }) => {
   });
 
   Rule("If a page claims a student teaches a course, then the reader shall grant review from the course's published educators, read by its server, and from nothing else.", ({ RuleScenario }) => {
-    const policies = fs.readFileSync(MIGRATION, "utf8");
-
     RuleScenario("A student cannot make themselves an instructor", ({ Given, When, Then, And }) => {
       Given("a student of the course is signed in to the reader", studentSignedIn);
       When("the instructor opens the exercise's submissions", opensSubmissions);
       Then("the reader does not treat the student as a reviewer", notReviewer);
       And("the reader answers 403 when the student asks for {string}'s submission", async (_ctx, name: string) => {
-        recorder.seed("playground_snapshots", [snapshotRow(name, "1", true)]);
+        await backend.seed("playground_snapshots", [snapshotRow(name, "1", true)]);
         const response = await readerRequest("GET", `/api/playground?courseId=${COURSE}&loId=lo&studentId=${name.split(" ")[0].toLowerCase()}`);
         expect(response.status).toBe(403);
-      });
-      And("the submissions table is closed to the anonymous role", () => {
-        expect(policies).toContain("ENABLE ROW LEVEL SECURITY");
-        expect(policies).not.toMatch(/TO\s+anon/i);
       });
     });
   });
 
   Rule("If the reader's server has no database to keep hand-ins in, then the reader shall offer no handing in while the exercise itself still runs.", ({ RuleScenario }) => {
-    RuleScenario("A deployment with no service key", ({ Given, When, Then, And }) => {
-      Given("the reader's server has no service key", () => {
-        signedIn("Ada");
-        privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = "";
+    RuleScenario("A deployment with no database", ({ Given, When, Then, And }) => {
+      Given("the reader's server has no database URL", async () => {
+        await signedIn("Ada");
+        privateEnv.PRIVATE_DATABASE_URL = "";
       });
       When("the instructor opens the exercise's submissions", opensSubmissions);
       Then("handing in is not available", () => expect(available).toBe(false));

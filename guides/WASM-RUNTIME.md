@@ -16,7 +16,7 @@ defects, and any broader execution capability had to fix all of them regardless:
 | Pyodide fetched from `cdn.jsdelivr.net` | The reader's CSP (`apps/reader/netlify.toml`) allowed scripts from `'self'` and `https://esm.sh` only, and omitted `'wasm-unsafe-eval'`. Execution could not work in production as configured. |
 | It ran on the main thread | `while True:` froze the tab permanently. A stop button was impossible. |
 | One interpreter on `window` | State bled between cells, between notebooks, and across navigations. No kernel restart. |
-| It ran on the reader's origin | Pyodide's `js` module — and any JS/TS runtime added later — reached `localStorage`, IndexedDB and the Supabase anon client. |
+| It ran on the reader's origin | Pyodide's `js` module — and any JS/TS runtime added later — reached `localStorage`, IndexedDB and the reader's same-origin `/api` routes. |
 
 The last one is why the design leads with isolation rather than with languages.
 
@@ -44,7 +44,7 @@ duration of its own run.
 
 Execution happens in `apps/reader/static/runtimes/runtime-host.html`, framed with
 `sandbox="allow-scripts"` and **without** `allow-same-origin`. The opaque origin is what
-denies student code access to reader storage, cookies and the Supabase client. The page and
+denies student code access to reader storage, cookies and the reader's `/api` routes. The page and
 the frame talk over `postMessage`, namespaced `tutors-runtime` and carrying a per-kernel
 token; the kernel additionally checks that a message came from its own frame's
 `contentWindow`.
@@ -170,16 +170,15 @@ of the files it is about. No global COOP/COEP.
 ### Real identity on hand-ins
 
 Student source code is handed in only through the reader's server: `PUT /api/playground` stores the
-signed-in student's workspace under the session's login with the service key, whatever the body
+signed-in student's workspace under the session's login in the Postgres store, whatever the body
 names, and `DELETE /api/playground` withdraws only the session's own (Rule 0475). `GET
 /api/playground` gives a student their own snapshot and an educator of the course every student's;
 the route decides that from the course's own `tutors.json` (`enrollment.educators`) or
 `PRIVATE_TUTORS_ADMINS`, through `can(actor, "playground:view", course)`, so a page cannot assert it
-(Rules 0435 to 0437). Without the service key the route answers 503 and handing in does not appear.
+(Rules 0435 to 0437). Without a database (`PRIVATE_DATABASE_URL`) the route answers 503 and handing in does not appear.
 
-`playground_snapshots` (`supabase/migrations/20261018000200_create_playground_snapshots.sql`) has
-row-level security and no anon policy; its policies on a token's claims date from when the browser
-held a minted token, and the server-side contract step drops them with every other browser grant.
+`playground_snapshots` (`db/migrations/20261019000000_create_tutors_store.sql`) is reached only by
+the reader's server; no browser connects to the database.
 
 ### Snapshot view
 
@@ -189,8 +188,10 @@ submissions for an exercise and reads any of them, read-only.
 
 ### Live attach
 
-A Realtime **broadcast** channel `playground:{courseId}:{loId}`
-(`community/src/services/playground-live.svelte.ts`), modelled on `presence.svelte.ts`.
+A realtime topic `playground:{courseId}:{loId}`
+(`community/src/services/playground-live.svelte.ts`, over `@tutors/realtime-valkey`): the student's
+tab publishes through the reader's `POST /api/realtime/publish` and the lecturer's streams it from
+`GET /api/realtime/stream`, which sends the work only to a signed-in educator of the course.
 Nothing is stored. It is off until the student ticks it on, throttled to 1.5 s, ends when
 they untick it or leave the page, and shows a "your lecturer is watching" indicator while
 anyone is. Read-only: no remote editing.

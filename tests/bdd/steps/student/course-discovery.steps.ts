@@ -1,12 +1,11 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { afterAll, beforeAll, expect, vi } from "vitest";
 
-// Supabase and the environments are the only stand-ins: the catalogue page's load function, the
-// reader's GET /api/catalogue and the catalogue store it reads through are the real ones.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("$app/env/public", async () => (await import("../../support/supabase-recorder.ts")).publicEnv);
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
+// The `pg` driver (the in-process store) and the environments are the only stand-ins: the catalogue
+// page's load function, the reader's GET /api/catalogue and the Postgres catalogue it reads through are the real ones.
+vi.mock("pg", async () => (await import("../../support/backend.ts")).pgModule);
+vi.mock("$app/env/public", async () => (await import("../../support/backend.ts")).publicEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 
 import log from "@tutors/logger";
 import { flattenLos, type Composite, type Course, type Lo } from "../../../../packages/jsr/model/src/tutors.ts";
@@ -14,19 +13,19 @@ import { load as loadCataloguePage } from "../../../../apps/catalogue/src/routes
 import type { LoShape } from "../../../support/arbitraries/course-tree.ts";
 import { labShape, loadCourse, shape } from "../../support/course.ts";
 import { installReaderFetch, READER_ORIGIN, resetReaderApi } from "../../support/reader-api.ts";
-import { privateEnv, publicEnv, recorder } from "../../support/supabase-recorder.ts";
+import { backend, privateEnv, publicEnv } from "../../support/backend.ts";
 
-const SERVICE_KEY = privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY;
+const DATABASE_URL = privateEnv.PRIVATE_DATABASE_URL;
 
-beforeAll(() => {
-  recorder.reset();
+beforeAll(async () => {
+  await backend.reset();
   resetReaderApi();
   installReaderFetch();
   publicEnv.PUBLIC_READER_URL = READER_ORIGIN;
 });
 afterAll(() => {
   delete publicEnv.PUBLIC_READER_URL;
-  privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = SERVICE_KEY;
+  privateEnv.PRIVATE_DATABASE_URL = DATABASE_URL;
   vi.unstubAllGlobals();
 });
 
@@ -48,9 +47,9 @@ describeFeature(feature, ({ Rule }) => {
 
       const record = (row: CatalogueRow) => ({ id: row.id, title: row.title, credits: `${row.title} team`, img: `https://${row.id}.netlify.app/course.png` });
 
-      Given("the catalogue contains the courses:", (_ctx, table: CatalogueRow[]) => {
+      Given("the catalogue contains the courses:", async (_ctx, table: CatalogueRow[]) => {
         rows = table;
-        recorder.seed(
+        await backend.seed(
           "tutors-connect-courses",
           rows.map((row, i) => ({
             course_id: row.id,
@@ -131,8 +130,9 @@ describeFeature(feature, ({ Rule }) => {
       let data: { courseRecords: CourseRecord[]; studentCount: number };
       let logError: ReturnType<typeof vi.spyOn>;
 
-      Given("the reader's server has no service key", () => {
-        privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = "";
+      Given("the reader's server has no database configured", () => {
+        privateEnv.PRIVATE_DATABASE_URL = "";
+        backend.queries.length = 0;
         logError = vi.spyOn(log, "error");
       });
       When("a student opens the catalogue", async () => {
@@ -140,6 +140,8 @@ describeFeature(feature, ({ Rule }) => {
       });
       Then("the catalogue shall display no courses", () => {
         expect(data.courseRecords).toEqual([]);
+        // Nothing was asked of a store: the reader's server has none.
+        expect(backend.queries).toEqual([]);
       });
       And("the catalogue shall show a student count of 0", () => {
         expect(data.studentCount).toBe(0);
@@ -149,7 +151,7 @@ describeFeature(feature, ({ Rule }) => {
           expect(logError).not.toHaveBeenCalled();
         } finally {
           logError.mockRestore();
-          privateEnv.PRIVATE_SUPABASE_SERVICE_ROLE_KEY = SERVICE_KEY;
+          privateEnv.PRIVATE_DATABASE_URL = DATABASE_URL;
         }
       });
     });

@@ -38,12 +38,12 @@ Feature: Error Handling
       | a null document                     |
 
   @ears-unwanted
-  Scenario: Supabase query failure
+  Scenario: Database query failure
     Given the catalogue holds 2 courses
-    And Supabase answers queries on "tutors-connect-courses" with the error "DB down"
+    And the database answers queries on "tutors-connect-courses" with the error "DB down"
     When the catalogue is read
     Then the catalogue shall fall back to an empty list
     And the course count shall fall back to 0
-    And the catalogue service shall log the error "Error fetching courses:"
-    When Supabase recovers and the catalogue is read again
+    And the catalogue service shall log the error "Reading the catalogue failed:"
+    When the database recovers and the catalogue is read again
     Then the catalogue shall list 2 courses

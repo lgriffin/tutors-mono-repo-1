@@ -8,7 +8,7 @@
 -- schema the Tutors app code reads/writes (not docs/DATA-INVENTORY.md, which is
 -- out of date as of 2026-08-31).
 --
--- Run against each database Grafana points at (local Supabase and/or staging):
+-- Run against each database Grafana points at (the local Postgres store and/or staging):
 --   psql "$CONN" -f reporting_views.sql
 -- Then run grafana_reader.sql to grant the read-only role access to them.
 -- ============================================================================

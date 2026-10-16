@@ -2,7 +2,7 @@
  * Reads of `calendar`, `learning_records`, `tutors-connect-users`, the catalogue row and the Moodle
  * assignments: the application's LearningRecords port, `timeRows` included (everything Tutors Time
  * shows about a course, read by the reader's server for GET /api/time/[courseId]). Rows come back in
- * the shapes the Supabase adapter hands back: dates as `YYYY-MM-DD`, timestamps as ISO strings,
+ * the shapes the ports promise: dates as `YYYY-MM-DD`, timestamps as ISO strings,
  * counts as numbers.
  */
 import type { CalendarEntry, LearningRecord, TutorsConnectUser, TutorsTimeAssignment, TutorsTimeRows } from "@tutors/domain/learning";
@@ -32,7 +32,7 @@ function readCalendar(sql: SqlClient, courseId: string, start?: string | null, e
   return sql.query(`${CALENDAR} WHERE courseid = $1 AND ($2::date IS NULL OR id >= $2::date) AND ($3::date IS NULL OR id <= $3::date) ORDER BY id`, [courseId, start || null, end || null]);
 }
 
-/** A failed read is logged and answered empty, as the Supabase adapter's reads are. */
+/** A failed read is logged and answered empty. */
 async function orEmpty<T>(what: string, read: () => Promise<T[]>): Promise<T[]> {
   try {
     return await read();
@@ -42,7 +42,7 @@ async function orEmpty<T>(what: string, read: () => Promise<T[]>): Promise<T[]> 
   }
 }
 
-/** The course's Moodle assignments; a failed read is logged and answered empty, so the rest of the Time rows still show (as the Supabase adapter does). */
+/** The course's Moodle assignments; a failed read is logged and answered empty, so the rest of the Time rows still show. */
 async function readAssignments(sql: SqlClient, courseId: string): Promise<TutorsTimeAssignment[]> {
   const rows = await orEmpty("assignments", async () =>
     (await sql.query(

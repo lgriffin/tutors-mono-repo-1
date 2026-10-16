@@ -1,6 +1,6 @@
 /**
  * The Realtime port. Tutors code names topics, publishes and subscribes through a gateway; an adapter
- * translates that into one broker's protocol. Supabase Realtime is the first adapter. The budget,
+ * translates that into one broker's protocol. Valkey with server-sent events is the adapter. The budget,
  * backoff and counting live in the gateway so that every adapter gets them.
  */
 
@@ -120,7 +120,7 @@ interface Entry {
 
 export function createRealtimeGateway({ adapter, budget = DEFAULT_BUDGET, random = () => Math.random(), onError = () => {} }: GatewayDeps): RealtimeGateway {
   const entries = new Map<Topic, Entry>();
-  /** Topics being left: Supabase reuses a channel by topic, so a rejoin waits for the leave. */
+  /** Topics being left: an adapter may reuse a channel by topic, so a rejoin waits for the leave. */
   const leaving = new Map<Topic, Promise<unknown>>();
   let counts: Record<string, TopicCounts> = {};
   let windowStart = 0;

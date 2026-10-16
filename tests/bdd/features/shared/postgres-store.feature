@@ -1,7 +1,7 @@
 Feature: Student data in plain Postgres
-  As the team moving Tutors off Supabase
+  As the team running Tutors
   I want the reader and time servers to keep student data in a Postgres database we run ourselves
-  So that one release can switch a deployment between Supabase and Postgres, and the next can drop Supabase
+  So that a deployment's student data lives in plain Postgres with a schema we migrate ourselves
 
   Background:
     Given the course "web-dev-101" is published with 2 labs and "eve" as its educator
@@ -15,41 +15,31 @@ Feature: Student data in plain Postgres
       And no table has row-level security or a policy
       And no migration names a Supabase role or the auth schema
 
-  @rule-0477 @ears-optional
-  Rule: Where a server is deployed with DATA_STORE set to postgres, the reader shall read and write student data in the Postgres database at PRIVATE_DATABASE_URL instead of Supabase.
+  @rule-0477 @ears-ubiquitous
+  Rule: The reader's server shall read and write student data in the Postgres database at PRIVATE_DATABASE_URL.
 
-    @active
     Scenario: A lab visit on a Postgres deployment is stored in Postgres
-      Given the reader's server is deployed with DATA_STORE "postgres" and a database URL
+      Given the reader's server is deployed with a database URL
       And "Alice" is signed in to the reader
       When the browser posts a page load of the first lab of "web-dev-101"
       Then the Postgres database holds the learning record and calendar row of "alice"
-      And nothing was read from or written to Supabase's tables
-
-    @inactive
-    Scenario: A lab visit on a deployment without DATA_STORE is stored in Supabase
-      Given the reader's server is deployed with DATA_STORE "" and a database URL
-      And "Alice" is signed in to the reader
-      When the browser posts a page load of the first lab of "web-dev-101"
-      Then Supabase recorded the page load of "alice"
-      And the Postgres database holds no learning record
 
   @rule-0478 @ears-ubiquitous
-  Rule: Tutors shall hold the Postgres store to the same contract suites as the Supabase and in-memory stores for every store port.
+  Rule: Tutors shall hold the Postgres store to the same contract suites as the in-memory stores for every store port.
 
     Scenario: The Postgres store keeps every store port's contract
       When the contract suites of ProfilePort, AccessStore, LearningEventSink, ScormRecords, SnippetStore, PlaygroundSnapshots, AssistanceStore, FeedbackStore and InsightsRead run against the Postgres store
       Then every case passes
 
   @rule-0479 @ears-unwanted
-  Rule: If a server is deployed with DATA_STORE set to postgres but without PRIVATE_DATABASE_URL, then the reader shall answer 503 to each of its data routes and read or write no row.
+  Rule: If a server is deployed without PRIVATE_DATABASE_URL, then the reader shall answer 503 to each of its data routes and read or write no row.
 
     Scenario: A Postgres deployment with no database URL
       Given "Alice" is signed in to the reader
-      And the reader's server is deployed with DATA_STORE "postgres" and no database URL
+      And the reader's server is deployed with no database URL
       When the browser asks the reader for the content locks of "web-dev-101"
       Then the reader answers 503
-      And nothing was read from or written to Supabase's tables
+      And the reader opened no connection to a database
 
   @rule-0480 @ears-event-driven
   Rule: When the migration command runs against a Postgres database, tutors shall apply in name order only the migrations not yet recorded there, each in one transaction that a failure rolls back.

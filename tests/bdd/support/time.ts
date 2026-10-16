@@ -3,7 +3,7 @@ import type { LearningRecord } from "../../../packages/domain/src/learning/types
 
 /**
  * Builders for the analytics features: a scenario's data table describes the
- * rows the time app reads from Supabase, and the steps hand those rows to the
+ * rows the time app reads from the Postgres store, and the steps hand those rows to the
  * real `BaseCalendarModel` / `BaseLabModel`. Nothing here computes a result.
  *
  * Calendar ids are plain YYYY-MM-DD strings, as the `calendar` table stores

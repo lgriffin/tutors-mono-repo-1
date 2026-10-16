@@ -4,16 +4,14 @@ Feature: Lecturer feedback on the reader's server
   I want feedback kept and changed only by the reader's server, as the person signed in
   So that nobody posts as a lecturer, and nobody reads what was written to someone else
 
-  Annotations and shared reflections are kept in Postgres (DATA_STORE=postgres,
-  feedback_annotations and feedback_reflections); a broadcast travels on Valkey
-  (PUBLIC_REALTIME=valkey) on the course's help queue topic for Tutors Live and on the course's
-  broadcast topic as a toast for its students. No Supabase table or channel is added for them. These
+  Annotations and shared reflections are kept in Postgres (feedback_annotations and
+  feedback_reflections); a broadcast travels on Valkey on the course's help queue topic for Tutors
+  Live and on the course's broadcast topic as a toast for its students. These
   Rules drive the reader's /api/feedback over a Postgres database (PGlite) and the process's memory
   hub, which stands in for Valkey.
 
   Background:
     Given the course "cs101" is published with 2 labs and "ellen" as its educator
-    And the reader's server keeps feedback in Postgres and publishes realtime on Valkey
 
   @rule-0565 @ears-ubiquitous
   Rule: Tutors shall keep and change lecturer feedback only on the reader's server as the signed-in actor, refusing a visitor who is not signed in with 401, and give a student only the broadcasts and the annotations addressed to them.

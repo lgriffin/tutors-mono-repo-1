@@ -5,18 +5,16 @@ How schema changes are written, so that a rolling release never breaks the versi
 ## Where migrations live
 
 ```
-supabase/migrations/<version>_<snake_case_name>.sql
+db/migrations/<version>_<snake_case_name>.sql
 ```
+
+They are the schema of the Postgres store the reader and time servers use (`@tutors/store-postgres`). `pnpm db:migrate` applies them to the database at `PRIVATE_DATABASE_URL`: each one once, in name order, in one transaction with its record in `schema_migrations`. The compose `store-postgres` profile applies them on its first start ([docs/LOCAL-CONTAINERS.md](../docs/LOCAL-CONTAINERS.md)).
 
 - `<version>` is a date (`20260822`) or a timestamp (`20260822143000`), 8 to 14 digits. Migrations apply in **name order**. A new migration must sort after every migration already on `main`, and two files may not share a version prefix: use a timestamp when two land on one day.
 - One concern per file, plain SQL only, no `psql` meta-commands. Write it so a second run is harmless where Postgres allows it (`IF NOT EXISTS`, `CREATE OR REPLACE`).
 - **A merged migration is never edited, deleted or renamed.** Deployed databases have already run it, and the harness applies only the files the deployed version lacks, so an edit to a merged file would not be rehearsed at all. To change something, add a new migration.
 
-The harness reads this directory and nothing else: `--mode migration --a <ref> --b <ref>` fetches `supabase/migrations/*.sql` at both refs (the harness's own `scripts/fetch-migrations.sh` in tutors-sdk/tutors-release-harness, a sparse checkout). Any other layout (a different directory, subfolders, `.sql` files elsewhere) is invisible to it.
-
-### What is not in this directory yet
-
-`tutors_content_locks` is created by a hand-run script in `packages/adapters/driven/store-supabase/sql/` (`002_content_locks.sql`), and the tables behind the community, connect and time features predate this directory. (`whiteboard_scenes` moved in as `20261017000000_create_whiteboard_scenes.sql`; its old script was never run on production.) The harness therefore rehearses a schema that has only `app_errors` and `whiteboard_scenes` in it: a destructive change to any other table is invisible to it, and to `pnpm check:migrations`. Moving those scripts in, as new migrations with `IF NOT EXISTS`, is the way to bring them under the rule; it needs a maintainer who can confirm what production already has. Row-Level Security on all of them is already under the rule: `20260924_enable_rls_public_tables.sql` turns it on for every table in `public` and gives `anon` only the operations the apps perform.
+The harness reads this directory and nothing else: `--mode migration --a <ref> --b <ref>` fetches `db/migrations/*.sql` at both refs (the harness's own `scripts/fetch-migrations.sh` in tutors-sdk/tutors-release-harness, a sparse checkout). Any other layout (a different directory, subfolders, `.sql` files elsewhere) is invisible to it.
 
 ## Expand and contract
 
@@ -26,11 +24,7 @@ A contract step never lands in the release that makes it safe, and CI enforces i
 removes or narrows something (a destructive statement, a `DO` block that drops or revokes, a
 `REVOKE` from `anon` or `authenticated`) needs a header line `-- contract-for: vX.Y.Z` naming the
 release whose code no longer uses what it removes, and `pnpm check:migrations` fails unless
-CHANGELOG.md already records that version as released. A contract step written ahead of time waits
-in [`supabase/contracts/`](../supabase/contracts/README.md), outside this directory, so no
-`supabase db push` or release run can apply it early; each file there also refuses to run unless
-`tutors.contract_ok` is set. The anon-access revocation for the server-side data routes waits there
-now ([SERVER-WRITES.md](SERVER-WRITES.md)).
+CHANGELOG.md already records that version as released.
 
 | Release | Code | Migration |
 | --- | --- | --- |

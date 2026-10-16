@@ -1,5 +1,5 @@
 /**
- * Applies db/migrations to the Postgres the servers use when DATA_STORE=postgres (store-postgres).
+ * Applies db/migrations to the Postgres store the servers use (store-postgres).
  *
  * Each migration runs once, in name order, inside one transaction with its record in
  * `schema_migrations`; a second run applies only what is new, and a failing migration leaves

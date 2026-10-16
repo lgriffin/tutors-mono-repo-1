@@ -11,7 +11,6 @@ Feature: Learning insights on the reader's server
 
   Background:
     Given the course "cs101" is published with 1 lab and "ellen" as its educator
-    And the reader's server keeps help requests and feedback in Postgres
 
   @rule-0416 @ears-unwanted
   Rule: If the insights views are missing in the database, then tutors shall show the insights pages empty with one message and keep the rest of Time working.

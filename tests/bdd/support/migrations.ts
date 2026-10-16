@@ -57,7 +57,7 @@ export function builtSchema(): Schema {
 }
 
 export function anonPolicies(schema: Schema, table: string, command: "SELECT" | "INSERT" | "UPDATE" | "DELETE"): Policy[] {
-  if (schema.opaqueTables.has(table)) throw new Error(`a DO block in supabase/migrations names ${table}; its policies cannot be read from the SQL text`);
+  if (schema.opaqueTables.has(table)) throw new Error(`a DO block in ${MIGRATIONS_DIR} names ${table}; its policies cannot be read from the SQL text`);
   return schema.policies.filter((p) => p.table === table && (p.command === command || p.command === "ALL") && p.roles.some((r) => r === "anon" || r === "public"));
 }
 

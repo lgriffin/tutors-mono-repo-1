@@ -1,14 +1,13 @@
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
 import { expect, vi } from "vitest";
 
-// The seams: Supabase (by the path product code resolves, and by name for a hoisted install), the public env,
-// SvelteKit and the identity adapter. Everything between them is product code.
-vi.mock("../../../../packages/adapters/driven/store-supabase/node_modules/@supabase/supabase-js/dist/index.mjs", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("@supabase/supabase-js", async () => ({ createClient: (await import("../../support/supabase-recorder.ts")).createClient }));
-vi.mock("$app/env/public", async () => (await import("../../support/supabase-recorder.ts")).publicEnv);
+// The seams: the `pg` driver (the in-process store), the environments, SvelteKit and the identity
+// adapter. Everything between them is product code.
+vi.mock("pg", async () => (await import("../../support/backend.ts")).pgModule);
+vi.mock("$app/env/public", async () => (await import("../../support/backend.ts")).publicEnv);
 // `$app/env` and `$app/navigation` are aliased to one stub file, so one mock serves both.
 vi.mock("$app/env", () => ({ browser: true, goto: vi.fn() }));
-vi.mock("$app/env/private", async () => (await import("../../support/supabase-recorder.ts")).privateEnv);
+vi.mock("$app/env/private", async () => (await import("../../support/backend.ts")).privateEnv);
 
 import { goto } from "$app/navigation";
 import { freshBrowser, githubUser, labsOf, openLo, publishedCourse, signIn } from "../../support/connect.ts";
@@ -22,8 +21,8 @@ describeFeature(feature, ({ Scenario }) => {
   let course: Course;
 
   // `auth: 1` in properties.yaml is what makes the reader demand a sign-in; the whitelist comes from enrollment.yaml.
-  const restrictedCourse = (_ctx: unknown, courseId: string, whitelist: string, educators: string) => {
-    freshBrowser();
+  const restrictedCourse = async (_ctx: unknown, courseId: string, whitelist: string, educators: string) => {
+    await freshBrowser();
     course = publishedCourse(courseId, 1, { auth: 1 }, { whitelist: list(whitelist), educators: list(educators), students: [] });
   };
   const signedIn = (_ctx: unknown, name: string) => signIn(githubUser(name));
@@ -31,8 +30,8 @@ describeFeature(feature, ({ Scenario }) => {
   const granted = () => expect(goto).not.toHaveBeenCalled();
 
   Scenario("Private course requires authentication", ({ Given, And, When, Then }) => {
-    Given("the course {string} requires authentication", (_ctx, courseId: string) => {
-      freshBrowser();
+    Given("the course {string} requires authentication", async (_ctx, courseId: string) => {
+      await freshBrowser();
       course = publishedCourse(courseId, 1, { auth: 1 });
     });
     And("nobody is signed in", () => {});

@@ -24,7 +24,6 @@ import {
   publishLiveActivity,
   publishNotice,
   realtimeHub,
-  realtimeKindOf,
   realtimeStream,
   sseRealtimeAdapter,
   streamableTopic,
@@ -182,12 +181,6 @@ describe("valkeyRealtimeHub", () => {
     const valkey = realtimeHub("redis://valkey.invalid:6379");
     expect(valkey.kind).toBe("valkey");
     expect(realtimeHub("redis://valkey.invalid:6379")).toBe(valkey);
-  });
-
-  it("names Valkey only for PUBLIC_REALTIME=valkey", () => {
-    expect(realtimeKindOf({ PUBLIC_REALTIME: " Valkey " })).toBe("valkey");
-    expect(realtimeKindOf({ PUBLIC_REALTIME: "" })).toBe("supabase");
-    expect(realtimeKindOf({})).toBe("supabase");
   });
 });
 
@@ -430,7 +423,7 @@ function playgroundTabs(): PlaygroundLive {
 }
 
 contract("PlaygroundLive: Valkey", playgroundLiveContract(playgroundTabs), {
-  // As on Supabase: the watcher announces itself on a 250 ms poll; covered below with a controlled clock.
+  // The watcher announces itself on a 250 ms poll; covered below with a controlled clock.
   "a lecturer's arrival is announced to the students sharing": "announcement polls on a 250 ms interval",
   // A stream is live only once the server answers, after the contract's synchronous send; covered below once it is.
   "a sharing student's state reaches a lecturer watching the same exercise, and no other": "a share's stream opens asynchronously"

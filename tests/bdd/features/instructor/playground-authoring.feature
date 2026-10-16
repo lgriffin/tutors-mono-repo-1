@@ -89,13 +89,12 @@ Feature: Playground Authoring and Review
       When the instructor opens the exercise's submissions
       Then the reader does not treat the student as a reviewer
       And the reader answers 403 when the student asks for "Ada Lovelace"'s submission
-      And the submissions table is closed to the anonymous role
 
   @rule-0437 @ears-unwanted
   Rule: If the reader's server has no database to keep hand-ins in, then the reader shall offer no handing in while the exercise itself still runs.
 
-    Scenario: A deployment with no service key
-      Given the reader's server has no service key
+    Scenario: A deployment with no database
+      Given the reader's server has no database URL
       When the instructor opens the exercise's submissions
       Then handing in is not available
       And the submissions are empty

@@ -58,7 +58,7 @@ export const dataInventory: DataInventoryEntry[] = [
   },
   {
     table: "realtime_presence",
-    description: "Supabase Realtime presence data (who is online, what they are viewing)",
+    description: "Valkey realtime presence data (who is online, what they are viewing)",
     piiFields: ["user identity", "current location"],
     legalBasis: "Consent (live collaboration features)",
     retentionNote: "Ephemeral — not persisted beyond the session",

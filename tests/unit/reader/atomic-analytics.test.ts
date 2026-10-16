@@ -1,25 +1,41 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { recordPageLoad, recordTick, recordingFunctions } from "../../../packages/adapters/driven/store-supabase/src/learning-events.ts";
+import { describe, expect, it } from "vitest";
+import { postgresLearningEventSink, type SqlClient } from "@tutors/store-postgres";
 
-beforeEach(() => { recordingFunctions.missing = false; });
+/** A store that remembers each statement it is sent, and answers or refuses it. */
+function store(refuse?: Error) {
+  const sent: { text: string; params?: unknown[] }[] = [];
+  const sql: SqlClient = {
+    async query(text, params) {
+      sent.push({ text, params });
+      if (refuse) throw refuse;
+      return { rows: [], rowCount: 1 };
+    },
+    end: async () => {}
+  };
+  return { sql, sent };
+}
 
-describe("server analytics preserve main's atomic recording", () => {
-  const input = { courseId: "course", loId: "lab/one", loType: "lab", day: "2026-10-15" };
-  it.each([["record_page_view", recordPageLoad], ["record_heartbeat", recordTick]] as const)("uses %s with the verified login", async (name, record) => {
-    const rpc = vi.fn().mockResolvedValue({ error: null });
-    const from = vi.fn();
-    await record({ rpc, from } as unknown as Parameters<typeof recordTick>[0], "alice", input);
-    expect(rpc).toHaveBeenCalledExactlyOnceWith(name, {
-      p_course_id: "course", p_student_id: "alice", p_lo_id: "lab/one", p_day: "2026-10-15",
-      ...(name === "record_page_view" ? { p_lo_type: "lab" } : {})
-    });
-    expect(from).not.toHaveBeenCalled();
+describe("server analytics record each event atomically", () => {
+  const day = "2026-10-15";
+  it("records a page load in one statement, for the verified login, on the learning record and the calendar", async () => {
+    const { sql, sent } = store();
+    await postgresLearningEventSink(sql).record({ kind: "page-load", courseId: "course", loId: "lab/one", loType: "lab", day }, "alice");
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toMatch(/INSERT INTO learning_records[\s\S]*INSERT INTO calendar/);
+    expect(sent[0].params).toEqual(["course", "alice", "lab/one", "lab", day]);
   });
-  it("reports database failures without retrying the write through the legacy path", async () => {
-    const rpc = vi.fn().mockResolvedValue({ error: { code: "42501", message: "permission denied" } });
-    const from = vi.fn();
-    await expect(recordPageLoad({ rpc, from } as unknown as Parameters<typeof recordTick>[0], "alice", input)).rejects.toThrow("permission denied");
-    expect(from).not.toHaveBeenCalled();
-    expect(recordingFunctions.missing).toBe(false);
+
+  it("records a tick in one statement, for the verified login, on the learning record and the calendar", async () => {
+    const { sql, sent } = store();
+    await postgresLearningEventSink(sql).record({ kind: "tick", courseId: "course", loId: "lab/one", day }, "alice");
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toMatch(/UPDATE learning_records[\s\S]*UPDATE calendar/);
+    expect(sent[0].params).toEqual(["course", "alice", "lab/one", day]);
+  });
+
+  it("reports a database failure without retrying the write another way", async () => {
+    const { sql, sent } = store(new Error("permission denied"));
+    await expect(postgresLearningEventSink(sql).record({ kind: "page-load", courseId: "course", loId: "lab/one", loType: "lab", day }, "alice")).rejects.toThrow("permission denied");
+    expect(sent).toHaveLength(1);
   });
 });

@@ -36,7 +36,7 @@ The generated bundle lives in `okf/` (gitignored, generated locally):
         lo.md               # One concept per type with fields
         ...
       schemas/
-        index.md            # Supabase and API schemas
+        index.md            # Database and API schemas
         learning-record.md  # One concept per Zod schema
         ...
       services/

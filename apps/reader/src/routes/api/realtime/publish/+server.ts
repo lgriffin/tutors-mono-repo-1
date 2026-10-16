@@ -9,8 +9,7 @@ const allow = topicRateLimiter();
 
 /**
  * POST /api/realtime/publish: a signed-in reader tab's message for a playground live share (a
- * student's own `state`, an educator's `watching`), published to Valkey when PUBLIC_REALTIME is
- * valkey. Only the reader's own pages may post, and only to a playground topic (Rule 0484).
+ * student's own `state`, an educator's `watching`), published to Valkey. Only the reader's own pages may post, and only to a playground topic (Rule 0484).
  */
 export const POST: RequestHandler = async ({ request, url, locals, fetch }) => {
   const origin = request.headers.get("origin");

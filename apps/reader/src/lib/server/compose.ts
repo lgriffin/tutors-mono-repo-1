@@ -6,8 +6,7 @@
  * compose it with the environment they want. Without the database URL (or in anonymous mode) there
  * is no data: the routes answer 503. The server publishes to Tutors Live, course notices and the
  * help queue over Valkey pub/sub at PRIVATE_VALKEY_URL (one process's memory without it), which the
- * realtime stream routes fan out over server-sent events (realtime-valkey). Supabase is gone (S4 of
- * the Supabase exit, guides/DATA-MOVE.md).
+ * realtime stream routes fan out over server-sent events (realtime-valkey).
  */
 import type {
   AccessStore,

@@ -405,8 +405,8 @@ product that fails when the product stops doing it.
 [`vitest-cucumber`](https://vitest-cucumber.miceli.click/), inside the ordinary Vitest run, so
 there is one runner and no second CI job. The binder fails the run when a scenario or step is
 on one side only, which is what keeps the Gherkin from drifting back into prose. Steps drive
-product code and never assert on a fixture; Supabase, the course host and `$state` are the only
-stand-ins.
+product code and never assert on a fixture; the store and realtime (`tests/bdd/support/backend.ts`),
+the course host and `$state` are the only stand-ins.
 
 **Proves it can fail.** Changing one expected value in a feature file turns its run red; every
 bound feature was checked that way when it was bound. Tier O fails a feature that nothing
@@ -429,8 +429,8 @@ Rule id.
 **How.** `pnpm test:ears:audit` binds the two statically: a scenario with no test
 (`unproved-scenario`), a test whose title or Rule id matches no scenario (`orphan-ui-test`) and
 a skipped test (`rule-not-run`) fail it. The tests run with `apps/reader/playwright.config.ts`
-against an isolated `vite dev` on port 5173 with authentication enabled and Supabase directed to
-a local discard fixture.
+against an isolated `vite dev` on port 5173 with authentication enabled and no data store
+(`PRIVATE_DATABASE_URL` unset, so the data API answers 503).
 The config supplies test OAuth credentials and explicitly preloads the shared GitHub stub into the
 server process. No production login endpoint or trusted identity header is added. Auth-dependent
 specs call `signInAs` to obtain real signed cookies through HTTP; store seeding is limited to

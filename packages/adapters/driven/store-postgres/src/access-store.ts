@@ -4,7 +4,7 @@ import type { AccessStore } from "@tutors/application/ports";
 import log from "@tutors/logger";
 import { iso, type SqlClient } from "./client.ts";
 
-/** The AccessStore the reader's server reads and changes behind /api/locks. Like the Supabase one, it answers a failure with nothing rather than throwing. */
+/** The AccessStore the reader's server reads and changes behind /api/locks. It answers a failure with nothing rather than throwing. */
 export function postgresAccessStore(sql: SqlClient): AccessStore {
   return {
     async locks(courseId) {

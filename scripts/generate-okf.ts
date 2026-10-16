@@ -452,7 +452,7 @@ function extractSchemas(): SchemaInfo[] {
       }
     }
 
-    // 2. Extract Supabase table models and data-record types as schema concepts
+    // 2. Extract the store's table models and data-record types as schema concepts
     const schemaExportPattern = /export\s+(?:interface|type)\s+(\w+)/g;
     let exportMatch;
     while ((exportMatch = schemaExportPattern.exec(content)) !== null) {
@@ -595,7 +595,7 @@ function generateBundleIndex(packages: PackageInfo[], routeCount: number, compon
     "",
     `This bundle catalogs the Tutors monorepo: **${appCount} apps**, **${pkgCount} packages**, **${componentCount} components**, **${typeCount} types**, **${schemaCount} data schemas**, **${serviceCount} services**, and **${routeCount} routes**.`,
     "",
-    "Tutors is an open-source learning platform built with SvelteKit, Svelte 5, Skeleton UI, and Supabase.",
+    "Tutors is an open-source learning platform built with SvelteKit, Svelte 5, Skeleton UI, Postgres and Valkey.",
     "",
     "## Sections",
     "",
@@ -603,7 +603,7 @@ function generateBundleIndex(packages: PackageInfo[], routeCount: number, compon
     "* [Components](components/index.md) — Svelte UI components with props",
     "* [Routes](routes/index.md) — SvelteKit route structure per app",
     "* [Types](types/index.md) — Core type definitions from tutors-model-lib",
-    "* [Schemas](schemas/index.md) — Supabase and API data schemas",
+    "* [Schemas](schemas/index.md) — store and API data schemas",
     "* [Services](services/index.md) — Application services and their methods",
     "",
   ].join("\n");
@@ -867,7 +867,7 @@ function generateTypeConcepts(types: TypeInfo[], timestamp: string): void {
 }
 
 function generateSchemaConcepts(schemas: SchemaInfo[], timestamp: string): void {
-  const indexLines = ["# Data Schemas", "", "Data schemas from Supabase table models and structured data types.", ""];
+  const indexLines = ["# Data Schemas", "", "Data schemas from the store's table models and structured data types.", ""];
   for (const s of schemas.sort((a, b) => a.name.localeCompare(b.name))) {
     indexLines.push(`* [${s.description}](${kebab(s.name)}.md) — ${s.fields.length} fields`);
   }

@@ -27,7 +27,7 @@ export async function insertAppErrors(sql: SqlClient, rows: AppErrorRow[]): Prom
   await run("app_errors insert", () => sql.query(`INSERT INTO app_errors (app, level, message, context, url, user_agent, course_id, student_id) VALUES ${tuples.join(", ")}`, values));
 }
 
-/** Errors per app and level in the last `minutes` (1 to 1440), as get_error_counts answers on Supabase; [] when the read fails. */
+/** Errors per app and level in the last `minutes` (1 to 1440); [] when the read fails. */
 export async function recentErrorCounts(sql: SqlClient | null | undefined, minutes = 60): Promise<{ app: string; level: string; count: number }[]> {
   if (!sql) return [];
   try {

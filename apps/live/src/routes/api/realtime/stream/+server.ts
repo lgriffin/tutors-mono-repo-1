@@ -4,7 +4,7 @@ import { liveRealtimeHub } from "#lib/server/realtime.ts";
 
 /**
  * GET /api/realtime/stream?topic=: a course's or the platform's activity as server-sent events, for
- * Tutors Live's own pages, when PUBLIC_REALTIME is valkey (Rule 0482). Only activity topics are
+ * Tutors Live's own pages, from Valkey (Rule 0482). Only activity topics are
  * streamed here (Rule 0483); playground shares and course notices are the reader's to stream.
  */
 export const GET: RequestHandler = async ({ request, url }) => {

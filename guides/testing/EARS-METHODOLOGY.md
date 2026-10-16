@@ -111,7 +111,7 @@ an `@ignore` tag, which the binder would otherwise skip without a word.
 A file under `tests/bdd/features/` is executable: its steps file under `tests/bdd/steps/` loads
 it with [`vitest-cucumber`](https://vitest-cucumber.miceli.click/), and the run fails when a
 scenario or step exists on one side only. Steps call product code, such as the model library,
-the time library or a service with a mocked Supabase client, and never assert on a fixture.
+the time library or a service over the in-process backend (`tests/bdd/support/backend.ts`), and never assert on a fixture.
 
 ```ts
 const feature = await loadFeature("tests/bdd/features/course/course-loading.feature");

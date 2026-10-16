@@ -7,7 +7,7 @@
 # Format: `<app> <METHOD> <route id> | who: <callers>`
 # Add `| hook` for routes a hook mounts (discovery cannot see them).
 
-time POST /api/sync | who: anyone who can reach the time app today; the handler has no authentication or role check (tier F must add one). It writes only what it fetches from Moodle, with the service_role key
+time POST /api/sync | who: anyone who can reach the time app today; the handler has no authentication or role check (tier F must add one). It writes only what it fetches from Moodle, through the Postgres store (PRIVATE_DATABASE_URL)
 reader POST /api/analytics | who: a signed-in student (verified identity (locals.actor), else 401); rows are written under the session's login (Rules 0071, 0072)
 reader PUT /api/me | who: a signed-in user, for their own tutors-connect-users row; name, email and avatar come from the session
 reader PATCH /api/me | who: a signed-in user, for their own sentiment and online status (Rule 0072)
@@ -21,7 +21,6 @@ reader PUT /api/scorm | who: a signed-in learner, for their own SCORM state; sto
 reader PUT /api/playground | who: a signed-in student, for their own hand-in; student id and name come from the session (Rule 0475)
 reader DELETE /api/playground | who: a signed-in student, for their own hand-in only; an educator withdraws nobody's (Rule 0475)
 reader POST /api/errors | who: anyone, as the anon insert it replaces allowed, from the reader or an origin in PRIVATE_API_ALLOWED_ORIGINS; 16 KB, 20 entries, 30 reports a minute per address; the student is the session's (Rule 0472)
-reader POST /api/live/watch | who: anyone, as the anon realtime_watch it replaces allowed, from the reader or an origin in PRIVATE_API_ALLOWED_ORIGINS (Tutors Live); the topic must be a Live activity topic (Rule 0472)
 reader POST /api/auth/sign-in/social | hook | who: anyone; GitHub only, Better Auth verifies origin and return URL
 reader POST /api/auth/callback/github | hook | who: OAuth callback holder; Better Auth verifies signed state (GitHub normally uses GET)
 reader POST /api/auth/sign-out | hook | who: session holder; Better Auth verifies origin and deletes browser cookies

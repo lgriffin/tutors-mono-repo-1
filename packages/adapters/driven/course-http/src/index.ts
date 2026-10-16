@@ -71,7 +71,7 @@ export class SnippetRefusedError extends Error {
 /**
  * The browser's SnippetStore: it hands the snippet to the reader's own server (which writes the
  * row with its service key and tells the educators) and reads nothing. The dashboard that reads
- * snippets runs on the server with the Supabase store, so `active` and `countSince` have no
+ * snippets runs on the server with the Postgres store, so `active` and `countSince` have no
  * caller here and answer "nothing" and "unknown".
  */
 export function httpSnippetStore(fetchFn: typeof fetch = (...args) => globalThis.fetch(...args)): SnippetStore {

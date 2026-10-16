@@ -1,11 +1,11 @@
 /**
- * The plain Postgres store adapter: every table the Tutors servers read and write, behind the same
- * ports as store-supabase (LearningEventSink, LearningRecords, ProfilePort, AccessStore,
+ * The plain Postgres store adapter: every table the Tutors servers read and write, behind the
+ * application's ports (LearningEventSink, LearningRecords, ProfilePort, AccessStore,
  * WhiteboardStore, SnippetStore, ScormRecords, the playground's snapshot rows) and the help requests
  * of the Assistance context (AssistanceStore) and the annotations and reflections of the Feedback
  * context (FeedbackStore), the Insights context's read-only views of both (InsightsRead), plus the catalogue,
- * the presence roster, Tutors Time's Moodle assignments, the error log and the health check. A server composes it when
- * DATA_STORE=postgres, over PRIVATE_DATABASE_URL. The schema is the plain SQL of db/migrations,
+ * the presence roster, Tutors Time's Moodle assignments, the error log and the health check. The reader's and
+ * time's servers compose it over PRIVATE_DATABASE_URL. The schema is the plain SQL of db/migrations,
  * applied by `migrate` (`pnpm db:migrate`); `pg` is imported here, lazily, and in live-postgres.
  */
 export { postgresClient, StoreError, type SqlClient } from "./client.ts";

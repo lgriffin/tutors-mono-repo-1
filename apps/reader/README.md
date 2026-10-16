@@ -21,14 +21,15 @@ The `.env` file sits at the repository root, not in this folder. With `PUBLIC_AN
 | Variable | Used for |
 |---|---|
 | `PUBLIC_ANON_MODE` | `TRUE` turns off auth, presence and analytics |
-| `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY` | Learning records and presence |
+| `PRIVATE_DATABASE_URL` | The Postgres store behind the `/api` routes: learning records, profiles, locks, snippets; unset, the routes answer 503 |
+| `PRIVATE_VALKEY_URL` | Valkey pub/sub for realtime (presence, Tutors Live activity, notices, live share, whiteboards, help queue); unset, this server's memory carries it |
 | `PRIVATE_AUTH_GITHUB_ID`, `PRIVATE_AUTH_GITHUB_SECRET`, `PRIVATE_AUTH_SECRET` | GitHub sign-in (Better Auth) |
 | `PUBLIC_PDF_KEY` | The Adobe PDF viewer for talks |
 | `METRICS_TOKEN`, `LOG_LEVEL` | Guarding `/metrics` and the log level |
 
 ## Tests
 
-The Playwright specs live in `tests/e2e/`. Run them from the root with `pnpm test:e2e:reader`. The config starts an isolated `pnpm dev` itself with authentication enabled, fixture OAuth credentials, and Supabase directed to a local discard fixture; it never reuses your running dev server. Ports 5173, 5178 and 5179 must be free.
+The Playwright specs live in `tests/e2e/`. Run them from the root with `pnpm test:e2e:reader`. The config starts an isolated `pnpm dev` itself with authentication enabled, and fixture OAuth credentials, with no database, so the data routes answer 503; it never reuses your running dev server. Ports 5173, 5178 and 5179 must be free.
 
 `signInAs` obtains signed session cookies through the real `/auth` routes and installs them in the browser. The server's GitHub fetches use the same provider responses as `tests/bdd/support/reader-auth.ts`, via a test-only Node preload that refuses production mode or different credentials. Lecturer role comes from intercepted course enrollment, not a client role override. Store seeding remains for rendering/presence previews and the explicit forged-identity regression.
 
@@ -41,11 +42,11 @@ The Playwright specs live in `tests/e2e/`. Run them from the root with `pnpm tes
 - `@tutors/svelte-state/course`, `@tutors/tutors-model-lib` load and model courses, through the `@tutors/course-http` and `@tutors/render-markdown` adapters the reader composes in `src/lib/compose.ts`
 - `@tutors/identity`, `@tutors/identity-better-auth` provide verified identity contracts and the Better Auth adapter
 - `@tutors/svelte-state/connect`, `@tutors/svelte-state/community`, `@tutors/svelte-state/rbac`, `@tutors/svelte-state` handle sign-in, presence, roles and shared state
-- `@tutors/store-supabase`, `@tutors/realtime-supabase`, `@tutors/profile-localstorage`, `@tutors/notes-localstorage`, `@tutors/bus-inprocess` are the driven adapters behind those ports: the learner record, presence, the browser-only profile, the learner's private lab notes (kept in the browser, never sent anywhere) and in-process events
-- `@tutors/realtime-valkey` carries realtime instead of Supabase when `PUBLIC_REALTIME=valkey`: the server publishes to Valkey at `PRIVATE_VALKEY_URL` (with `redis`, loaded lazily) and streams each topic to browsers over server-sent events at `/api/realtime/stream`; a playground share's sends come back through `/api/realtime/publish`
+- `@tutors/realtime-valkey`, `@tutors/profile-localstorage`, `@tutors/notes-localstorage`, `@tutors/bus-inprocess` are the driven adapters behind those ports: presence, the browser-only profile, the learner's private lab notes (kept in the browser, never sent anywhere) and in-process events
+- `@tutors/realtime-valkey` carries realtime: the server publishes to Valkey at `PRIVATE_VALKEY_URL` (with `redis`, loaded lazily) and streams each topic to browsers over server-sent events at `/api/realtime/stream`; a playground share's sends come back through `/api/realtime/publish`
 - `@tutors/runtime-wasm`, `@tutors/workspace-indexeddb` run student code in a sandboxed, off-origin frame and keep playground edits in the browser; `@tutors/scorm-runtime` is the SCORM run-time an imported package finds on the reader's window
 - `@tutors/live-events-http` is the adapter behind the `LiveEventReporter` port: the anonymous session events the reader posts to Tutors Live when `PUBLIC_LIVE_EVENTS_URL` is set
-- `@tutors/data-api` is the driven adapter the browser composes for the learner's writes: the typed contract of the reader's own `/api` routes and the ports over it; the routes call the application through `src/lib/server/compose.ts` and write with `@tutors/store-supabase`, or `@tutors/store-postgres` when `DATA_STORE=postgres` (the reader hosts the data API for now; see [guides/SERVER-WRITES.md](../../guides/SERVER-WRITES.md))
+- `@tutors/data-api` is the driven adapter the browser composes for the learner's writes: the typed contract of the reader's own `/api` routes and the ports over it; the routes call the application through `src/lib/server/compose.ts` and read and write the Postgres store with `@tutors/store-postgres` (the reader hosts the data API for now; see [guides/SERVER-WRITES.md](../../guides/SERVER-WRITES.md))
 - `@tutors/themes`, `@tutors/i18n` provide themes and interface text
 - `@tutors/tutors-create`, `@tutors/tutors-time-lib` support course creation and the time views
 - `@tutors/logger`, `@tutors/metrics`, `@tutors/clock` provide logging, `/metrics`, `/version` and the server clock seam
