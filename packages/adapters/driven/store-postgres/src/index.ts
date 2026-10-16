@@ -10,6 +10,7 @@
  */
 export { postgresClient, StoreError, type SqlClient } from "./client.ts";
 export { migrate, type Migration, type MigrationRun } from "./migrate.ts";
+export { MoveRefused, planMove, runMove, verifyMove, type Copier, type MoveCheck, type MovePlan, type MoveRun } from "./move.ts";
 export { postgresLearningEventSink } from "./learning-events.ts";
 export { postgresLearningRecords } from "./learning-records.ts";
 export { postgresProfile, upsertUser } from "./profile.ts";
