@@ -39,6 +39,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:migrate": "tsx scripts/db-migrate.ts",
+    "db:move": "tsx scripts/db-move.ts",
     "api-report": "tsx scripts/api-surface.ts",
     "api-report:check": "tsx scripts/api-surface.ts --check",
     "architecture-report": "depcruise apps packages --config .dependency-cruiser.cjs --output-type err-long",
