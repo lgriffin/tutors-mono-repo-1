@@ -22,6 +22,7 @@ import { freshBrowser, githubUser, labsOf, publishedCourse, signIn } from "../..
 import { readerRequest, setReaderSession } from "../../support/reader-api.ts";
 import { backend } from "../../support/backend.ts";
 import { readStream, type OpenStream } from "../../support/sse-stream.ts";
+import { mountWhiteboardEditor } from "../../support/whiteboard-editor.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/realtime-valkey.feature");
 
@@ -43,6 +44,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   const streams: Record<string, OpenStream> = {};
   let sources: FakeEventSource[] = [];
   let tabSubscription: Subscription | undefined;
+  let editor: ReturnType<typeof mountWhiteboardEditor> | undefined;
 
   const hub = () => realtimeHub(undefined);
   const firstLab = () => labsOf(course)[0];
@@ -97,6 +99,8 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   };
 
   AfterEachScenario(async () => {
+    editor?.unmount();
+    editor = undefined;
     for (const stream of Object.values(streams)) await stream.close();
     for (const key of Object.keys(streams)) delete streams[key];
     await tabSubscription?.close();
@@ -351,6 +355,51 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
         Then("the reader answers {number}", answers);
         And("the whiteboard stream receives the {string} of {string}'s tab", receivesFrom);
+      });
+
+      // The editor page itself (excalidraw-editor.html), in the browser: what its tab posts to the room.
+      const editorInRoom = (_ctx: unknown, user: string, others: number) => {
+        vi.useFakeTimers();
+        editor = mountWhiteboardEditor(false, user);
+        editor.open();
+        editor.participants(others + 1);
+      };
+      const movesCursor = () => {
+        editor!.editor.onPointerUpdate({ pointer: { x: 10, y: 10 }, button: "up" });
+        vi.advanceTimersByTime(1000);
+      };
+
+      RuleScenario("An editor who is not signed in only watches a shared whiteboard", ({ Given, When, Then }) => {
+        Given("the shared whiteboard editor of {string} has its room open with {number} other editor", editorInRoom);
+        When("the editor moves its cursor", movesCursor);
+        Then("the editor has posted nothing to the reader", () => {
+          expect(editor!.published).toEqual([]);
+        });
+      });
+
+      RuleScenario("An editor answers a newcomer to a shared whiteboard once, and never answers an answer", ({ Given, When, And, Then }) => {
+        Given("the shared whiteboard editor of {string} has its room open with {number} other editors", editorInRoom);
+        When("{string} announces the tab {string} in the room twice", (_ctx, user: string, tab: string) => {
+          editor!.receive("presence", { userId: user }, tab);
+          editor!.receive("presence", { userId: user }, tab);
+        });
+        And("{string} answers the editor's presence from the tab {string}", (_ctx, user: string, tab: string) => {
+          editor!.receive("presence", { userId: user, reply: true }, tab);
+        });
+        Then("the editor has answered with its own presence once", () => {
+          expect(editor!.published.filter((m) => m.event === "presence" && m.payload.reply === true)).toHaveLength(1);
+        });
+      });
+
+      RuleScenario("Another user cannot drop an editor from a shared whiteboard room", ({ Given, When, And, Then }) => {
+        Given("the shared whiteboard editor of {string} has its room open with {number} other editor", editorInRoom);
+        When("{string} says the tab {string} is leaving the room", (_ctx, user: string, tab: string) => {
+          editor!.receive("leave", { userId: user }, tab);
+        });
+        And("the editor moves its cursor", movesCursor);
+        Then("the editor sends its cursor to the room", () => {
+          expect(editor!.broadcasts().map((m) => m.event)).toEqual(["cursor-update"]);
+        });
       });
     }
   );

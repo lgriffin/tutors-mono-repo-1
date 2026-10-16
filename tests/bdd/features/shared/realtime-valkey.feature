@@ -137,3 +137,20 @@ Feature: Realtime on Valkey
       Then the reader answers 202
       And the whiteboard stream receives the "presence" of "alice"'s tab
 
+    Scenario: An editor who is not signed in only watches a shared whiteboard
+      Given the shared whiteboard editor of "anon" has its room open with 1 other editor
+      When the editor moves its cursor
+      Then the editor has posted nothing to the reader
+
+    Scenario: An editor answers a newcomer to a shared whiteboard once, and never answers an answer
+      Given the shared whiteboard editor of "alice" has its room open with 0 other editors
+      When "bob" announces the tab "tab-of-bob" in the room twice
+      And "carol" answers the editor's presence from the tab "tab-of-carol"
+      Then the editor has answered with its own presence once
+
+    Scenario: Another user cannot drop an editor from a shared whiteboard room
+      Given the shared whiteboard editor of "alice" has its room open with 1 other editor
+      When "mallory" says the tab "session-peer-1" is leaving the room
+      And the editor moves its cursor
+      Then the editor sends its cursor to the room
+

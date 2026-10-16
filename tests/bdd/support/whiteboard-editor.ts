@@ -25,7 +25,7 @@ class RoomEventSource {
  * seams; no CDN or network. A shared board's room streams from the reader's server and posts what it
  * sends to the reader's publish route; the test opens, feeds and drops that stream.
  */
-export function mountWhiteboardEditor(personal = false) {
+export function mountWhiteboardEditor(personal = false, userId = "alice") {
   const html = readFileSync("apps/reader/static/excalidraw-editor.html", "utf8");
   const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)![1].replace(/^\s*import .*;$/gm, "");
   const effects: (() => void | (() => void))[] = [];
@@ -71,14 +71,14 @@ export function mountWhiteboardEditor(personal = false) {
     config: {
       shared: !personal,
       roomId: "shared-board",
-      user: { id: "alice", name: "Alice", avatar: "alice.png" }
+      user: { id: userId, name: userId, avatar: `${userId}.png` }
     }
   });
   const cleanups = effects.map((effect) => effect());
   postMessage.mockClear();
 
-  /** The peers this test has announced in the room, by presence key. */
-  const peers = new Set<string>();
+  /** The peers this test has announced in the room: presence key to user. */
+  const peers = new Map<string, string>();
   const source = () => sources.at(-1);
   const deliver = (message: { event: string; payload: unknown; from: string }) => source()?.onmessage?.({ data: JSON.stringify(message) });
 
@@ -101,16 +101,19 @@ export function mountWhiteboardEditor(personal = false) {
      */
     participants: (count: number, sameUser = false) => {
       const wanted = new Set(Array.from({ length: Math.max(0, count - 1) }, (_, index) => `session-peer-${index + 1}`));
-      for (const key of [...peers]) {
+      for (const [key, user] of [...peers]) {
         if (wanted.has(key)) continue;
         peers.delete(key);
-        deliver({ event: "leave", payload: { userId: key.replace("session-", "") }, from: key });
+        deliver({ event: "leave", payload: { userId: user }, from: key });
       }
       for (const key of wanted) {
-        peers.add(key);
-        deliver({ event: "presence", payload: { userId: sameUser ? "alice" : key.replace("session-", "") }, from: key });
+        const user = sameUser ? userId : key.replace("session-", "");
+        peers.set(key, user);
+        deliver({ event: "presence", payload: { userId: user }, from: key });
       }
     },
+    /** A message another tab posted to the room, as the reader's stream carries it (the server checked its userId). */
+    receive: (event: string, payload: Record<string, unknown>, from: string) => deliver({ event, payload, from }),
     unmount: () => {
       for (const cleanup of cleanups.splice(0).reverse()) cleanup?.();
     }
