@@ -5,25 +5,22 @@ import { liveService } from "../../../packages/adapters/driving/svelte-state/src
 import { presenceService } from "../../../packages/adapters/driving/svelte-state/src/community/services/presence.svelte.ts";
 import { tutorsConnectService } from "../../../packages/adapters/driving/svelte-state/src/connect/services/connect.svelte.ts";
 import { configureAdapters } from "../../../packages/adapters/driving/svelte-state/src/adapters.ts";
-import { recordingFunctions } from "../../../packages/adapters/driven/store-supabase/src/index.ts";
 import { composeReader } from "../../../apps/reader/src/lib/compose.ts";
 import { currentCourse, currentLo, tutorsId } from "../../../packages/adapters/driving/svelte-state/src/index.svelte.ts";
 import { materialiseCourse } from "../../support/arbitraries/course-tree.ts";
 import { labShape, shape } from "./course.ts";
-import { installReaderFetch, resetReaderApi, serveCourseJson, setReaderSession } from "./reader-api.ts";
-import { browserStorage, publicEnv, recorder, settle } from "./supabase-recorder.ts";
-import { adapters } from "../../../packages/adapters/driving/svelte-state/src/adapters.ts";
+import { apiRequests, installReaderFetch, resetReaderApi, serveCourseJson, setReaderSession } from "./reader-api.ts";
+import { backend, browserStorage, publicEnv, settle } from "./backend.ts";
 import type { LoRecord } from "../../../packages/adapters/driving/svelte-state/src/community/types.svelte.ts";
-import type { SupabasePresence } from "../../../packages/adapters/driven/realtime-supabase/src/index.ts";
 import { POST as postLiveActivity } from "../../../apps/reader/src/routes/api/live/activity/+server.ts";
 
 /**
  * Drives the reader's connect, analytics, presence and live services the way
  * the reader's layouts do. `freshBrowser` runs the reader's own composition root
- * (`composeReader`) against the recorder's environment, so every adapter the
- * reader composes in a signed-in deployment is in place. A steps file that
- * imports this must first mock `@supabase/supabase-js` (returning `recorder`),
- * `$app/env/public`, `$app/env` and `$app/navigation`; the identity client is
+ * (`composeReader`) signed in, so every adapter the
+ * reader composes in a signed-in deployment is in place, over the in-process backend (backend.ts):
+ * the Postgres store and the realtime hub. A steps file that imports this must first mock `pg`,
+ * `$app/env/public`, `$app/env/private`, `$app/env` and `$app/navigation`; the identity client is
  * injected here. Every module between those seams is the real product code.
  */
 
@@ -56,34 +53,28 @@ export async function postToReaderServer(body: string): Promise<{ status: number
   return { status: response.status, answer: text ? JSON.parse(text) : null };
 }
 
-/** A Tutors Live tab, in another browser, reported itself as a watcher of `topic` `secondsAgo` before now. */
-export function liveWatcher(topic: string, watcher: string, secondsAgo = 0): void {
-  recorder.rows("realtime_watchers").push({ topic, watcher, seen_at: new Date(Date.now() - secondsAgo * 1000).toISOString() });
-}
-
-/** A browser tab with nobody signed in, no course open and nobody online. */
-export function freshBrowser(): void {
+/** A browser tab with nobody signed in, no course open and nobody online, over an empty store. */
+export async function freshBrowser(): Promise<void> {
   vi.clearAllMocks();
   liveService.stopGlobalPresenceService();
   liveService.stopCoursePresenceListener();
   presenceService.stopPresenceListener();
-  void (adapters().presence as Partial<SupabasePresence>).gateway?.reset();
-  recorder.reset();
+  await backend.reset();
   resetReaderApi();
-  recordingFunctions.missing = false;
   const storage = browserStorage();
   vi.stubGlobal("localStorage", storage);
   vi.stubGlobal("window", { localStorage: storage });
   vi.stubGlobal("document", { hidden: false });
   vi.stubGlobal("fetch", readerFetch);
   installReaderFetch();
+  backend.installEventSource();
   readerServer.posts = [];
 
   tutorsId.value = null;
   currentCourse.value = null;
   currentLo.value = null;
-  // The reader's composition root, with the signed-in environment the recorder describes and the
-  // identity adapter stubbed: the Supabase adapters it composes all talk to the recorder.
+  // The reader's composition root, signed in, with the identity adapter stubbed: what it composes
+  // talks to the reader's server, which keeps rows in the store and publishes to the hub.
   const identityClient = { signIn: vi.fn(), signOut: vi.fn() };
   configureAdapters(composeReader(publicEnv, { identityClient }));
   tutorsConnectService.identityClient = identityClient;
@@ -162,62 +153,55 @@ export async function studentOpensLab(name: string, course: Course, lab = 0): Pr
  * format `presenceService.sendLoEvent` broadcasts. Only the listeners under test
  * are product code here; the sender is the network.
  */
-export function loEventArrives(channel: string, name: string, course: Course, lo: Lo): void {
+export async function loEventArrives(topic: string, name: string, course: Course, lo: Lo): Promise<void> {
   const user = githubUser(name);
-  recorder.relay(channel, {
-    type: "broadcast",
-    event: "lo-event",
-    payload: {
-      courseId: course.courseId,
-      courseUrl: course.courseUrl,
-      courseTitle: course.title,
-      img: lo.img,
-      title: lo.title,
-      loRoute: lo.route,
-      type: lo.type,
-      isPrivate: false,
-      user: { fullName: user.name, avatar: user.image, id: user.login, sentiment: user.sentiment }
-    }
+  await backend.relay(topic, "lo-event", {
+    courseId: course.courseId,
+    courseUrl: course.courseUrl,
+    courseTitle: course.title,
+    img: lo.img,
+    title: lo.title,
+    loRoute: lo.route,
+    type: lo.type,
+    isPrivate: false,
+    user: { fullName: user.name, avatar: user.image, id: user.login, sentiment: user.sentiment }
   });
+  await settle();
 }
 
 /**
- * Another student's latest activity as the database holds it: the row the reader's server upserts
- * into `tutors-connect-latest` for them (POST /api/presence), stamped `minutesAgo` before the reader's clock.
+ * Another student's latest activity as the store holds it: the row the reader's server upserts into
+ * `tutors-connect-latest` for them (POST /api/presence), stamped `minutesAgo` before the reader's clock.
  */
-export function storedActivity(name: string, course: Course, lo: Lo, minutesAgo: number): void {
+export async function storedActivity(name: string, course: Course, lo: Lo, minutesAgo: number): Promise<void> {
   const user = githubUser(name);
-  const row = {
-    course_id: course.courseId,
-    student_id: user.login,
-    payload: {
-      courseId: course.courseId,
-      courseUrl: course.courseUrl,
-      courseTitle: course.title,
-      img: lo.img,
-      title: lo.title,
-      loRoute: lo.route,
-      type: lo.type,
-      isPrivate: false,
-      user: { fullName: user.name, avatar: user.image, id: user.login, sentiment: user.sentiment }
-    },
-    received_at: new Date(Date.now() - minutesAgo * 60_000).toISOString()
+  const payload = {
+    courseId: course.courseId,
+    courseUrl: course.courseUrl,
+    courseTitle: course.title,
+    img: lo.img,
+    title: lo.title,
+    loRoute: lo.route,
+    type: lo.type,
+    isPrivate: false,
+    user: { fullName: user.name, avatar: user.image, id: user.login, sentiment: user.sentiment }
   };
-  const rows = recorder.rows("tutors-connect-latest");
-  const at = rows.findIndex((existing) => existing.course_id === row.course_id && existing.student_id === row.student_id);
-  if (at >= 0) rows[at] = row;
-  else rows.push(row);
+  await backend.sql.query(
+    `INSERT INTO "tutors-connect-latest" (course_id, student_id, payload, received_at) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (course_id, student_id) DO UPDATE SET payload = EXCLUDED.payload, received_at = EXCLUDED.received_at`,
+    [course.courseId, user.login, JSON.stringify(payload), new Date(Date.now() - minutesAgo * 60_000).toISOString()]
+  );
 }
 
-/** How many times the reader asked the database for a course's online list. */
+/** How many times the reader asked its server for a course's online list. */
 export function onlineListLoads(): number {
-  return recorder.tableCalls.filter((call) => call.table === "tutors-connect-latest" && call.op === "select").length;
+  return apiRequests.filter((request) => request.method === "GET" && request.url === "/api/presence/roster").length;
 }
 
-/** The learning events the reader stored for Tutors Live for `name`, in order: the server's upserts into tutors-connect-latest. */
+/** The learning events the reader sent its server for Tutors Live for `name`, in order: each POST /api/presence it accepted. */
 export function liveActivityStored(name: string): LoRecord[] {
-  return recorder
-    .upserts("tutors-connect-latest")
-    .map((row) => row.payload as LoRecord)
-    .filter((payload) => payload.user?.fullName === name);
+  return apiRequests
+    .filter((request) => request.method === "POST" && request.url === "/api/presence" && request.status < 300)
+    .map((request) => (request.body as { payload: LoRecord }).payload)
+    .filter((payload) => payload?.user?.fullName === name);
 }
