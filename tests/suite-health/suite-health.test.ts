@@ -62,11 +62,7 @@ describe("suite health (runway tier O)", () => {
           it.each([1, 2])("case %i asserts nothing", (n) => { void n; });
           test("playwright journey asserts nothing", async ({ page }) => { await page.goto("/"); });
         `)
-      ).toEqual([
-        "no-assertion: logs but asserts nothing",
-        "no-assertion: case %i asserts nothing",
-        "no-assertion: playwright journey asserts nothing"
-      ]);
+      ).toEqual(["no-assertion: logs but asserts nothing", "no-assertion: case %i asserts nothing", "no-assertion: playwright journey asserts nothing"]);
     });
 
     it("does not flag hooks, assertions through expect, assert, fast-check or named helpers", () => {
@@ -98,10 +94,7 @@ describe("suite health (runway tier O)", () => {
         lintFeatureFiles(root)
           .filter((f) => f.detail)
           .map(formatFeatureFinding)
-      ).toEqual([
-        "dropped-step: specs/drops-steps.feature :: While the parser drops this line",
-        "ignored-scenario: specs/drops-steps.feature :: @slow @ignore"
-      ]);
+      ).toEqual(["dropped-step: specs/drops-steps.feature :: While the parser drops this line", "ignored-scenario: specs/drops-steps.feature :: @slow @ignore"]);
     });
 
     it("flags test files no runner collects: outside include, excluded, unmatched by testMatch, no deno test step", () => {
@@ -134,14 +127,11 @@ describe("suite health (runway tier O)", () => {
   });
 
   it("the repo adds no findings beyond the baseline, and the baseline has no stale entries", () => {
-    const current = [
-      ...lintTestSuite(REPO_ROOT).map(formatSuiteFinding),
-      ...lintFeatureFiles(REPO_ROOT).map(formatFeatureFinding),
-      ...lintUncollectedTests(REPO_ROOT)
-    ];
+    const current = [...lintTestSuite(REPO_ROOT).map(formatSuiteFinding), ...lintFeatureFiles(REPO_ROOT).map(formatFeatureFinding), ...lintUncollectedTests(REPO_ROOT)];
     // `.only` is never baselined: it silently disables the rest of the suite.
     expect(current.filter((line) => line.startsWith("only:"))).toEqual([]);
     const result = ratchet(current, readBaseline(resolve(REPO_ROOT, BASELINE)));
     expect(result, describeRatchet("suite health", BASELINE, result)).toEqual({ added: [], stale: [] });
-  });
+    // It reads every test and feature file in the repo, as the completeness and dependency scans do.
+  }, 60_000);
 });
