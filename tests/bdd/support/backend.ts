@@ -30,7 +30,7 @@ const queries: StoreQuery[] = [];
 
 const storeSql: SqlClient = {
   async query<T>(text: string, params?: unknown[]) {
-    for (const table of failing) if (text.includes(`"${table}"`) || new RegExp(`\\b${table}\\b`).test(text)) throw new Error(`relation "${table}" is unavailable`);
+    for (const table of failing) if (text.includes(`"${table}"`) || new RegExp(`\\b${literal(table)}\\b`).test(text)) throw new Error(`relation "${table}" is unavailable`);
     const result = await database.sql.query<T>(text, params);
     queries.push({ text, params, returned: result.rows.length });
     return result;
@@ -49,6 +49,8 @@ export const pgModule = (() => {
 })();
 
 const quoted = (table: string) => `"${table.replace(/"/g, '""')}"`;
+/** `text` as a regular expression that matches it literally. */
+const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** The hub the reader's server publishes to and its streams read: the process's memory hub (no PRIVATE_VALKEY_URL). */
 const hub: RealtimeHub = realtimeHub(undefined);
@@ -135,7 +137,7 @@ export const backend = {
 
   /** The statements that read from or wrote to `table`. */
   queriesOn(table: string): StoreQuery[] {
-    const named = new RegExp(`(FROM|INTO|UPDATE|JOIN)\\s+"?${table.replace(/[-]/g, "\\-")}"?(\\s|$|\\()`, "i");
+    const named = new RegExp(`(FROM|INTO|UPDATE|JOIN)\\s+"?${literal(table)}"?(\\s|$|\\()`, "i");
     return queries.filter((q) => named.test(q.text));
   },
 
