@@ -47,25 +47,30 @@ may read or change a row (`guides/SERVER-WRITES.md`).
 
 ## On the day
 
-Pick a quiet hour; the reader serves courses throughout, but nothing is recorded while writes are frozen.
+Pick a quiet hour and tell students and lecturers first: the reader and Tutors Time are down for
+the whole freeze, so no course page opens until step 3 brings them back. The rehearsal says how
+long that is.
 
-1. **Freeze writes to Supabase.** Scale the reader and time Deployments to zero, so nothing writes
-   learning records while the copy runs (the catalogue and Live do not write to these tables):
+1. **Freeze writes to Supabase.** Note each Deployment's replica count
+   (`oc get deploy reader-tutors-app time-tutors-app`), then scale the reader and time Deployments
+   to zero, so nothing writes learning records while the copy runs (the catalogue and Live do not write to these tables):
    `oc scale deploy/reader-tutors-app deploy/time-tutors-app --replicas=0`.
 2. **Copy and verify.**
    `SOURCE_DATABASE_URL=… PRIVATE_DATABASE_URL=… pnpm db:move run`. Add `--replace` only when the
    store holds rows from an earlier attempt; without it a store table that already holds rows
    refuses the whole move. Every line must read `ok` and the last `all N tables match`.
-3. **Start the servers again.** Scale the reader and time back up, with `PRIVATE_DATABASE_URL`
-   (reader and time) and `PRIVATE_VALKEY_URL` (reader and Live) in their Secrets. Check a lab visit
-   lands in `learning_records` in the store.
+3. **Start the servers again.** With `PRIVATE_DATABASE_URL` (reader and time) and
+   `PRIVATE_VALKEY_URL` (reader and Live) in their Secrets, scale the reader and time back to the
+   counts from step 1 and restart Live (`oc rollout restart deploy/live-tutors-app`). Check a lab
+   visit lands in `learning_records` in the store, and that Live's course page shows it.
 4. **Keep the evidence.** Keep the `pnpm db:move run` output with the release notes. The archive it
    names (`supabase-move-<time>.dump`) holds student data: keep it outside git, and delete it once
    the release is signed off.
 
 **Rolling back.** The Supabase project still holds every row up to the freeze, but no release
 reads it any more: rolling back means restoring the Supabase adapters from git (the release before
-they were deleted). Rows written to the store after the move stay in the store.
+they were deleted). Rows written to the store after the move stay in the store. A copy that fails
+in step 2 needs only the scale back up to the counts from step 1.
 
 ## Afterwards
 

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
  * from the Tutors servers. Nothing drives a broker's channels directly any more (Supabase Realtime
  * went with S4 of the Supabase exit), so the gateway's budget, rejoin backoff and counts cover every
  * topic a tab opens. The whiteboard editor is a static page with its own small room over the same
- * stream and publish routes (Rule 0573).
+ * stream and publish routes (Rule 0580).
  */
 const ALLOWED: string[] = [];
 

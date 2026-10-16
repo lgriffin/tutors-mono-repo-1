@@ -63,13 +63,16 @@
       return null;
     }
 
-    // A shared board's room on Valkey (Rule 0573): the reader's server streams the room
+    // A shared board's room on Valkey (Rule 0580): the reader's server streams the room
     // (GET /api/realtime/stream) and publishes what this tab posts (POST /api/realtime/publish).
-    // It answers the few calls the editor makes of a broadcast channel with presence. Presence is each tab announcing itself every 15 seconds (and at once
-    // to a newcomer), forgotten after 40 seconds of silence or when the tab says it is leaving.
+    // It answers the few calls the editor makes of a broadcast channel with presence. Presence is
+    // each tab announcing itself every 15 seconds (and once, as a reply, to a newcomer), forgotten after 40 seconds of silence or when the tab says it is leaving.
+    // The server checks a presence or leave names the signed-in sender, and a peer is held under its
+    // user and key together, so no one can take over or drop a slot another user's tab announced. A
+    // viewer who is not signed in only watches: the server would refuse everything it posted.
     const PRESENCE_EVERY_MS = 15000;
     const PRESENCE_FORGET_MS = 40000;
-    function valkeyRoom(topic, presenceKey) {
+    function valkeyRoom(topic, presenceKey, watchOnly) {
       const broadcasts = new Map();
       const syncs = [];
       const peers = new Map();
@@ -78,7 +81,7 @@
       let subscribed = false;
       const timers = [];
       const publish = (event, payload, keepalive = false) =>
-        fetch("/api/realtime/publish", {
+        watchOnly ? Promise.resolve() : fetch("/api/realtime/publish", {
           method: "POST",
           credentials: "same-origin",
           keepalive,
@@ -97,12 +100,18 @@
         },
         subscribe(onStatus) {
           source = new EventSource(`/api/realtime/stream?topic=${encodeURIComponent(topic)}`);
+          // The editor sends nothing while the stream is down; the browser reopens it, and the
+          // reopened stream is SUBSCRIBED again, which tracks (announces) this tab once more.
           source.onopen = () => {
-            // A reconnect announces this tab again, as the room may have forgotten it.
-            if (own) void publish("presence", own);
             if (!subscribed) {
               subscribed = true;
               onStatus("SUBSCRIBED");
+            }
+          };
+          source.onerror = () => {
+            if (subscribed) {
+              subscribed = false;
+              onStatus("CHANNEL_ERROR");
             }
           };
           source.onmessage = (frame) => {
@@ -113,13 +122,15 @@
               return;
             }
             if (!message || message.from === presenceKey) return;
+            const slot = `${message.payload?.userId ?? ""} ${message.from}`;
             if (message.event === "presence") {
-              const isNew = !peers.has(message.from);
-              peers.set(message.from, { meta: message.payload, seen: Date.now() });
-              if (isNew && own) void publish("presence", own);
+              const known = peers.has(slot);
+              const { reply, ...meta } = message.payload ?? {};
+              peers.set(slot, { meta, seen: Date.now() });
+              if (!known && !reply && own) void publish("presence", { ...own, reply: true });
               sync();
             } else if (message.event === "leave") {
-              if (peers.delete(message.from)) sync();
+              if (peers.delete(slot)) sync();
             } else {
               broadcasts.get(message.event)?.({ payload: message.payload });
             }
@@ -157,9 +168,10 @@
       return { channel, close };
     }
 
-    /** The shared board's room, or none for a personal board. */
+    /** The shared board's room, or none for a personal board. A viewer who is not signed in only watches. */
     function openRoom(config, presenceKey) {
-      return config.shared ? valkeyRoom(`wb:${config.roomId}`, presenceKey) : null;
+      if (!config.shared) return null;
+      return valkeyRoom(`wb:${config.roomId}`, presenceKey, /^anon(-|$)/.test(String(config.user?.id ?? "anon")));
     }
 
     function ExcalidrawEditor({ config }) {

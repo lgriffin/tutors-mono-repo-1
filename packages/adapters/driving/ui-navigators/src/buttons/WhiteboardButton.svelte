@@ -39,7 +39,7 @@
           window.removeEventListener("message", handler);
           editorIframe?.contentWindow?.postMessage({
             type: "init-editor",
-            // The course's shared room, through the reader's server over Valkey (Rule 0573).
+            // The course's shared room, through the reader's server over Valkey (Rule 0580).
             shared: true,
             roomId: getWhiteboardRoomId(),
             user: {

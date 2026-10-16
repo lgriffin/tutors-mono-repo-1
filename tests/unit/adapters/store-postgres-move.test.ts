@@ -20,11 +20,21 @@ afterEach(async () => {
   await Promise.all(opened.splice(0).map((db) => db.end()));
 });
 
-const copyAll = (source: SqlClient, target: SqlClient): Copier => ({
-  async copy(tables) {
-    for (const table of tables) {
-      const { rows } = await source.query<{ row: string }>(`SELECT row_to_json(t)::text AS row FROM "${table}" t`);
-      for (const { row } of rows) await target.query(`INSERT INTO "${table}" SELECT * FROM json_populate_record(null::"${table}", $1::json)`, [row]);
+/** The rows of each table, copied in one transaction (emptied first on `replace`), as the restore does; `failAfter` fails it part way. */
+const copyAll = (source: SqlClient, target: SqlClient, failAfter?: string): Copier => ({
+  async copy(tables, { replace }) {
+    await target.query("BEGIN");
+    try {
+      if (replace && tables.length) await target.query(`TRUNCATE ${tables.map((t) => `"${t}"`).join(", ")}`);
+      for (const table of tables) {
+        const { rows } = await source.query<{ row: string }>(`SELECT row_to_json(t)::text AS row FROM "${table}" t`);
+        for (const { row } of rows) await target.query(`INSERT INTO "${table}" SELECT * FROM json_populate_record(null::"${table}", $1::json)`, [row]);
+        if (table === failAfter) throw new Error(`the copy failed after ${table}`);
+      }
+      await target.query("COMMIT");
+    } catch (error) {
+      await target.query("ROLLBACK");
+      throw error;
     }
   }
 });
@@ -54,6 +64,11 @@ describe("planMove", { timeout: 60_000 }, () => {
     ]);
   });
 
+  it("is blocked when Supabase shares no table with the store, as a wrong source URL would", async () => {
+    const plan = await planMove(await database(), await database("CREATE TABLE b (id int)"));
+    expect(plan.blockers).toEqual(["Supabase shares no table with the store: check SOURCE_DATABASE_URL names the Supabase database"]);
+  });
+
   it("never moves the migration ledger", async () => {
     const ledger = "CREATE TABLE schema_migrations (name text PRIMARY KEY)";
     const plan = await planMove(await database(ledger), await database(`${ledger}; CREATE TABLE b (id int)`));
@@ -74,6 +89,15 @@ describe("runMove", { timeout: 60_000 }, () => {
     expect(rows[0].id).toBe(4);
   });
 
+  it("keeps the store's rows when a replacing copy fails part way", async () => {
+    const schema = "CREATE TABLE a (id int); CREATE TABLE b (id int)";
+    const source = await database(`${schema}; INSERT INTO a VALUES (1), (2); INSERT INTO b VALUES (3)`);
+    const target = await database(`${schema}; INSERT INTO a VALUES (9); INSERT INTO b VALUES (8)`);
+    const plan = await planMove(source, target);
+    await expect(runMove(plan, copyAll(source, target, "a"), target, { replace: true })).rejects.toThrow("the copy failed after a");
+    expect((await target.query("SELECT id FROM a UNION ALL SELECT id FROM b ORDER BY id")).rows).toEqual([{ id: 8 }, { id: 9 }]);
+  });
+
   it("reports nothing copied when Supabase shares no table with the store", async () => {
     const target = await database("CREATE TABLE b (id int)");
     const plan = await planMove(await database(), target);
@@ -91,6 +115,13 @@ describe("verifyMove", { timeout: 60_000 }, () => {
     const plan = await planMove(source, target);
     await runMove(plan, copyAll(source, target), target);
     expect((await verifyMove(plan, source, target)).differing).toEqual([]);
+  });
+
+  it("tells apart rows whose values differ only in where a delimiter or a null falls", async () => {
+    const schema = "CREATE TABLE t (a text, b text)";
+    const source = await database(`${schema}; INSERT INTO t VALUES ('x|y', 'z'), (NULL, 'w')`);
+    const target = await database(`${schema}; INSERT INTO t VALUES ('x', 'y|z'), ('\\N', 'w')`);
+    expect((await verifyMove(await planMove(source, target), source, target)).differing).toEqual(["t"]);
   });
 
   it("names a table that lost a row, and one with the same count but a different row", async () => {

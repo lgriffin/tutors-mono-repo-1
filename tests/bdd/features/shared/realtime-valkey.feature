@@ -122,7 +122,7 @@ Feature: Realtime on Valkey
       And no stream is reopened before 500 ms
       And one stream is reopened at 500 ms
 
-  @rule-0573 @ears-ubiquitous
+  @rule-0580 @ears-ubiquitous
   Rule: The reader shall carry each shared whiteboard room's scene changes, cursors, presence and leaving between the browsers streaming it, from editors who are signed in.
 
     Scenario: A scene change reaches the other editors of a shared whiteboard
