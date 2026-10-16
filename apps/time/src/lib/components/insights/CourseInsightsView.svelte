@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { t } from "@tutors/i18n";
   import { insightsService } from "@tutors/svelte-state/insights";
   import InsightsPeriod from "./InsightsPeriod.svelte";
@@ -15,9 +16,11 @@
   let { courseId, show }: Props = $props();
 
   // An educator opens the course's insights: they are read for the chosen span (Rule 0412).
+  // Only the props are tracked: the service reads and writes its own state, which must not reopen the page.
   $effect(() => {
-    void insightsService.openCourse(courseId);
-    return () => insightsService.close();
+    const id = courseId;
+    untrack(() => void insightsService.openCourse(id));
+    return () => untrack(() => insightsService.close());
   });
 
   const view = $derived(insightsService.course.value);

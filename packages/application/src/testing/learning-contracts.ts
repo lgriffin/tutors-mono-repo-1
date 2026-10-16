@@ -449,7 +449,7 @@ export function insightsDeskContract(make: (rows: { requests: HelpRequest[]; ann
   const refusal = (answer: InsightsAnswer<unknown>) => (answer.ok ? "ok" : answer.reason);
   return [
     {
-      name: "an educator reads the course's steps hardest first over the day, with its cohort and response times",
+      name: "an educator reads the course's steps hardest first over the day, with its cohort and response times; a one-student step shows counts only",
       run: async () => {
         const { educator } = await make(rows);
         const answer = await educator.course("cs101", "day", "2026-01-05");
@@ -459,7 +459,7 @@ export function insightsDeskContract(make: (rows: { requests: HelpRequest[]; ann
           insights.steps.map((s) => [s.ref.stepId, s.total, s.medianWaitSeconds, s.p90WaitSeconds]),
           [
             ["03", 5, 180, 300],
-            ["02", 1, 30, 30]
+            ["02", 1, null, null]
           ],
           "ranked"
         );

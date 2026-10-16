@@ -8,10 +8,10 @@ import { HELP_KINDS, type HelpKind, type HelpRequest } from "../assistance/help-
 import type { Annotation } from "../feedback/annotation.ts";
 import type { Reflection } from "../feedback/reflection.ts";
 import { stepKey, type StepRef } from "../learning/step-ref.ts";
-import { responseTimes, type ResponseTimes } from "./response-times.ts";
+import { responseTimes, type ResponseTime, type ResponseTimes } from "./response-times.ts";
 import { median, percentile } from "./statistics.ts";
 import { waitSeconds } from "./step-diagnostic.ts";
-import { cohortProfile, type CohortProfile } from "./student-progress.ts";
+import { cohortProfile, MIN_COHORT_FOR_PERCENTILES, type CohortProfile } from "./student-progress.ts";
 
 /** How much help a step needed over the period. */
 export type StepStruggle = {
@@ -39,6 +39,14 @@ export type CourseInsights = {
 
 const dayOf = (iso: string) => iso.slice(0, 10);
 
+/**
+ * Whether a group of requests (one step, or one kind on one day) came from enough students for its
+ * median and 90th percentile to be shown: with fewer, one student's own wait could be read off them,
+ * however large the course's cohort (Rule 0571).
+ */
+const enoughStudents = (requests: readonly HelpRequest[]) => new Set(requests.map((r) => r.learnerId)).size >= MIN_COHORT_FOR_PERCENTILES;
+const countsOnly = (t: ResponseTime): ResponseTime => ({ ...t, median: null, p90: null });
+
 function struggleAt(ref: StepRef, requests: readonly HelpRequest[], annotations: number): StepStruggle {
   const waits = requests.map(waitSeconds).filter((w): w is number => w !== null);
   return {
@@ -54,9 +62,10 @@ function struggleAt(ref: StepRef, requests: readonly HelpRequest[], annotations:
 }
 
 /**
- * Every step with a request or an annotation in the rows, hardest first (Rule 0412): more requests
- * ranks higher, then a longer median wait (a step nobody waited at comes after one somebody did),
- * then the step's place in the course, so equal steps keep a stable order.
+ * Every step with a request or an unrevoked annotation in the rows, hardest first (Rule 0412): more
+ * requests ranks higher, then a longer median wait (a step nobody waited at comes after one somebody
+ * did), then the step's place in the course, so equal steps keep a stable order. A step whose
+ * requests came from fewer than 5 students shows no median or 90th percentile (Rule 0571).
  */
 export function rankSteps(requests: readonly HelpRequest[], annotations: readonly Annotation[]): StepStruggle[] {
   const steps = new Map<string, { ref: StepRef; requests: HelpRequest[]; annotations: number }>();
@@ -67,21 +76,38 @@ export function rankSteps(requests: readonly HelpRequest[], annotations: readonl
     return step;
   };
   for (const r of requests) at(r.ref).requests.push(r);
-  for (const a of annotations) at(a.anchor.ref).annotations++;
+  for (const a of annotations) if (a.revokedAt === null) at(a.anchor.ref).annotations++;
   const order = (s: StepStruggle) => stepKey(s.ref);
   return [...steps.values()]
-    .map((s) => struggleAt(s.ref, s.requests, s.annotations))
-    .sort((a, b) => b.total - a.total || (b.medianWaitSeconds ?? -1) - (a.medianWaitSeconds ?? -1) || order(a).localeCompare(order(b), undefined, { numeric: true }));
+    .map((s) => ({ struggle: struggleAt(s.ref, s.requests, s.annotations), shown: enoughStudents(s.requests) }))
+    .sort(
+      ({ struggle: a }, { struggle: b }) =>
+        b.total - a.total || (b.medianWaitSeconds ?? -1) - (a.medianWaitSeconds ?? -1) || order(a).localeCompare(order(b), undefined, { numeric: true })
+    )
+    .map(({ struggle, shown }) => (shown ? struggle : { ...struggle, medianWaitSeconds: null, p90WaitSeconds: null }));
 }
 
-/** Time to acknowledge and to resolve per day the requests were raised, and per kind (Rule 0413). */
+/**
+ * Time to acknowledge and to resolve per day the requests were raised, and per kind (Rule 0413); a
+ * kind whose requests that day came from fewer than 5 students shows counts only (Rule 0571).
+ */
 export function dailyResponseTimes(requests: readonly HelpRequest[]): DailyResponseTimes[] {
   const days = new Map<string, HelpRequest[]>();
   for (const r of requests) {
     const day = dayOf(r.requestedAt);
-    days.set(day, [...(days.get(day) ?? []), r]);
+    const rows = days.get(day);
+    if (rows) rows.push(r);
+    else days.set(day, [r]);
   }
-  return [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, rows]) => ({ day, times: responseTimes(rows) }));
+  return [...days.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, rows]) => {
+      const times = responseTimes(rows);
+      for (const kind of HELP_KINDS) {
+        if (!enoughStudents(rows.filter((r) => r.kind === kind))) times[kind] = { acknowledge: countsOnly(times[kind].acknowledge), resolve: countsOnly(times[kind].resolve) };
+      }
+      return { day, times };
+    });
 }
 
 /** The students with records in the period: those who asked for help or shared a reflection. */
@@ -93,9 +119,7 @@ export function cohortOf(courseId: string, requests: readonly HelpRequest[], ref
 export function withholdPercentiles(insights: CourseInsights): CourseInsights {
   if (insights.cohort.percentilesShown) return insights;
   const times = (t: ResponseTimes): ResponseTimes =>
-    Object.fromEntries(
-      HELP_KINDS.map((k) => [k, { acknowledge: { ...t[k].acknowledge, median: null, p90: null }, resolve: { ...t[k].resolve, median: null, p90: null } }])
-    ) as ResponseTimes;
+    Object.fromEntries(HELP_KINDS.map((k) => [k, { acknowledge: countsOnly(t[k].acknowledge), resolve: countsOnly(t[k].resolve) }])) as ResponseTimes;
   return {
     ...insights,
     steps: insights.steps.map((s) => ({ ...s, medianWaitSeconds: null, p90WaitSeconds: null })),
@@ -104,12 +128,7 @@ export function withholdPercentiles(insights: CourseInsights): CourseInsights {
 }
 
 /** A course's insights from the rows of one period, percentiles withheld for a small cohort. */
-export function courseInsights(
-  courseId: string,
-  requests: readonly HelpRequest[],
-  annotations: readonly Annotation[],
-  reflections: readonly Reflection[]
-): CourseInsights {
+export function courseInsights(courseId: string, requests: readonly HelpRequest[], annotations: readonly Annotation[], reflections: readonly Reflection[]): CourseInsights {
   return withholdPercentiles({
     cohort: cohortOf(courseId, requests, reflections),
     steps: rankSteps(requests, annotations),

@@ -82,7 +82,7 @@ Feature: Learning insights
       And 5 students each asked for help at the step "03" on "2026-01-05", acknowledged after 1 to 5 minutes
       And "frank" asked for a hint at the step "04" on "2026-01-04", answered with a hint after 4 minutes
       When "ellen" opens the course's insights for 7 days ending "2026-01-05"
-      Then the response times of "2026-01-04" for "hint" shall be 1 resolved with a median of 240 seconds and a 90th percentile of 240 seconds
+      Then the response times of "2026-01-04" for "hint" shall be 1 resolved, its percentiles withheld for one student
       And the response times of "2026-01-05" for "stuck" shall be 5 acknowledged with a median of 180 seconds and a 90th percentile of 300 seconds
       And the response times of "2026-01-05" shall have none for "hint"
 
@@ -133,3 +133,16 @@ Feature: Learning insights
     Scenario: No context's use cases import another's
       Given the use cases of the assistance, feedback and insights contexts
       Then none of them shall import another of those contexts' use case modules
+
+  @rule-0571 @ears-ubiquitous
+  Rule: Tutors shall withhold the median and 90th percentile of a step, or of a kind of help on a day, whose requests came from fewer than 5 students, whatever the size of the course's cohort.
+
+    Scenario: One student's step and kind show counts only beside five who asked
+      Given "ellen" teaches the course
+      And 5 students each asked for help at the step "03" on "2026-01-05", acknowledged after 1 to 5 minutes
+      And "frank" asked for a hint at the step "04" on "2026-01-05", answered with a hint after 4 minutes
+      When "ellen" opens the course's insights for the day "2026-01-05"
+      Then the step "03" shall show 5 requests with a median wait of 180 seconds
+      And the step "04" shall show 1 requests and no median or 90th percentile wait
+      And the response times of "2026-01-05" for "hint" shall be 1 resolved, its percentiles withheld for one student
+      And the page shall not say that only counts are shown

@@ -99,6 +99,10 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   const opensSpan = (_ctx: unknown, login: string, days: number, day: string) => openAs(login, span(days), day);
   const ranked = (_ctx: unknown, order: string) => expect(shown().steps.map((s) => s.ref.stepId)).toEqual(order.split(", "));
   const withMedian = (_ctx: unknown, stepId: string, total: number, median: number) => expect([step(stepId).total, step(stepId).medianWaitSeconds]).toEqual([total, median]);
+  const withheldFor = (_ctx: unknown, day: string, kind: HelpKind, count: number) => {
+    const times = shown().responseTimes.find((d) => d.day === day)!.times;
+    expect(times[kind].resolve).toEqual({ count, median: null, p90: null });
+  };
   const saysCountsOnly = (yes: boolean) => () => {
     expect(shown().cohort.percentilesShown).toBe(!yes);
     expect(t("insights.withheld")).toMatch(/only counts/);
@@ -172,40 +176,37 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     }
   );
 
-  Rule(
-    "When an educator opens a course's insights, tutors shall rank its lab steps by requests and waiting time for the chosen day, week or month.",
-    ({ RuleScenario }) => {
-      RuleScenario("The step most students asked about comes first, and the week reaches further back than the day", ({ Given, And, When, Then }) => {
-        Given("{string} teaches the course", teaches);
-        And("{number} students each asked for help at the step {string} on {string}, acknowledged after 1 to 5 minutes", many);
-        And("{string} asked for help at the step {string} on {string}, acknowledged after {number} seconds", one);
-        And("{string} asked for help at the step {string} on {string}, acknowledged after {number} minutes", oneMinutes);
-        When("{string} opens the course's insights for the day {string}", opensDay);
-        Then("the steps shall be ranked {string}", ranked);
-        And("the step {string} shall show {number} requests with a median wait of {number} seconds", withMedian);
-        When("{string} chooses 7 days", () => insightsService.choose("week"));
-        Then("the steps over the 7 days shall be ranked {string}", ranked);
-      });
+  Rule("When an educator opens a course's insights, tutors shall rank its lab steps by requests and waiting time for the chosen day, week or month.", ({ RuleScenario }) => {
+    RuleScenario("The step most students asked about comes first, and the week reaches further back than the day", ({ Given, And, When, Then }) => {
+      Given("{string} teaches the course", teaches);
+      And("{number} students each asked for help at the step {string} on {string}, acknowledged after 1 to 5 minutes", many);
+      And("{string} asked for help at the step {string} on {string}, acknowledged after {number} seconds", one);
+      And("{string} asked for help at the step {string} on {string}, acknowledged after {number} minutes", oneMinutes);
+      When("{string} opens the course's insights for the day {string}", opensDay);
+      Then("the steps shall be ranked {string}", ranked);
+      And("the step {string} shall show {number} requests with a median wait of {number} seconds", withMedian);
+      When("{string} chooses 7 days", () => insightsService.choose("week"));
+      Then("the steps over the 7 days shall be ranked {string}", ranked);
+    });
 
-      RuleScenario("Equal requests rank the longer wait first", ({ Given, And, When, Then }) => {
-        Given("{string} teaches the course", teaches);
-        And("these students asked for help on {string}", (_ctx, day: string, rows: { learner: string; step: string; waited: string }[]) => {
-          for (const r of rows) asked(r.learner, r.step, day, 30, Number(r.waited));
-        });
-        When("{string} opens the course's insights for the day {string}", opensDay);
-        Then("the steps shall be ranked {string}", ranked);
+    RuleScenario("Equal requests rank the longer wait first", ({ Given, And, When, Then }) => {
+      Given("{string} teaches the course", teaches);
+      And("these students asked for help on {string}", (_ctx, day: string, rows: { learner: string; step: string; waited: string }[]) => {
+        for (const r of rows) asked(r.learner, r.step, day, 30, Number(r.waited));
       });
+      When("{string} opens the course's insights for the day {string}", opensDay);
+      Then("the steps shall be ranked {string}", ranked);
+    });
 
-      RuleScenario("A student cannot open the course's insights", ({ Given, And, When, Then }) => {
-        Given("{string} teaches the course", teaches);
-        And("{string} asked for help at the step {string} on {string}, acknowledged after {number} seconds", one);
-        When("{string} opens the course's insights for the day {string}", opensDay);
-        Then("the insights page shall say {string} and rank no step", (_ctx, reason: string) => {
-          expect(insightsService.course.value.answer).toEqual({ ok: false, reason });
-        });
+    RuleScenario("A student cannot open the course's insights", ({ Given, And, When, Then }) => {
+      Given("{string} teaches the course", teaches);
+      And("{string} asked for help at the step {string} on {string}, acknowledged after {number} seconds", one);
+      When("{string} opens the course's insights for the day {string}", opensDay);
+      Then("the insights page shall say {string} and rank no step", (_ctx, reason: string) => {
+        expect(insightsService.course.value.answer).toEqual({ ok: false, reason });
       });
-    }
-  );
+    });
+  });
 
   Rule("Tutors shall report time to acknowledge and time to resolve as median and 90th percentile per day and per kind of help.", ({ RuleScenario }) => {
     RuleScenario("Each day and kind has its own times", ({ Given, And, When, Then }) => {
@@ -214,12 +215,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       And("{string} asked for a hint at the step {string} on {string}, answered with a hint after {number} minutes", hinted);
       When("{string} opens the course's insights for {number} days ending {string}", opensSpan);
       const timesOf = (day: string) => shown().responseTimes.find((d) => d.day === day)!.times;
-      Then(
-        "the response times of {string} for {string} shall be {number} resolved with a median of {number} seconds and a 90th percentile of {number} seconds",
-        (_ctx, day: string, kind: HelpKind, count: number, median: number, p90: number) => {
-          expect(timesOf(day)[kind].resolve).toEqual({ count, median, p90 });
-        }
-      );
+      Then("the response times of {string} for {string} shall be {number} resolved, its percentiles withheld for one student", withheldFor);
       And(
         "the response times of {string} for {string} shall be {number} acknowledged with a median of {number} seconds and a 90th percentile of {number} seconds",
         (_ctx, day: string, kind: HelpKind, count: number, median: number, p90: number) => {
@@ -240,7 +236,15 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         And("{string} asked for a hint at the step {string} on {string}, answered with a hint after {number} minutes", hinted);
         And("{string} asked for help at the step {string} on {string}, acknowledged after {number} seconds", one);
         And("{string} wrote an annotation to {string} at the step {string} on {string}", (_ctx, author: string, learnerId: string, stepId: string, day: string) => {
-          annotations.push({ id: `a${annotations.length}`, anchor: { kind: "step", ref: at(stepId) }, audience: { kind: "student", learnerId }, body: "Nearly.", authorId: author, createdAt: `${day}T12:00:00.000Z`, revokedAt: null });
+          annotations.push({
+            id: `a${annotations.length}`,
+            anchor: { kind: "step", ref: at(stepId) },
+            audience: { kind: "student", learnerId },
+            body: "Nearly.",
+            authorId: author,
+            createdAt: `${day}T12:00:00.000Z`,
+            revokedAt: null
+          });
         });
         And("{string} shared a reflection at the step {string} on {string}", (_ctx, learnerId: string, stepId: string, day: string) => {
           reflections.push({ id: `r${reflections.length}`, ref: at(stepId), learnerId, body: "Found it.", kind: "reflection", sharedAt: `${day}T13:00:00.000Z` });
@@ -327,16 +331,34 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
             const index = readFileSync(join(dir, "index.ts"), "utf8");
             const files = [...index.matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1]);
             expect(files.length).toBeGreaterThan(0);
-            return files.flatMap((file) =>
-              [...readFileSync(join(dir, file), "utf8").matchAll(/from "([^"]+)"/g)].map((m) => ({ context, from: m[1] }))
-            );
+            return files.flatMap((file) => [...readFileSync(join(dir, file), "utf8").matchAll(/from "([^"]+)"/g)].map((m) => ({ context, from: m[1] })));
           });
         });
         Then("none of them shall import another of those contexts' use case modules", () => {
-          const crossing = imports.filter(({ context, from }) => contexts.some((other) => other !== context && (from.startsWith(`../${other}/`) || from === `@tutors/application/${other}`)));
+          const crossing = imports.filter(({ context, from }) =>
+            contexts.some((other) => other !== context && (from.startsWith(`../${other}/`) || from === `@tutors/application/${other}`))
+          );
           expect(imports.length).toBeGreaterThan(10);
           expect(crossing).toEqual([]);
         });
+      });
+    }
+  );
+
+  Rule(
+    "Tutors shall withhold the median and 90th percentile of a step, or of a kind of help on a day, whose requests came from fewer than 5 students, whatever the size of the course's cohort.",
+    ({ RuleScenario }) => {
+      RuleScenario("One student's step and kind show counts only beside five who asked", ({ Given, And, When, Then }) => {
+        Given("{string} teaches the course", teaches);
+        And("{number} students each asked for help at the step {string} on {string}, acknowledged after 1 to 5 minutes", many);
+        And("{string} asked for a hint at the step {string} on {string}, answered with a hint after {number} minutes", hinted);
+        When("{string} opens the course's insights for the day {string}", opensDay);
+        Then("the step {string} shall show {number} requests with a median wait of {number} seconds", withMedian);
+        And("the step {string} shall show {number} requests and no median or 90th percentile wait", (_ctx, stepId: string, total: number) => {
+          expect([step(stepId).total, step(stepId).medianWaitSeconds, step(stepId).p90WaitSeconds]).toEqual([total, null, null]);
+        });
+        And("the response times of {string} for {string} shall be {number} resolved, its percentiles withheld for one student", withheldFor);
+        And("the page shall not say that only counts are shown", saysCountsOnly(false));
       });
     }
   );

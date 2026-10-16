@@ -64,10 +64,51 @@ describe("educatorInsights", () => {
 
 describe("course insights in the domain", () => {
   it("counts an annotation's step even where nobody asked, and leaves a big cohort's percentiles alone", () => {
-    const annotation = { id: "a1", anchor: { kind: "step" as const, ref: ref("09") }, audience: { kind: "everyone" as const }, body: "", authorId: "ellen", createdAt: "2026-01-05T10:00:00.000Z", revokedAt: null };
+    const annotation = {
+      id: "a1",
+      anchor: { kind: "step" as const, ref: ref("09") },
+      audience: { kind: "everyone" as const },
+      body: "",
+      authorId: "ellen",
+      createdAt: "2026-01-05T10:00:00.000Z",
+      revokedAt: null
+    };
     expect(rankSteps([], [annotation]).map((s) => [s.ref.stepId, s.total, s.annotations])).toEqual([["09", 0, 1]]);
-    const big = courseInsights("cs101", ["a", "b", "c", "d", "e"].map((l) => request(l, "02", "2026-01-05T09:00:00.000Z", 30)), [], []);
+    const big = courseInsights(
+      "cs101",
+      ["a", "b", "c", "d", "e"].map((l) => request(l, "02", "2026-01-05T09:00:00.000Z", 30)),
+      [],
+      []
+    );
     expect(withholdPercentiles(big)).toBe(big);
+  });
+
+  it("leaves a revoked annotation out, so its step is not listed", () => {
+    const revoked = {
+      id: "a2",
+      anchor: { kind: "step" as const, ref: ref("09") },
+      audience: { kind: "everyone" as const },
+      body: "",
+      authorId: "ellen",
+      createdAt: "2026-01-05T10:00:00.000Z",
+      revokedAt: "2026-01-05T11:00:00.000Z"
+    };
+    expect(rankSteps([], [revoked])).toEqual([]);
+  });
+
+  it("withholds one student's wait though four others shared reflections (Rule 0571)", () => {
+    const reflections = ["b", "c", "d", "e"].map((learnerId, i) => ({
+      id: `r${i}`,
+      ref: ref("02"),
+      learnerId,
+      body: "",
+      kind: "reflection" as const,
+      sharedAt: "2026-01-05T11:00:00.000Z"
+    }));
+    const insights = courseInsights("cs101", [request("a", "02", "2026-01-05T09:00:00.000Z", 30)], [], reflections);
+    expect(insights.cohort.percentilesShown).toBe(true);
+    expect([insights.steps[0].total, insights.steps[0].medianWaitSeconds, insights.steps[0].p90WaitSeconds]).toEqual([1, null, null]);
+    expect(insights.responseTimes[0].times.stuck.acknowledge).toEqual({ count: 1, median: null, p90: null });
   });
 
   it("puts a step nobody waited at after one somebody did", () => {
@@ -87,7 +128,11 @@ describe("the in-memory insights desks", () => {
 });
 
 describe("insightsService", () => {
-  const desk = new InMemoryInsightsDesk({ read: new InMemoryInsightsRead([request("alice", "02", "2026-01-05T09:00:00.000Z", 60)]), educators: { cs101: ["ellen"] }, actor: "ellen" });
+  const desk = new InMemoryInsightsDesk({
+    read: new InMemoryInsightsRead([request("alice", "02", "2026-01-05T09:00:00.000Z", 60)]),
+    educators: { cs101: ["ellen"] },
+    actor: "ellen"
+  });
 
   it("reads nothing until a page is open, and ends the span on today until a day is chosen", async () => {
     configureAdapters({ ...anonymousAdapters(), anonymous: false, insightsDesk: desk });
