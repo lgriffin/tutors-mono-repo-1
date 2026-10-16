@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "commit": "cf61ae8e93a38fa08435995a7ec14180a451fe50",
+  "base": "432d46864626ce14e07eb7715e0408c643ca906a",
+  "generatedAt": "2026-10-16T08:51:09Z",
+  "evidence": "https://github.com/lgriffin/tutors-mono-repo-1/actions/runs/38870248450",
+  "nightly": {
+    "result": "failure",
+    "jobs": {
+      "contract-snapshots": "success",
+      "mutation": "failure",
+      "mutation-nightly": "failure",
+      "suite-health": "success",
+      "e2e-stack-nightly": "failure",
+      "timezone-matrix": "success",
+      "lighthouse": "success",
+      "load": "success",
+      "generator-corpus": "success"
+    }
+  }
+}
