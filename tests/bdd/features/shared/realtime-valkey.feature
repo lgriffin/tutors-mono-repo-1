@@ -145,7 +145,7 @@ Feature: Realtime on Valkey
       And no stream is reopened before 500 ms
       And one stream is reopened at 500 ms
 
-  @rule-0573 @ears-optional
+  @rule-0580 @ears-optional
   Rule: Where a server is deployed with PUBLIC_REALTIME set to valkey, the reader shall carry each shared whiteboard room's scene changes, cursors, presence and leaving between the browsers streaming it, from editors who are signed in.
 
     @active

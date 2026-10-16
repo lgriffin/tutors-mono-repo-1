@@ -71,7 +71,7 @@
       return null;
     }
 
-    // A shared board's room on Valkey (Rule 0573): the reader's server streams the room
+    // A shared board's room on Valkey (Rule 0580): the reader's server streams the room
     // (GET /api/realtime/stream) and publishes what this tab posts (POST /api/realtime/publish).
     // It answers the few calls the editor makes of a Supabase channel, so the editor below is the
     // same on either broker. Presence is each tab announcing itself every 15 seconds (and at once

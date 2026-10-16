@@ -128,7 +128,7 @@ async function publishAs(hub: RealtimeHub, topic: string, body: BrowserMessage):
 }
 
 /**
- * A shared whiteboard's room (Rule 0573). Anyone signed in may draw on a shared board, as anyone
+ * A shared whiteboard's room (Rule 0580). Anyone signed in may draw on a shared board, as anyone
  * signed in may save it (PUT /api/whiteboard); a cursor, a presence or a leaving names its sender.
  * Each event has its own allowance, so a room's cursors (up to ten a second) never crowd out its scene.
  */
