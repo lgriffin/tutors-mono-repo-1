@@ -11,7 +11,7 @@ import { topics } from "@tutors/realtime";
 import log from "@tutors/logger";
 import type { RealtimeHub } from "./hub.ts";
 import { noticeEvent, noticeTopic } from "./notices.ts";
-import { PLAYGROUND_EVENTS, playgroundOf } from "./topics.ts";
+import { PLAYGROUND_EVENTS, WHITEBOARD_EVENTS, playgroundOf, whiteboardTopicOf } from "./topics.ts";
 
 export const LO_EVENT = "lo-event";
 
@@ -81,9 +81,10 @@ export function topicRateLimiter(perSecond = BROWSER_MESSAGES_PER_SECOND, now: (
 export type BrowserSender = { login: string; isEducator: (courseId: string) => Promise<boolean> };
 
 /**
- * A signed-in browser's message to publish (POST /api/realtime/publish): only a live share's
- * `state`, sent as the student it names, or a `watching` announcement from an educator of the
- * course, and only on a playground topic. Anything else is refused before Valkey sees it.
+ * A signed-in browser's message to publish (POST /api/realtime/publish): on a playground topic, only
+ * a live share's `state`, sent as the student it names, or a `watching` announcement from an
+ * educator of the course; on a shared whiteboard's room, its scene changes, and its cursors,
+ * presence and leaving sent as the person they name. Anything else is refused before Valkey sees it.
  */
 export async function publishBrowserMessage(raw: string, hub: RealtimeHub, allow: (key: string) => boolean, sender: BrowserSender): Promise<BrowserPublishResponse> {
   if (new TextEncoder().encode(raw).length > MAX_BROWSER_MESSAGE_BYTES) return { status: 413, message: "body is larger than 256 KB" };
@@ -94,8 +95,10 @@ export async function publishBrowserMessage(raw: string, hub: RealtimeHub, allow
     return { status: 400, message: "body is not JSON" };
   }
   if (!body || typeof body !== "object") return { status: 400, message: "body is not an object" };
+  const whiteboard = whiteboardTopicOf(body.topic);
+  if (whiteboard) return publishWhiteboard(whiteboard, body, hub, allow, sender);
   const playground = playgroundOf(body.topic);
-  if (!playground) return { status: 403, message: "a browser publishes only to a playground topic" };
+  if (!playground) return { status: 403, message: "a browser publishes only to a playground topic or a shared whiteboard's room" };
   const { topic, courseId } = playground;
   if (typeof body.event !== "string" || !(PLAYGROUND_EVENTS as readonly string[]).includes(body.event)) {
     return { status: 400, message: `event is one of ${PLAYGROUND_EVENTS.join(", ")}` };
@@ -106,13 +109,42 @@ export async function publishBrowserMessage(raw: string, hub: RealtimeHub, allow
   if (body.event === "watching" && !(await sender.isEducator(courseId))) {
     return { status: 403, message: "only an educator of the course watches a share" };
   }
-  const from = typeof body.from === "string" && body.from.length <= 64 ? body.from : undefined;
   if (!allow(`${topic}|${sender.login}`)) return { status: 429, message: "too many messages on this topic" };
+  return publishAs(hub, topic, body);
+}
+
+type BrowserMessage = { event?: unknown; payload?: unknown; from?: unknown };
+
+/** The tab a message came from, so the tab can ignore its own: what Supabase's `broadcast: { self: false }` did. */
+async function publishAs(hub: RealtimeHub, topic: string, body: BrowserMessage): Promise<BrowserPublishResponse> {
+  const from = typeof body.from === "string" && body.from.length <= 64 ? body.from : undefined;
   try {
-    await hub.publish(topic, { event: body.event, payload: body.payload ?? {}, ...(from ? { from } : {}) });
+    await hub.publish(topic, { event: body.event as string, payload: body.payload ?? {}, ...(from ? { from } : {}) });
     return { status: 202 };
   } catch (error) {
     log.error("Publishing a browser's realtime message failed:", topic, error);
     return { status: 502, message: "the message was not published" };
   }
+}
+
+/**
+ * A shared whiteboard's room (Rule 0580). Anyone signed in may draw on a shared board, as anyone
+ * signed in may save it (PUT /api/whiteboard); a cursor, a presence or a leaving names its sender.
+ * Each event has its own allowance, so a room's cursors (up to ten a second) never crowd out its scene.
+ */
+function publishWhiteboard(
+  topic: string,
+  body: BrowserMessage,
+  hub: RealtimeHub,
+  allow: (key: string) => boolean,
+  sender: BrowserSender
+): Promise<BrowserPublishResponse> | BrowserPublishResponse {
+  if (typeof body.event !== "string" || !(WHITEBOARD_EVENTS as readonly string[]).includes(body.event)) {
+    return { status: 400, message: `event is one of ${WHITEBOARD_EVENTS.join(", ")}` };
+  }
+  if (body.event !== "scene-update" && (body.payload as { userId?: unknown } | null)?.userId !== sender.login) {
+    return { status: 403, message: "a cursor or presence names its own sender" };
+  }
+  if (!allow(`${topic}|${sender.login}|${body.event}`)) return { status: 429, message: "too many messages on this topic" };
+  return publishAs(hub, topic, body);
 }

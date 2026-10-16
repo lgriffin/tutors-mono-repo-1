@@ -109,7 +109,7 @@ The same `CourseNotices` port carries a lecturer's broadcast. `BroadcastPanel` (
 Two layers guarantee the 48h cap:
 
 1. **Read-time filtering**: the authorised read filters `expires_at > now()`, so an expired snippet is invisible well before physical deletion.
-2. **Physical deletion**: the **`gist-cleanup.yml`** GitHub Actions workflow (cron, twice daily) runs `scripts/purge-course-gists.ts`, which batch-deletes expired rows through `expired_course_gists()`.
+2. **Physical deletion**: the **`gist-cleanup.yml`** GitHub Actions workflow (cron, twice daily) runs `scripts/purge-course-gists.ts`, which batch-deletes expired rows through `expired_course_gists()`. With `PRIVATE_DATABASE_URL` set it deletes them from the Postgres store instead (`purgeExpiredSnippets`).
 
    Dry-run locally: `DRY_RUN=1 pnpm tsx scripts/purge-course-gists.ts`.
 

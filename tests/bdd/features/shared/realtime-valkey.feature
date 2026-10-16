@@ -60,7 +60,7 @@ Feature: Realtime on Valkey
       And nothing listens to the topic "../admin"
 
   @rule-0484 @ears-unwanted
-  Rule: If a browser asks the reader's server to publish to a topic other than a playground share, an event other than a share's state or a lecturer's watching, or as anyone but the signed-in student or educator the event needs, then the reader shall answer 400, 401 or 403 and publish nothing.
+  Rule: If a browser asks the reader's server to publish to a topic other than a playground share or a shared whiteboard's room, an event that topic does not take, or as anyone but the signed-in student, educator or editor the event names, then the reader shall answer 400, 401 or 403 and publish nothing.
 
     Scenario: A browser cannot publish a lecturer's broadcast
       Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
@@ -104,6 +104,20 @@ Feature: Realtime on Valkey
       Then the reader answers 403
       And the playground stream receives nothing
 
+    Scenario: An editor cannot move someone else's cursor on a shared whiteboard
+      Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
+      And "bob" streams the shared whiteboard of the first lab of "web-dev-101" from the reader
+      When "mallory" asks the reader to publish "cursor-update" for "alice" on the shared whiteboard of the first lab
+      Then the reader answers 403
+      And the whiteboard stream receives nothing
+
+    Scenario: A browser cannot publish another event on a shared whiteboard
+      Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
+      And "bob" streams the shared whiteboard of the first lab of "web-dev-101" from the reader
+      When "alice" asks the reader to publish "state" for "alice" on the shared whiteboard of the first lab
+      Then the reader answers 400
+      And the whiteboard stream receives nothing
+
   @rule-0560 @ears-event-driven
   Rule: When a browser that is not signed in as an educator of the course streams a playground share, the reader shall send it only the lecturers' watching announcements.
 
@@ -130,3 +144,28 @@ Feature: Realtime on Valkey
       Then the failed stream is closed
       And no stream is reopened before 500 ms
       And one stream is reopened at 500 ms
+
+  @rule-0580 @ears-optional
+  Rule: Where a server is deployed with PUBLIC_REALTIME set to valkey, the reader shall carry each shared whiteboard room's scene changes, cursors, presence and leaving between the browsers streaming it, from editors who are signed in.
+
+    @active
+    Scenario: A scene change reaches the other editors of a shared whiteboard
+      Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
+      And "bob" streams the shared whiteboard of the first lab of "web-dev-101" from the reader
+      When "alice" asks the reader to publish "scene-update" for "alice" on the shared whiteboard of the first lab
+      Then the reader answers 202
+      And the whiteboard stream receives the "scene-update" of "alice"'s tab
+
+    @active
+    Scenario: An editor's presence reaches the other editors of a shared whiteboard
+      Given the reader's server is deployed with PUBLIC_REALTIME "valkey"
+      And "bob" streams the shared whiteboard of the first lab of "web-dev-101" from the reader
+      When "alice" asks the reader to publish "presence" for "alice" on the shared whiteboard of the first lab
+      Then the reader answers 202
+      And the whiteboard stream receives the "presence" of "alice"'s tab
+
+    @inactive
+    Scenario: A deployment without PUBLIC_REALTIME carries no whiteboard room
+      Given the reader's server is deployed with PUBLIC_REALTIME ""
+      When "alice" asks the reader to publish "scene-update" for "alice" on the shared whiteboard of the first lab
+      Then the reader answers 404

@@ -18,7 +18,7 @@ export { postgresAccessStore } from "./access-store.ts";
 export { postgresWhiteboardStore } from "./whiteboard-scenes.ts";
 export { postgresScormRecords } from "./scorm-records.ts";
 export { postgresPlaygroundSnapshotRows } from "./playground-snapshots.ts";
-export { postgresSnippetStore } from "./snippets.ts";
+export { postgresSnippetStore, purgeExpiredSnippets } from "./snippets.ts";
 export { postgresAssistanceStore } from "./assistance.ts";
 export { postgresFeedbackStore } from "./feedback.ts";
 export { postgresInsightsRead } from "./insights.ts";

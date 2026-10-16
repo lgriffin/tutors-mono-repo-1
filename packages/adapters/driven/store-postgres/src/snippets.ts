@@ -50,7 +50,11 @@ export function postgresSnippetStore(sql: SqlClient): SnippetStore {
 
     async countSince(courseId: string, learnerId: string, sinceIso: string): Promise<number | null> {
       try {
-        const { rows } = await sql.query(`SELECT count(*) AS n FROM course_gists WHERE student_id = $1 AND course_id = $2 AND created_at >= $3::timestamptz`, [learnerId, courseId, sinceIso]);
+        const { rows } = await sql.query(`SELECT count(*) AS n FROM course_gists WHERE student_id = $1 AND course_id = $2 AND created_at >= $3::timestamptz`, [
+          learnerId,
+          courseId,
+          sinceIso
+        ]);
         return num(rows[0]?.n) ?? 0;
       } catch (error) {
         log.error("Counting a learner's snippets failed:", error);
@@ -58,4 +62,32 @@ export function postgresSnippetStore(sql: SqlClient): SnippetStore {
       }
     }
   };
+}
+
+/**
+ * Deletes the snippets that expired at or before `nowIso` (`scripts/purge-course-gists.ts`, run by
+ * `.github/workflows/gist-cleanup.yml`): reads already hide them, so this reclaims the storage. One
+ * statement per batch of `batchSize`, at most `maxBatches`; answers how many rows were deleted, or,
+ * with `dryRun`, how many would be.
+ */
+export async function purgeExpiredSnippets(sql: SqlClient, nowIso: string, options: { batchSize?: number; maxBatches?: number; dryRun?: boolean } = {}): Promise<number> {
+  if (options.dryRun) {
+    const { rows } = await run("course_gists count expired", () =>
+      sql.query<{ n: number }>(`SELECT count(*)::int AS n FROM course_gists WHERE expires_at <= $1::timestamptz`, [nowIso])
+    );
+    return rows[0].n;
+  }
+  const batchSize = Math.max(1, options.batchSize ?? 200);
+  let deleted = 0;
+  for (let batch = 0; batch < Math.max(1, options.maxBatches ?? 50); batch++) {
+    const { rows } = await run("course_gists purge", () =>
+      sql.query<{ id: string }>(
+        `DELETE FROM course_gists WHERE id IN (SELECT id FROM course_gists WHERE expires_at <= $1::timestamptz ORDER BY expires_at LIMIT $2) RETURNING id::text AS id`,
+        [nowIso, batchSize]
+      )
+    );
+    deleted += rows.length;
+    if (rows.length < batchSize) break;
+  }
+  return deleted;
 }
