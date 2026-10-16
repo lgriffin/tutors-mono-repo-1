@@ -5,7 +5,8 @@
 # then checks the three outcomes the runbook (guides/DATA-MOVE.md) relies on:
 #   1. the move copies every row and verify reports every table matching;
 #   2. a second run without --replace is refused and changes nothing;
-#   3. verify catches a row changed after the move.
+#   3. verify catches a row changed after the move;
+#   4. --replace puts Supabase's rows back over the changed store, and verify matches again.
 #
 #   ADMIN_URL=postgres://tutors:tutors@localhost:5432/tutors_test scripts/db-move-rehearsal.sh
 set -euo pipefail
@@ -41,5 +42,8 @@ rows=$(psql -tA "$base/$dst" -c "SELECT count(*) FROM learning_records")
 echo "== 3. verify catches a changed row"
 psql -q "$base/$dst" -c "UPDATE learning_records SET duration = duration + 1 WHERE student_id = 'student-7'"
 if move verify; then echo "FAIL: verify missed a changed row" >&2; exit 1; fi
+
+echo "== 4. --replace copies over the store's rows in one transaction"
+move run --replace
 
 echo "rehearsal passed"

@@ -7,19 +7,20 @@
  *   pnpm db:move verify            compare row counts and checksums table by table
  *
  * `plan` and `verify` only read. `run` copies nothing when the plan has a blocker or a planned
- * table already holds rows in the store (`--replace` empties those tables first). It keeps the
+ * table already holds rows in the store (`--replace` empties those tables in the copy's own
+ * transaction). It keeps the
  * pg_dump archive (MOVE_ARCHIVE, default ./supabase-move-<time>.dump): it holds student data, so
  * keep it out of git and delete it once the move is signed off.
  *
  * Env:
  *   SOURCE_DATABASE_URL    (required) the Supabase database, as postgres:// (Project settings > Database)
  *   PRIVATE_DATABASE_URL   (required) the Postgres store the servers use with DATA_STORE=postgres
- *   PG_BIN_DIR             (optional) where pg_dump and pg_restore live; their major version must be
+ *   PG_BIN_DIR             (optional) where pg_dump, pg_restore and psql live; their major version must be
  *                          at least the Supabase server's
  *   MOVE_ARCHIVE           (optional) where the archive is written
  */
 import { spawn } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -43,13 +44,15 @@ function exec(binary: string, args: string[]): Promise<void> {
 const pattern = (table: string) => `public."${table.replace(/"/g, '""')}"`;
 
 /**
- * pg_dump of the named tables' rows into one custom-format archive, then pg_restore of that data
- * into the store, in one transaction: a failed restore leaves the store as it was.
+ * pg_dump of the named tables' rows into one custom-format archive, then their data restored into
+ * the store in one transaction: a failed restore leaves the store as it was. With `replace` the
+ * archive is turned into SQL (pg_restore --file) and psql runs the TRUNCATE and that SQL in one
+ * transaction, so a failed replacement keeps the rows the store held.
  */
 export function pgDumpCopier(options: { sourceUrl: string; targetUrl: string; archive: string; binDir?: string }): Copier {
   const bin = (name: string) => (options.binDir ? join(options.binDir, name) : name);
   return {
-    async copy(tables) {
+    async copy(tables, { replace }) {
       if (!tables.length) return;
       await exec(bin("pg_dump"), [
         "--format=custom",
@@ -60,7 +63,26 @@ export function pgDumpCopier(options: { sourceUrl: string; targetUrl: string; ar
         `--file=${options.archive}`,
         `--dbname=${options.sourceUrl}`
       ]);
-      await exec(bin("pg_restore"), ["--data-only", "--no-owner", "--no-acl", "--single-transaction", "--exit-on-error", `--dbname=${options.targetUrl}`, options.archive]);
+      if (!replace) {
+        await exec(bin("pg_restore"), ["--data-only", "--no-owner", "--no-acl", "--single-transaction", "--exit-on-error", `--dbname=${options.targetUrl}`, options.archive]);
+        return;
+      }
+      const script = `${options.archive}.sql`;
+      try {
+        await exec(bin("pg_restore"), ["--data-only", "--no-owner", "--no-acl", `--file=${script}`, options.archive]);
+        await exec(bin("psql"), [
+          "--no-psqlrc",
+          "--quiet",
+          "--output=/dev/null",
+          "--single-transaction",
+          "--set=ON_ERROR_STOP=1",
+          `--command=TRUNCATE ${tables.map(pattern).join(", ")}`,
+          `--file=${script}`,
+          `--dbname=${options.targetUrl}`
+        ]);
+      } finally {
+        rmSync(script, { force: true });
+      }
     }
   };
 }
@@ -110,6 +132,8 @@ async function main(argv: string[]): Promise<number> {
     const plan = await planMove(source, target);
     for (const line of describePlan(plan)) out(line);
     if (command === "plan") return plan.blockers.length ? 1 : 0;
+    // A source with no table in common compares nothing, which is not a match.
+    if (command === "verify" && !plan.copy.length) return 1;
     if (command === "run") {
       const archive = process.env.MOVE_ARCHIVE || `supabase-move-${new Date().toISOString().replace(/[:.]/g, "-")}.dump`;
       const moved = await runMove(plan, pgDumpCopier({ sourceUrl, targetUrl, archive, binDir: process.env.PG_BIN_DIR }), target, { replace: flags.includes("--replace") });
