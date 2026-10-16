@@ -22,6 +22,11 @@ Feature: Moving the rows out of Supabase
       When the data move is planned
       Then the plan is blocked by "learning_records.legacy_score"
 
+    Scenario: A source that shares no table with the store blocks the move
+      Given the source database holds none of the store's tables
+      When the data move is planned
+      Then the plan is blocked by "shares no table"
+
   @rule-0487 @ears-event-driven
   Rule: When the data move runs, tutors shall copy every row of each table it planned to copy from the Supabase database into the Postgres store.
 
@@ -44,6 +49,11 @@ Feature: Moving the rows out of Supabase
       When the data move runs replacing what the store holds
       Then the store holds 250 learning records, 2 users and 1 SCORM record
 
+    Scenario: A replacement that fails part way keeps what the store held
+      Given the store already holds a learning record of "carol"
+      When the data move runs replacing what the store holds and the copy fails part way
+      Then the store holds 1 learning records, 0 users and 0 SCORM record
+
     Scenario: A blocked plan copies nothing
       Given Supabase's "learning_records" table has a column "legacy_score" the store does not
       When the data move runs
@@ -61,5 +71,11 @@ Feature: Moving the rows out of Supabase
     Scenario: A changed row is caught
       Given the data move has run
       And one learning record's duration was changed in the store
+      When the data move is verified
+      Then only "learning_records" differs
+
+    Scenario: Text split differently at a column boundary is caught
+      Given the data move has run
+      And a learning record whose student id holds a "|" was split at that "|" differently in the store
       When the data move is verified
       Then only "learning_records" differs

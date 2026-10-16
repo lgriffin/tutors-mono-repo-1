@@ -76,9 +76,9 @@
     // It answers the few calls the editor makes of a Supabase channel, so the editor below is the
     // same on either broker. Presence is each tab announcing itself every 15 seconds (and once, as a
     // reply, to a newcomer), forgotten after 40 seconds of silence or when the tab says it is leaving.
-    // The server checks a presence or leave names the signed-in sender, so a key another user's tab
-    // announced is never taken over or dropped by someone else. A viewer who is not signed in only
-    // watches: the server would refuse everything it posted.
+    // The server checks a presence or leave names the signed-in sender, and a peer is held under its
+    // user and key together, so no one can take over or drop a slot another user's tab announced. A
+    // viewer who is not signed in only watches: the server would refuse everything it posted.
     const PRESENCE_EVERY_MS = 15000;
     const PRESENCE_FORGET_MS = 40000;
     function valkeyRoom(topic, presenceKey, watchOnly) {
@@ -131,16 +131,15 @@
               return;
             }
             if (!message || message.from === presenceKey) return;
-            const holder = peers.get(message.from)?.meta.userId;
-            const claimed = message.payload?.userId;
+            const slot = `${message.payload?.userId ?? ""} ${message.from}`;
             if (message.event === "presence") {
-              if (holder && holder !== claimed) return;
+              const known = peers.has(slot);
               const { reply, ...meta } = message.payload ?? {};
-              peers.set(message.from, { meta, seen: Date.now() });
-              if (!holder && !reply && own) void publish("presence", { ...own, reply: true });
+              peers.set(slot, { meta, seen: Date.now() });
+              if (!known && !reply && own) void publish("presence", { ...own, reply: true });
               sync();
             } else if (message.event === "leave") {
-              if (holder && holder === claimed && peers.delete(message.from)) sync();
+              if (peers.delete(slot)) sync();
             } else {
               broadcasts.get(message.event)?.({ payload: message.payload });
             }
@@ -181,7 +180,7 @@
     /** The shared board's room on the broker the reader runs: Valkey, Supabase Realtime, or none (a personal board). */
     function openRoom(config, presenceKey) {
       const topic = `wb:${config.roomId}`;
-      if (config.realtime === "valkey") return valkeyRoom(topic, presenceKey, String(config.user?.id ?? "").startsWith("anon-"));
+      if (config.realtime === "valkey") return valkeyRoom(topic, presenceKey, /^anon(-|$)/.test(String(config.user?.id ?? "anon")));
       if (!config.supabaseUrl || !config.supabaseAnonKey) return null;
       const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, { realtime: REALTIME_OPTIONS });
       const channel = supabase.channel(topic, {

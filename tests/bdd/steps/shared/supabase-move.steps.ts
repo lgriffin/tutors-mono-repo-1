@@ -118,6 +118,18 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
         });
       });
 
+      RuleScenario("A source that shares no table with the store blocks the move", ({ Given, When, Then }) => {
+        Given("the source database holds none of the store's tables", async () => {
+          await supabase.end();
+          supabase = pgliteClient(new PGlite());
+          await supabase.query("CREATE TABLE unrelated (id INT)");
+        });
+        When("the data move is planned", planned);
+        Then("the plan is blocked by {string}", (_ctx, reason: string) => {
+          expect(plan.blockers.join("\n")).toContain(reason);
+        });
+      });
+
       RuleScenario("A Supabase column the store lacks blocks the move", ({ Given, When, Then }) => {
         Given("Supabase's {string} table has a column {string} the store does not", legacyColumn);
         When("the data move is planned", planned);
@@ -156,6 +168,21 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
         Then("the store holds {number} learning records, {number} users and {number} SCORM record", holds);
       });
 
+      RuleScenario("A replacement that fails part way keeps what the store held", ({ Given, When, Then }) => {
+        Given("the store already holds a learning record of {string}", carolsRecord);
+        When("the data move runs replacing what the store holds and the copy fails part way", async () => {
+          await planned();
+          const last = plan.copy.at(-1)!.table;
+          // The source drops the connection at the last table, after the store was emptied and the others written.
+          const failing: SqlClient = {
+            query: (text, params) => (text.includes(`"${last}"`) ? Promise.reject(new Error("connection lost")) : supabase.query(text, params)),
+            end: () => supabase.end()
+          };
+          await expect(runMove(plan, inProcessCopier(failing, store.sql), store.sql, { replace: true })).rejects.toThrow("connection lost");
+        });
+        Then("the store holds {number} learning records, {number} users and {number} SCORM record", holds);
+      });
+
       RuleScenario("A blocked plan copies nothing", ({ Given, When, Then, And }) => {
         Given("Supabase's {string} table has a column {string} the store does not", legacyColumn);
         When("the data move runs", () => runs(false));
@@ -186,6 +213,19 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
         Given("the data move has run", moved);
         And("one learning record's duration was changed in the store", async () => {
           await store.sql.query(`UPDATE learning_records SET duration = duration + 1 WHERE student_id = 'student-7'`);
+        });
+        When("the data move is verified", verified);
+        Then("only {string} differs", (_ctx, table: string) => {
+          expect(check.differing).toEqual([table]);
+        });
+      });
+
+      RuleScenario("Text split differently at a column boundary is caught", ({ Given, And, When, Then }) => {
+        Given("the data move has run", moved);
+        And("a learning record whose student id holds a {string} was split at that {string} differently in the store", async (_ctx, bar: string) => {
+          // Joined with that character between columns, both rows read the same: the checksum must not join them.
+          await supabase.query(`UPDATE learning_records SET student_id = $1 WHERE student_id = 'student-7'`, [`student${bar}7`]);
+          await store.sql.query(`UPDATE learning_records SET course_id = course_id || $1, student_id = '7' WHERE student_id = 'student-7'`, [`${bar}student`]);
         });
         When("the data move is verified", verified);
         Then("only {string} differs", (_ctx, table: string) => {

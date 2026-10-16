@@ -50,7 +50,8 @@ Pick a quiet hour and tell students and lecturers first: the reader and Tutors T
 the whole freeze, so no course page opens until step 3 brings them back. The rehearsal says how
 long that is.
 
-1. **Freeze writes to Supabase.** Scale the reader and time Deployments to zero, so nothing writes
+1. **Freeze writes to Supabase.** Note each Deployment's replica count
+   (`oc get deploy reader-tutors-app time-tutors-app`), then scale the reader and time Deployments to zero, so nothing writes
    learning records while the copy runs (the catalogue and Live do not write to these tables):
    `oc scale deploy/reader-tutors-app deploy/time-tutors-app --replicas=0`.
 2. **Copy and verify.**
@@ -68,9 +69,13 @@ long that is.
    the release is signed off.
 
 **Rolling back.** Until the Supabase adapters are deleted, setting `DATA_STORE` and
-`PUBLIC_REALTIME` back to empty, then restarting the reader, time and Live
-(`oc rollout restart deploy/reader-tutors-app deploy/time-tutors-app deploy/live-tutors-app`),
-returns the deployment to Supabase, which still holds every row up to the freeze. Rows written to
+`PUBLIC_REALTIME` back to empty in the ConfigMaps and the repository variable `DATA_STORE` back to
+empty (so the snippet cleanup purges Supabase again), then bringing the reader and time back and
+restarting Live
+(`oc scale deploy/reader-tutors-app deploy/time-tutors-app --replicas=<the count before step 1>`
+and `oc rollout restart deploy/reader-tutors-app deploy/time-tutors-app deploy/live-tutors-app`),
+returns the deployment to Supabase, which still holds every row up to the freeze. A copy that fails
+in step 2 needs only the scale back up: nothing was switched yet. Rows written to
 the store after the switch are not in Supabase: roll back before students use the store, or accept
 losing what they recorded since.
 

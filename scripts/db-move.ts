@@ -68,8 +68,8 @@ export function pgDumpCopier(options: { sourceUrl: string; targetUrl: string; ar
         return;
       }
       const script = `${options.archive}.sql`;
-      await exec(bin("pg_restore"), ["--data-only", "--no-owner", "--no-acl", `--file=${script}`, options.archive]);
       try {
+        await exec(bin("pg_restore"), ["--data-only", "--no-owner", "--no-acl", `--file=${script}`, options.archive]);
         await exec(bin("psql"), [
           "--no-psqlrc",
           "--quiet",
@@ -132,6 +132,8 @@ async function main(argv: string[]): Promise<number> {
     const plan = await planMove(source, target);
     for (const line of describePlan(plan)) out(line);
     if (command === "plan") return plan.blockers.length ? 1 : 0;
+    // A source with no table in common compares nothing, which is not a match.
+    if (command === "verify" && !plan.copy.length) return 1;
     if (command === "run") {
       const archive = process.env.MOVE_ARCHIVE || `supabase-move-${new Date().toISOString().replace(/[:.]/g, "-")}.dump`;
       const moved = await runMove(plan, pgDumpCopier({ sourceUrl, targetUrl, archive, binDir: process.env.PG_BIN_DIR }), target, { replace: flags.includes("--replace") });
