@@ -335,8 +335,9 @@ On 17 September a PR added an export, regenerated the snapshot and not the repor
 red on `api-report:check` until the report was regenerated. If you touch the public surface of
 `model`, `gen` or `time`, run both and commit both.
 
-The rest of `tests/contract/` is Zod schemas for the external shapes the apps depend on — six
-Supabase tables, two RPCs, the realtime `LoRecord` and whiteboard protocols, and the generated
+The rest of `tests/contract/` is Zod schemas for the external shapes the apps depend on — the rows
+of seven Postgres store tables (`tests/contract/supabase/`) and the parameters of two of its SQL
+functions, the realtime `LoRecord` and whiteboard protocols, and the generated
 course JSON — asserting that conforming data is accepted and malformed data rejected.
 `tests/mutation/schema-snapshot.test.ts` snapshots the schemas themselves as JSON Schema, so a
 renamed column shows up as a snapshot diff rather than a runtime surprise.
@@ -489,10 +490,13 @@ lands.
 |---|---|---|
 | F | The authorisation matrix — every route against every role | RBAC [#77](https://github.com/tutors-sdk/tutors-mono-repo/issues/77); `/api/sync` auth is the open decision. See [RBAC.md](../RBAC.md) |
 | H | Message contracts for the realtime and broadcast protocols, versioned | No issue yet; shapes are snapshot-checked in `tests/contract/` |
-| I | Data migration and the Supabase exit | No issue yet |
 
 Do not claim these in documentation or PR descriptions until the suite and its negative fixture
 exist.
+
+Tier I, data migration, is in place: the one-off move into the Postgres store is `pnpm db:move`
+([DATA-MOVE.md](../DATA-MOVE.md)), rehearsed in the PR `build-and-test` job by
+`scripts/db-move-rehearsal.sh` (Rules 0486 to 0489).
 
 ## CI schedule
 

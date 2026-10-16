@@ -36,7 +36,7 @@ Feature: Hexagonal architecture
       Then no violation of "application-imports-domain-only" is found
 
   @rule-0342 @ears-ubiquitous
-  Rule: Tutors shall import a vendor library (the Supabase client, the markdown renderers, Better Auth) only from the adapter that wraps it, outside the authoring toolchain.
+  Rule: Tutors shall import a vendor library (the Postgres and Valkey clients, the markdown renderers, Better Auth) only from the adapter that wraps it, outside the authoring toolchain.
 
     Scenario: A package other than the wrapping adapter importing a vendor library is a violation
       Given the architecture rules run over the fixture workspace

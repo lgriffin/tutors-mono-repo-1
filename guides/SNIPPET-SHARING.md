@@ -141,7 +141,7 @@ See `db/migrations/20261019000000_create_tutors_store.sql`. One table:
 
 - **`course_gists`**: course id, student login/name, `filename`, `content`, optional title and learning-object labels, `created_at`, `expires_at`.
 
-The row shape is locked by `tests/contract/supabase/course-gists.contract.test.ts`.
+The row shape is locked by `tests/contract/supabase/course-gists.contract.test.ts`, and `postgresSnippetStore` is held to the `SnippetStore` contract suite in `tests/unit/adapters/store-postgres-ports.test.ts`.
 
 ## Open notes
 

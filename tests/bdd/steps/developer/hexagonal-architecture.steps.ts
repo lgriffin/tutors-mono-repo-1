@@ -173,7 +173,7 @@ describeFeature(feature, ({ Rule }) => {
   });
 
   Rule(
-    "Tutors shall import a vendor library (the Supabase client, the markdown renderers, Better Auth) only from the adapter that wraps it, outside the authoring toolchain.",
+    "Tutors shall import a vendor library (the Postgres and Valkey clients, the markdown renderers, Better Auth) only from the adapter that wraps it, outside the authoring toolchain.",
     ({ RuleScenario }) => {
       let violations: ArchitectureViolation[] = [];
       RuleScenario("A package other than the wrapping adapter importing a vendor library is a violation", ({ Given, Then, And }) => {

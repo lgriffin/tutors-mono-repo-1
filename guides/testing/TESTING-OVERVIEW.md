@@ -24,7 +24,7 @@ first gate is the pull request.
 | **F** | Authorisation — who may call what | Planned ([#77](https://github.com/tutors-sdk/tutors-mono-repo/issues/77)) | — |
 | **G** | User journeys — the whole system through a real browser, against built images | In repo | PR: `e2e-stack` (chromium, webkit). Nightly: `e2e-stack-nightly` (firefox, mobile) |
 | **H** | Message contracts — the realtime and broadcast protocols as a versioned contract | Planned, no issue yet | Shapes are snapshot-checked under tier "contract" below |
-| **I** | Data — migration and the Supabase exit | Planned, no issue yet | — |
+| **I** | Data — the one-off move into the Postgres store | In repo (`pnpm db:move`, [DATA-MOVE.md](../DATA-MOVE.md)) | PR: `build-and-test` (`scripts/db-move-rehearsal.sh` rehearses the move, Rules 0486 to 0489) |
 | **J** | Platform — kustomize overlays, restricted-SCC policy, arbitrary UID, read-only root, env-var completeness | In repo | PR: `platform-conformance`, `container-smoke`, `container-smoke-fixtures`, and `vitest` |
 | **K** | Observability — log schema, request-id correlation, hook order, metrics an alert queries | In repo | PR: `build-and-test` (`vitest`) and `container-smoke` |
 | **L** | Performance and capacity — client bundle ceilings, Lighthouse floors, latency, memory growth | In repo | PR: `bundle-budgets`. Nightly: `lighthouse`, `load` |
@@ -38,7 +38,7 @@ Three tiers predate the runway letters and still carry weight:
 
 | Tier | Owns | Where it runs |
 |---|---|---|
-| Contract / API surface | Public exports of the three JSR packages, Supabase row and RPC shapes, realtime message shapes, generated course JSON | PR: `pnpm api-report:check` in `build-and-test`. Nightly: `contract-snapshots`. RC: Gate 2b |
+| Contract / API surface | Public exports of the three JSR packages, Postgres store row and SQL function shapes, realtime message shapes, generated course JSON | PR: `pnpm api-report:check` in `build-and-test`. Nightly: `contract-snapshots`. RC: Gate 2b |
 | Mutation | Whether the tests actually detect a change: the twelve targeted model, time and gen modules at 90%, and every library module at its own floor | Nightly `mutation` job, then `pnpm check:mutation-floors` per module (Rules 0113, 0114); nightly `mutation-nightly` over every library module against its own floors (Rules 0116 to 0119); locally `pnpm test:mutation` and `pnpm test:mutation:nightly` |
 | Release artifact | The CLI's output for the reference course against the last published CLI | Push to `rc/**`: `rc-validation.yml` Gate 6, `release-testing.yml` Gates 6a–6c |
 
@@ -88,7 +88,7 @@ Before opening a PR the expected local run is `pnpm lint` and `pnpm test`; see
 |---|---|---|
 | A pure function in a JSR or Svelte package | `tests/unit/<area>/` | B |
 | A property that must hold for any course or calendar | `tests/fuzz/`, with the arbitrary in `tests/support/arbitraries/` | B |
-| A Supabase row, RPC or realtime message shape | `tests/contract/` | Contract |
+| A Postgres store row, SQL function or realtime message shape | `tests/contract/` | Contract |
 | A public export of a JSR package | `pnpm api-report`, then update the contract snapshot | Contract |
 | Something a user does in a browser | `tests/e2e-stack/journeys/` | G |
 | A difference in generated course output | `tests/generator/corpus/`, claimed in `tests/generator/claims.yaml` | C |
