@@ -1,8 +1,9 @@
 /**
  * Purge expired course snippets (issue #155 — 48h ephemeral snippet sharing).
  *
- * Snippets live entirely in Supabase, so expiry is a row delete and nothing
- * else. There is no GitHub call, no stored access token, and therefore no
+ * Snippets live entirely in the database (`course_gists`), so expiry is a row delete and nothing
+ * else. With PRIVATE_DATABASE_URL set it deletes from the Postgres store (DATA_STORE=postgres,
+ * `purgeExpiredSnippets`); otherwise from Supabase, over PostgREST. There is no GitHub call, no stored access token, and therefore no
  * "orphaned on GitHub" failure mode — an earlier revision of this feature
  * stored snippets as gists and had to best-effort delete them with the
  * student's OAuth token.
@@ -11,8 +12,9 @@
  * invisible well before this job removes it. This job reclaims the storage.
  *
  * Env:
- *   SUPABASE_URL                       (required)
- *   SUPABASE_SERVICE_ROLE_KEY          (required — service-role JWT)
+ *   PRIVATE_DATABASE_URL               (the Postgres store; when set, the two below are not read)
+ *   SUPABASE_URL                       (required without PRIVATE_DATABASE_URL)
+ *   SUPABASE_SERVICE_ROLE_KEY          (required without PRIVATE_DATABASE_URL — service-role JWT)
  *   (optional) BATCH_SIZE              (default 200)
  *   (optional) MAX_ITERATIONS          (default 50, safety cap)
  *   (optional) DRY_RUN=1               (read-only; no DELETEs)
@@ -22,17 +24,19 @@
  */
 
 import process from "node:process";
+import { postgresClient, purgeExpiredSnippets } from "@tutors/store-postgres";
 
 /** Script output: the no-console rule (issue #211) keeps console.* to the logger package. */
 const out = (...parts: unknown[]) => process.stdout.write(`${parts.join(" ")}\n`);
 const err = (...parts: unknown[]) => process.stderr.write(`${parts.join(" ")}\n`);
 
+const DATABASE_URL = process.env.PRIVATE_DATABASE_URL ?? "";
 const SUPABASE_URL = (process.env.SUPABASE_URL ?? "").replace(/\/+$/, "");
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
-if (!SUPABASE_URL || !SERVICE_KEY) {
+if (!DATABASE_URL && (!SUPABASE_URL || !SERVICE_KEY)) {
   err(
-    "FATAL: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are both required (see .env.example for PRIVATE_SUPABASE_SERVICE_ROLE_KEY)"
+    "FATAL: PRIVATE_DATABASE_URL, or SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, are required (see .env.example)"
   );
   process.exit(2);
 }
@@ -100,7 +104,20 @@ class PgClient {
   }
 }
 
+/** The Postgres store: one DELETE per batch, so nothing is read back but the ids deleted. */
+async function purgePostgres(): Promise<Summary> {
+  const sql = postgresClient(DATABASE_URL);
+  try {
+    const count = await purgeExpiredSnippets(sql, new Date().toISOString(), { batchSize: BATCH_SIZE, maxBatches: MAX_ITERATIONS, dryRun: DRY_RUN });
+    if (DRY_RUN) out(`[dry-run] would delete ${count} expired snippet(s)`);
+    return { processed: count, deleted: DRY_RUN ? 0 : count, failed: 0 };
+  } finally {
+    await sql.end();
+  }
+}
+
 async function purge(): Promise<Summary> {
+  if (DATABASE_URL) return purgePostgres();
   const client = new PgClient(SUPABASE_URL, SERVICE_KEY);
   const summary: Summary = { processed: 0, deleted: 0, failed: 0 };
 

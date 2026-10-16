@@ -87,7 +87,7 @@ WhiteboardViewer.svelte
 
 ### Real-time Collaboration
 
-The editor iframe (`excalidraw-editor.html`) uses Supabase Realtime for collaboration:
+With `PUBLIC_REALTIME=valkey` the shared room is the topic `wb:{roomId}` on the reader's own server (Rule 0573): the editor streams it from `GET /api/realtime/stream` and posts scene changes, cursors, presence and leaving to `POST /api/realtime/publish`, which takes them only from a signed-in editor, and a cursor, presence or leaving only as the editor it names. Presence there is each tab announcing itself every 15 seconds (and at once to a newcomer), forgotten after 40 seconds of silence or when the tab leaves. An editor who is not signed in watches the room but sends nothing to it, as they cannot save the board either. Otherwise the editor iframe uses Supabase Realtime for collaboration:
 
 - **Scene sync**: Batches element changes and sends them at most once every 250 ms via the `scene-update` event, so a long drag still reaches peers. Elements are merged by ID using Excalidraw's version numbers (higher version wins).
 - **Cursor sync**: Coalesces pointer positions into one `cursor-update` broadcast per interval, preserving the final position. Each broadcast is delivered to every other editor, so the interval grows with the room: 100 ms up to 3 participants, 250 ms up to 6, 500 ms up to 8, and no cursor broadcasts above 8 (Presence still shows who is there). A pointer that has moved less than 4 px with the same button since the last broadcast is not sent. Cursor colors are deterministically assigned from the user's ID. Pending scene and cursor timers are cleared and the channel is removed when the editor unmounts.

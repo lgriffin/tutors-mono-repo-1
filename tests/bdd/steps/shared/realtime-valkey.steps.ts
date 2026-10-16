@@ -19,6 +19,7 @@ vi.mock("$app/env", () => ({ browser: true, building: false, goto: vi.fn() }));
 import type { Course } from "../../../../packages/jsr/model/src/tutors.ts";
 import { createRealtimeGateway, topics, type Subscription } from "@tutors/realtime";
 import { playgroundTopic, realtimeHub, sseRealtimeAdapter, type EventSourceLike } from "@tutors/realtime-valkey";
+import { whiteboardRoomId } from "@tutors/domain/course";
 import { GET as liveStream } from "../../../../apps/live/src/routes/api/realtime/stream/+server.ts";
 import { freshBrowser, githubUser, labsOf, publishedCourse, signIn } from "../../support/connect.ts";
 import { readerRequest, setReaderSession } from "../../support/reader-api.ts";
@@ -88,6 +89,17 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   const publishes = async (name: string | null, event: string, topic: string, studentId = name ?? "") => {
     as(name);
     response = await readerRequest("POST", "/api/realtime/publish", { topic, event, payload: { studentId, files: [] }, from: "tab-1" });
+  };
+  /** The first lab's shared whiteboard room, as the editor page names it. */
+  const whiteboard = () => `wb:${whiteboardRoomId(course.courseId, firstLab().route, null)}`;
+  const whiteboardPayload = (userId: string) => ({ userId, elements: [] });
+  const streamsWhiteboard = (_ctx: unknown, name: string) => {
+    as(name);
+    return streamFromReader("whiteboard", whiteboard());
+  };
+  const publishesOnWhiteboard = async (_ctx: unknown, name: string, event: string, userId: string) => {
+    as(name);
+    response = await readerRequest("POST", "/api/realtime/publish", { topic: whiteboard(), event, payload: whiteboardPayload(userId), from: `tab-of-${name}` });
   };
 
   AfterEachScenario(async () => {
@@ -201,7 +213,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   });
 
   Rule(
-    "If a browser asks the reader's server to publish to a topic other than a playground share, an event other than a share's state or a lecturer's watching, or as anyone but the signed-in student or educator the event needs, then the reader shall answer 400, 401 or 403 and publish nothing.",
+    "If a browser asks the reader's server to publish to a topic other than a playground share or a shared whiteboard's room, an event that topic does not take, or as anyone but the signed-in student, educator or editor the event names, then the reader shall answer 400, 401 or 403 and publish nothing.",
     ({ RuleScenario }) => {
       const streamsPlayground = (_ctx: unknown, name: string) => {
         as(name);
@@ -262,6 +274,22 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
         When("{string} asks the reader to publish {string} for {string} on the playground share of the first lab", publishesOnPlayground);
         Then("the reader answers {number}", answers);
         And("the playground stream receives nothing", receivesNothing("playground"));
+      });
+
+      RuleScenario("An editor cannot move someone else's cursor on a shared whiteboard", ({ Given, And, When, Then }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        And("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
+        When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
+        Then("the reader answers {number}", answers);
+        And("the whiteboard stream receives nothing", receivesNothing("whiteboard"));
+      });
+
+      RuleScenario("A browser cannot publish another event on a shared whiteboard", ({ Given, And, When, Then }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        And("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
+        When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
+        Then("the reader answers {number}", answers);
+        And("the whiteboard stream receives nothing", receivesNothing("whiteboard"));
       });
     }
   );
@@ -333,6 +361,37 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
           expect(sources).toHaveLength(2);
           expect(sources[1].closed).toBe(false);
         });
+      });
+    }
+  );
+
+  Rule(
+    "Where a server is deployed with PUBLIC_REALTIME set to valkey, the reader shall carry each shared whiteboard room's scene changes, cursors, presence and leaving between the browsers streaming it, from editors who are signed in.",
+    ({ RuleScenario }) => {
+      const receivesFrom = async (_ctx: unknown, event: string, name: string) => {
+        await vi.waitFor(() => expect(streams.whiteboard.frames).toEqual([{ event, payload: whiteboardPayload(name), from: `tab-of-${name}` }]));
+      };
+
+      RuleScenario("A scene change reaches the other editors of a shared whiteboard", ({ Given, And, When, Then }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        And("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
+        When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
+        Then("the reader answers {number}", answers);
+        And("the whiteboard stream receives the {string} of {string}'s tab", receivesFrom);
+      });
+
+      RuleScenario("An editor's presence reaches the other editors of a shared whiteboard", ({ Given, And, When, Then }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        And("{string} streams the shared whiteboard of the first lab of {string} from the reader", streamsWhiteboard);
+        When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
+        Then("the reader answers {number}", answers);
+        And("the whiteboard stream receives the {string} of {string}'s tab", receivesFrom);
+      });
+
+      RuleScenario("A deployment without PUBLIC_REALTIME carries no whiteboard room", ({ Given, When, Then }) => {
+        Given("the reader's server is deployed with PUBLIC_REALTIME {string}", deployed);
+        When("{string} asks the reader to publish {string} for {string} on the shared whiteboard of the first lab", publishesOnWhiteboard);
+        Then("the reader answers {number}", answers);
       });
     }
   );

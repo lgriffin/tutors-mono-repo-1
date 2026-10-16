@@ -40,6 +40,8 @@
           window.removeEventListener("message", handler);
           editorIframe?.contentWindow?.postMessage({
             type: "init-editor",
+            // The course's shared room: on Valkey through the reader's server (Rule 0573), else Supabase Realtime.
+            realtime: env.PUBLIC_REALTIME?.trim().toLowerCase(),
             supabaseUrl: env.PUBLIC_SUPABASE_URL,
             supabaseAnonKey: env.PUBLIC_SUPABASE_ANON_KEY,
             roomId: getWhiteboardRoomId(),

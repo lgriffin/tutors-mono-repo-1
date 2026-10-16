@@ -102,9 +102,11 @@
     } else if (type === "editor-ready" && isEditing) {
       const roomId = getWhiteboardRoomId();
       const savedScene = await whiteboardService.loadScene(courseId(), lo.route);
-      // Only the shared board collaborates over Realtime; a personal room gets no client at all.
+      // Only the shared board collaborates over Realtime (on Valkey through the reader's server, Rule 0573);
+      // a personal room gets no room at all.
       iframe?.contentWindow?.postMessage({
         type: "init-editor",
+        realtime: isShared ? env.PUBLIC_REALTIME?.trim().toLowerCase() : undefined,
         supabaseUrl: isShared ? env.PUBLIC_SUPABASE_URL : undefined,
         supabaseAnonKey: isShared ? env.PUBLIC_SUPABASE_ANON_KEY : undefined,
         roomId,
