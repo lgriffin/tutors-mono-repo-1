@@ -91,6 +91,13 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://tutors:tutors@localhost:5432/tutors_test
 
+      # Rules 0486 to 0489 with the real pg_dump and pg_restore: the Supabase data move against a
+      # Supabase-shaped database on the service above (guides/DATA-MOVE.md).
+      - name: Rehearse the Supabase data move
+        run: scripts/db-move-rehearsal.sh
+        env:
+          ADMIN_URL: postgres://tutors:tutors@localhost:5432/tutors_test
+
       # Rules 0111 and 0112: no scope below its floor, and no floor left 2+ points under its coverage.
       - name: Check coverage floors
         run: pnpm check:coverage-floors coverage/coverage-summary.json
