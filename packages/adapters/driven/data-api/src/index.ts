@@ -9,7 +9,6 @@ export {
   readerApiScormRecords,
   readerApiPlaygroundSnapshots,
   readerApiPresenceRoster,
-  readerApiLiveWatch,
   readerApiHelpDesk,
   readerApiFeedbackDesk,
   readerApiInsightsDesk

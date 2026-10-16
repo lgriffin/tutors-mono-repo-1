@@ -78,7 +78,7 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 2
             failureThreshold: 3
-          # Readiness reports dependency health (Supabase) as well.
+          # Readiness reports dependency health (Postgres) as well.
           readinessProbe:
             httpGet:
               path: /healthz

@@ -10,7 +10,7 @@ corepack install
 
 pnpm install --frozen-lockfile
 
-# Anonymous mode: no Supabase project or OAuth app needed. Keeps an existing file.
+# Anonymous mode: no database, Valkey or OAuth app needed. Keeps an existing file.
 if [ ! -f apps/reader/.env ]; then
   cp .env.example apps/reader/.env
   sed -i 's/^PUBLIC_ANON_MODE=.*/PUBLIC_ANON_MODE=TRUE/' apps/reader/.env

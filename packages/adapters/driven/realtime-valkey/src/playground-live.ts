@@ -4,8 +4,8 @@ import log from "@tutors/logger";
 import { playgroundTopic } from "./topics.ts";
 
 /**
- * Live attach on Valkey: the application's PlaygroundLive, as realtime-supabase has it (one topic per
- * exercise, nothing stored, a student who is not sharing sends nothing; S4 deletes that copy). A
+ * Live attach on Valkey: the application's PlaygroundLive (one topic per exercise, nothing stored, a
+ * student who is not sharing sends nothing). A
  * send goes through the gateway, so the per-tab budget, jittered rejoin and counts apply, and its
  * broker adapter posts it to the reader's server (POST /api/realtime/publish), which publishes only
  * these two events and only on playground topics.

@@ -79,14 +79,11 @@ services:
       PROTOCOL_HEADER: x-forwarded-proto
       HOST_HEADER: x-forwarded-host
       PUBLIC_ANON_MODE: ${PUBLIC_ANON_MODE:-TRUE}
-      # Unset, the store is Supabase. DATA_STORE=postgres uses the `store-postgres`
-      # profile's database over the compose network (not localhost, which is this container);
-      # COMPOSE_DATABASE_URL points it elsewhere.
-      DATA_STORE: ${DATA_STORE:-}
+      # The `store-postgres` profile's database over the compose network (not localhost, which
+      # is this container); COMPOSE_DATABASE_URL points it elsewhere.
       PRIVATE_DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgres://tutors:tutors@postgres:5432/tutors}
-      # Unset, realtime is Supabase. PUBLIC_REALTIME=valkey uses the `realtime-valkey`
-      # profile's Valkey over the compose network; COMPOSE_VALKEY_URL points it elsewhere.
-      PUBLIC_REALTIME: ${PUBLIC_REALTIME:-}
+      # The `realtime-valkey` profile's Valkey over the compose network; COMPOSE_VALKEY_URL
+      # points it elsewhere.
       PRIVATE_VALKEY_URL: ${COMPOSE_VALKEY_URL:-redis://valkey:6379}
 
   catalogue:
@@ -123,9 +120,8 @@ services:
       LIVE_REDIS_URL: ${LIVE_REDIS_URL:-}
       LIVE_DATABASE_URL: ${LIVE_DATABASE_URL:-}
       LIVE_TERMS: ${LIVE_TERMS:-}
-      # Unset, realtime is Supabase. PUBLIC_REALTIME=valkey uses the `realtime-valkey`
-      # profile's Valkey over the compose network; COMPOSE_VALKEY_URL points it elsewhere.
-      PUBLIC_REALTIME: ${PUBLIC_REALTIME:-}
+      # The `realtime-valkey` profile's Valkey over the compose network; COMPOSE_VALKEY_URL
+      # points it elsewhere.
       PRIVATE_VALKEY_URL: ${COMPOSE_VALKEY_URL:-redis://valkey:6379}
 
   # The full pipeline, off by default:
@@ -136,9 +132,9 @@ services:
   # them with LIVE_BUS=redis LIVE_HOT_STORE=valkey LIVE_WAREHOUSE=postgres and
   # the two URLs below.
   #
-  # Realtime without Supabase uses the same Valkey:
+  # Realtime uses the same Valkey:
   #
-  #   PUBLIC_ANON_MODE=FALSE PUBLIC_REALTIME=valkey docker compose --profile realtime-valkey up --build
+  #   PUBLIC_ANON_MODE=FALSE docker compose --profile realtime-valkey up --build
   #
   # (In anonymous mode the reader publishes and streams nothing, so realtime needs sign-in on.)
   #
@@ -211,8 +207,7 @@ services:
   #   docker compose --profile store-postgres up --build
   #
   # applies db/migrations on first start (db/compose-init.sh, recorded in
-  # schema_migrations). DATA_STORE=postgres points the reader and time at it over
-  # the compose network. From the host, port 5433; later migrations:
+  # schema_migrations). The reader and time reach it over the compose network. From the host, port 5433; later migrations:
   # PRIVATE_DATABASE_URL=postgres://tutors:tutors@localhost:5433/tutors pnpm db:migrate
   postgres:
     profiles: ["store-postgres"]
@@ -245,13 +240,9 @@ services:
       PROTOCOL_HEADER: x-forwarded-proto
       HOST_HEADER: x-forwarded-host
       PUBLIC_ANON_MODE: ${PUBLIC_ANON_MODE:-TRUE}
-      # Unset, the store is Supabase. DATA_STORE=postgres uses the `store-postgres`
-      # profile's database over the compose network (not localhost, which is this container);
-      # COMPOSE_DATABASE_URL points it elsewhere.
-      DATA_STORE: ${DATA_STORE:-}
+      # The `store-postgres` profile's database over the compose network (not localhost, which
+      # is this container); COMPOSE_DATABASE_URL points it elsewhere.
       PRIVATE_DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgres://tutors:tutors@postgres:5432/tutors}
-      # The snippets page streams its pings from the reader's server; only the browser reads this.
-      PUBLIC_REALTIME: ${PUBLIC_REALTIME:-}
 
 volumes:
   timescale-data:

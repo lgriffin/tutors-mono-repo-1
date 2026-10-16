@@ -19,15 +19,10 @@ data:
   ADDRESS_HEADER: "x-forwarded-for"
   XFF_DEPTH: "1"
   # Application settings (see .env.example). Set per environment.
-  PUBLIC_SUPABASE_URL: ""
-  PUBLIC_SUPABASE_ANON_KEY: ""
+  # The reader and time servers keep student data in Postgres (PRIVATE_DATABASE_URL), and the
+  # reader and live servers carry realtime over Valkey (PRIVATE_VALKEY_URL), both from the
+  # app's secret.
   PUBLIC_ANON_MODE: ""
-  # Where the reader and time servers keep student data: supabase (empty) | postgres.
-  # postgres reads PRIVATE_DATABASE_URL from the app's secret.
-  DATA_STORE: ""
-  # Which broker carries realtime: supabase (empty) | valkey. valkey reads PRIVATE_VALKEY_URL
-  # from the reader's and live's secrets; set the same value on reader, live and time.
-  PUBLIC_REALTIME: ""
   PUBLIC_PDF_KEY: ""
   LOG_LEVEL: "info"
   # Tutors Live. Where the reader posts events; empty disables the emitter.

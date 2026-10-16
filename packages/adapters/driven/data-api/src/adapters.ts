@@ -194,11 +194,6 @@ export function readerApiPresenceRoster(api: DataApi = dataApi): (courseId: stri
   return async (courseId, sinceIso) => (await api.getRoster(courseId, sinceIso))?.rows ?? null;
 }
 
-/** A Tutors Live tab's watcher report through POST /api/live/watch, for the realtime adapter's `watch` option. */
-export function readerApiLiveWatch(api: DataApi = dataApi): (topic: string, watcher: string) => Promise<"normal" | "slow" | "paused" | null> {
-  return async (topic, watcher) => (await api.watchLive({ topic, watcher }))?.tier ?? null;
-}
-
 const HELP_REFUSALS: readonly HelpDeskRefusal[] = ["invalid", "unavailable", "not-found", "conflict", "not-in-state-table", "not-permitted", "hint-required"];
 
 /**

@@ -37,7 +37,6 @@ unresolved: packages/adapters/driving/svelte-state/src/course/services/__tests__
 unresolved: packages/adapters/driving/svelte-state/src/course/services/__tests__/lo-tree.test.ts: ../../../runes.svelte
 
 # Files nothing imports.
-unused-file: apps/reader/src/lib/env.ts
 unused-file: apps/time/src/lib/components/calendar/CalendarMedianGrid.svelte
 unused-file: apps/time/src/lib/components/labs/LabsMedianGrid.svelte
 unused-file: tests/bdd/support/ears-tags.ts

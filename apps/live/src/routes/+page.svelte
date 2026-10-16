@@ -60,7 +60,7 @@
   }
 
   onMount(() => {
-    // The presence service is the older Supabase view, kept below the new panels.
+    // The presence service is the older realtime view, kept below the new panels.
     liveService.startGlobalPresenceService();
     fetchCourses()
       .then((found) => (courses = found))

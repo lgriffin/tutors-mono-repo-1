@@ -229,15 +229,9 @@ importers:
       '@tutors/live-redis':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/live-redis
-      '@tutors/realtime-supabase':
-        specifier: workspace:*
-        version: link:../../packages/adapters/driven/realtime-supabase
       '@tutors/realtime-valkey':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/realtime-valkey
-      '@tutors/store-supabase':
-        specifier: workspace:*
-        version: link:../../packages/adapters/driven/store-supabase
       isomorphic-dompurify:
         specifier: ^4.5.0
         version: 4.5.0(@noble/hashes@2.4.0)
@@ -350,9 +344,6 @@ importers:
       '@tutors/profile-localstorage':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/profile-localstorage
-      '@tutors/realtime-supabase':
-        specifier: workspace:*
-        version: link:../../packages/adapters/driven/realtime-supabase
       '@tutors/realtime-valkey':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/realtime-valkey
@@ -368,9 +359,6 @@ importers:
       '@tutors/store-postgres':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/store-postgres
-      '@tutors/store-supabase':
-        specifier: workspace:*
-        version: link:../../packages/adapters/driven/store-supabase
       '@tutors/workspace-indexeddb':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/workspace-indexeddb
@@ -507,9 +495,6 @@ importers:
       '@prometheus-io/client':
         specifier: ^0.16.1
         version: 0.16.1
-      '@supabase/supabase-js':
-        specifier: ^2.117.1
-        version: 2.117.2(@opentelemetry/api@1.9.1)
       '@tutors/application':
         specifier: workspace:*
         version: link:../../packages/application
@@ -528,18 +513,12 @@ importers:
       '@tutors/moodle':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/moodle
-      '@tutors/realtime-supabase':
-        specifier: workspace:*
-        version: link:../../packages/adapters/driven/realtime-supabase
       '@tutors/realtime-valkey':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/realtime-valkey
       '@tutors/store-postgres':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/store-postgres
-      '@tutors/store-supabase':
-        specifier: workspace:*
-        version: link:../../packages/adapters/driven/store-supabase
       '@tutors/svelte-state':
         specifier: workspace:*
         version: link:../../packages/adapters/driving/svelte-state
@@ -731,24 +710,6 @@ importers:
         specifier: workspace:*
         version: link:../../../domain
 
-  packages/adapters/driven/realtime-supabase:
-    dependencies:
-      '@supabase/supabase-js':
-        specifier: ^2.117.1
-        version: 2.117.2(@opentelemetry/api@1.9.1)
-      '@tutors/application':
-        specifier: workspace:*
-        version: link:../../../application
-      '@tutors/domain':
-        specifier: workspace:*
-        version: link:../../../domain
-      '@tutors/logger':
-        specifier: workspace:*
-        version: link:../../../platform/logger
-      '@tutors/realtime':
-        specifier: workspace:*
-        version: link:../../../jsr/realtime
-
   packages/adapters/driven/realtime-valkey:
     dependencies:
       '@tutors/application':
@@ -829,21 +790,6 @@ importers:
       pg:
         specifier: '>=8'
         version: 8.23.1
-
-  packages/adapters/driven/store-supabase:
-    dependencies:
-      '@supabase/supabase-js':
-        specifier: ^2.117.1
-        version: 2.117.2(@opentelemetry/api@1.9.1)
-      '@tutors/application':
-        specifier: workspace:*
-        version: link:../../../application
-      '@tutors/domain':
-        specifier: workspace:*
-        version: link:../../../domain
-      '@tutors/logger':
-        specifier: workspace:*
-        version: link:../../../platform/logger
 
   packages/adapters/driven/workspace-indexeddb:
     dependencies:
@@ -2929,38 +2875,6 @@ packages:
       '@stryker-mutator/core': 10.0.0
       vitest: '>=2.0.0'
 
-  '@supabase/auth-js@2.117.2':
-    resolution: {integrity: sha512-Z3WnGwrphYZubrLbxp5Iv0tLA9A5GhvKzJ/ZXglxqwd2QEH2R4dXRltjVJ8sIn4xEW2BSFIGT0yALVJIgZeDYw==}
-    engines: {node: '>=22.0.0'}
-
-  '@supabase/functions-js@2.117.2':
-    resolution: {integrity: sha512-6DT4ZIjmZxa9ANKaBIrjc86AyKrX8M376ynvNeOBBVad3eP7x3UHqWfDR2ynFkHGzCuOpr1A+kObmnahxuwuog==}
-    engines: {node: '>=22.0.0'}
-
-  '@supabase/phoenix@0.4.5':
-    resolution: {integrity: sha512-aAn9H9ovVyeApKy11OWOrrOGq8DV68yWeH4ud2lN9fzn4aO8Zb5GLL9m1pUg9nLqIcT+ZDfAcsZe0E/nqdv2lw==}
-
-  '@supabase/postgrest-js@2.117.2':
-    resolution: {integrity: sha512-V1Qhn+M8xzJqCasOxHZ2KG19Fj39PxU7weEAmOK65/KTsWCRXboB4hcQwFvxRvM7ZikeP9IZWNvQkfjvSxzYFw==}
-    engines: {node: '>=22.0.0'}
-
-  '@supabase/realtime-js@2.117.2':
-    resolution: {integrity: sha512-lYXSAIg3eAKA58riUED6Vb+TCzF8jtx18uOoiCaVJ7ZMre6FWBpwB1MPeW+B6vykJT/hPdiuqwcSB7ILMS21ew==}
-    engines: {node: '>=22.0.0'}
-
-  '@supabase/storage-js@2.117.2':
-    resolution: {integrity: sha512-8gAJoVaxZa/War2kFRfJMxGk4M190Q7lJ70BofwGlRxU/u9pIodd6XyTvmXkxOKXWuIYtkDaYPZrIAUt1T/7FQ==}
-    engines: {node: '>=22.0.0'}
-
-  '@supabase/supabase-js@2.117.2':
-    resolution: {integrity: sha512-eSG2VKnHR+Clp1PmidZ1/weJ8PJwoybjva3L2GgKqFG4YDS1Iqmc61psKGZP5xw6OMT2O7ZorPR42PY6q1BOXg==}
-    engines: {node: '>=22.0.0'}
-    peerDependencies:
-      '@opentelemetry/api': '>=1.0.0'
-    peerDependenciesMeta:
-      '@opentelemetry/api':
-        optional: true
-
   '@sveltejs/acorn-typescript@1.0.13':
     resolution: {integrity: sha512-wgKggnhZVL9Bfx1OaKKTrYY9BFRk6C8UAkQNUcIv1+llzYrIqy+RZm5HPKzn0NpEBvTVhTqB4kQyllZywsRBRQ==}
     peerDependencies:
@@ -4534,10 +4448,6 @@ packages:
   human-signals@8.0.1:
     resolution: {integrity: sha512-eKCa6bwnJhvxj14kZk5NCPc6Hb6BdsU9DZcOnmQKSnO1VKrfV0zCvtttPZUsBvjmNDn8rpcJfpwSYnHBjc95MQ==}
     engines: {node: '>=18.18.0'}
-
-  iceberg-js@0.8.1:
-    resolution: {integrity: sha512-1dhVQZXhcHje7798IVM+xoo/1ZdVfzOMIc8/rgVSijRK38EDqOJoGula9N/8ZI5RD8QTxNQtK/Gozpr+qUqRRA==}
-    engines: {node: '>=20.0.0'}
 
   iconv-lite@0.6.3:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
@@ -7374,40 +7284,6 @@ snapshots:
       tslib: 2.8.1
       vitest: 5.0.4(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/coverage-v8@5.0.4)(happy-dom@20.14.0)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))
 
-  '@supabase/auth-js@2.117.2':
-    dependencies:
-      tslib: 2.8.1
-
-  '@supabase/functions-js@2.117.2':
-    dependencies:
-      tslib: 2.8.1
-
-  '@supabase/phoenix@0.4.5': {}
-
-  '@supabase/postgrest-js@2.117.2':
-    dependencies:
-      tslib: 2.8.1
-
-  '@supabase/realtime-js@2.117.2':
-    dependencies:
-      '@supabase/phoenix': 0.4.5
-      tslib: 2.8.1
-
-  '@supabase/storage-js@2.117.2':
-    dependencies:
-      iceberg-js: 0.8.1
-      tslib: 2.8.1
-
-  '@supabase/supabase-js@2.117.2(@opentelemetry/api@1.9.1)':
-    dependencies:
-      '@supabase/auth-js': 2.117.2
-      '@supabase/functions-js': 2.117.2
-      '@supabase/postgrest-js': 2.117.2
-      '@supabase/realtime-js': 2.117.2
-      '@supabase/storage-js': 2.117.2
-    optionalDependencies:
-      '@opentelemetry/api': 1.9.1
-
   '@sveltejs/acorn-typescript@1.0.13(acorn@8.18.0)':
     dependencies:
       acorn: 8.18.0
@@ -9282,8 +9158,6 @@ snapshots:
   html-void-elements@3.0.0: {}
 
   human-signals@8.0.1: {}
-
-  iceberg-js@0.8.1: {}
 
   iconv-lite@0.6.3:
     dependencies:

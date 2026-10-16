@@ -2,7 +2,7 @@
 # "Container Image Build" workflow publishes to quay.io/tutors-sdk.
 # Nothing is built here; for a from-source stack use the root compose.yaml.
 #
-#   cp .env.example .env                          # fill in Supabase, OAuth, Moodle values
+#   cp .env.example .env                          # fill in database, Valkey, OAuth, Moodle values
 #   docker compose up -d
 #   docker compose pull && docker compose up -d   # roll to the current IMAGE_TAG
 #

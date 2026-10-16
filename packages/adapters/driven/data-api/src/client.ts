@@ -8,8 +8,6 @@ import type {
   HelpPost,
   HelpQueue,
   InsightsAsk,
-  LiveWatch,
-  LiveWatchTier,
   LockChange,
   LockRemoval,
   Locks,
@@ -118,7 +116,6 @@ export function createDataApi(fetchFn: FetchFn = (input, init) => globalThis.fet
     savePlayground: (save: PlaygroundSave) => send(call, "PUT", "/api/playground", save),
     removePlayground: (removal: PlaygroundRemoval) => send(call, "DELETE", "/api/playground", removal),
     reportErrors: (report: ErrorReport) => send(call, "POST", "/api/errors", report),
-    watchLive: (watch: LiveWatch) => sendJson<LiveWatchTier>("POST", "/api/live/watch", watch),
     // Help requests carry the session even from Tutors Live's origin: the reader decides from it who may act.
     postHelp: (post: HelpPost) => send(call, "POST", "/api/assistance", post, "include"),
     // Nobody signed in has no request of their own; any other failure is null.

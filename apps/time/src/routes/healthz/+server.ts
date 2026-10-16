@@ -3,7 +3,7 @@ import type { RequestHandler } from "./$types";
 import { now } from "@tutors/clock";
 import { storeHealth } from "#lib/server/snippets.ts";
 
-/** The store is read by the server, never with the browser's anon key (Rule 0472); the check is named for the store DATA_STORE picks. */
+/** The store is read by the server only (Rule 0472): the Postgres store at PRIVATE_DATABASE_URL. */
 export const GET: RequestHandler = async () => {
   const health = storeHealth();
   const [storeCheck, errorCounts] = await Promise.all([health.check(), health.errorCounts()]);

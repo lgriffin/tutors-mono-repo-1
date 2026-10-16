@@ -1,6 +1,5 @@
 <script lang="ts">
   import { browser } from "$app/env";
-  import * as env from "$app/env/public";
   import type { Whiteboard } from "@tutors/tutors-model-lib";
   import { tutorsId } from "@tutors/svelte-state";
   import { whiteboardService } from "@tutors/svelte-state/community";
@@ -102,13 +101,11 @@
     } else if (type === "editor-ready" && isEditing) {
       const roomId = getWhiteboardRoomId();
       const savedScene = await whiteboardService.loadScene(courseId(), lo.route);
-      // Only the shared board collaborates over Realtime (on Valkey through the reader's server, Rule 0573);
+      // Only the shared board collaborates, through the reader's server over Valkey (Rule 0573);
       // a personal room gets no room at all.
       iframe?.contentWindow?.postMessage({
         type: "init-editor",
-        realtime: isShared ? env.PUBLIC_REALTIME?.trim().toLowerCase() : undefined,
-        supabaseUrl: isShared ? env.PUBLIC_SUPABASE_URL : undefined,
-        supabaseAnonKey: isShared ? env.PUBLIC_SUPABASE_ANON_KEY : undefined,
+        shared: isShared,
         roomId,
         user: {
           name: tutorsId.value?.name || "Anonymous",

@@ -33,7 +33,7 @@ function isChange(value: unknown): value is AssistanceChange {
 
 /**
  * The server's feed over the hub: `publish` sends a change to its course's topic and resolves
- * false, logging, when there is no hub (anonymous mode, Supabase Realtime) or Valkey failed. `watch`
+ * false, logging, when there is no hub (anonymous mode) or Valkey failed. `watch`
  * hears a course's changes in this process, as the stream route does for each browser.
  */
 export function valkeyAssistanceFeed(hub: RealtimeHub | null): AssistanceFeed {

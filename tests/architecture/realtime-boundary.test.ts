@@ -2,15 +2,16 @@ import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 /**
- * Realtime is a port (@tutors/realtime) with adapters. Only the Supabase adapter may drive Supabase
- * Realtime channels, so the gateway's budget, rejoin backoff and counts cover every channel a tab opens.
- * The whiteboard editor is a static page that cannot import workspace packages; it carries the same
- * budget inline until phase 4 (#477) hands it a token through the parent.
+ * Realtime is a port (@tutors/realtime) with one adapter, realtime-valkey, whose browser side streams
+ * from the Tutors servers. Nothing drives a broker's channels directly any more (Supabase Realtime
+ * went with S4 of the Supabase exit), so the gateway's budget, rejoin backoff and counts cover every
+ * topic a tab opens. The whiteboard editor is a static page with its own small room over the same
+ * stream and publish routes (Rule 0573).
  */
-const ALLOWED = ["packages/adapters/driven/realtime-supabase/src/gateway.ts", "apps/reader/static/excalidraw-editor.html"];
+const ALLOWED: string[] = [];
 
 describe("realtime boundary", () => {
-  it("drives Realtime channels only from the realtime adapter", () => {
+  it("drives no broker's channels directly", () => {
     const output = execFileSync(
       "git",
       ["grep", "--untracked", "-l", "-E", String.raw`\.(channel|removeChannel|httpSend|removeAllChannels)\(`, "--", "apps", "packages", ":!**/node_modules/**"],

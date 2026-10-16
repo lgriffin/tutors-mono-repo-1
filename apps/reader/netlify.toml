@@ -14,7 +14,7 @@
     # 'wasm-unsafe-eval' is what lets the reader compile WebAssembly at all; without it the
     # code run-time cannot start. It permits WebAssembly and nothing else — plain eval is
     # still refused on this origin. The run-time's own frame has a separate policy below.
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'"
 
 # The sandboxed code run-time. See the note in apps/reader/vite.config.ts, which carries
 # the same rules for local development: this frame has an opaque origin, so it fetches its

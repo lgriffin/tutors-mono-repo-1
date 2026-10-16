@@ -65,7 +65,7 @@ jobs:
         run: pnpm check:slo
 
   migrations:
-    name: supabase/migrations follow expand/contract
+    name: db/migrations follow expand/contract
     if: github.event_name == 'push' || startsWith(github.head_ref, 'release/')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -89,5 +89,5 @@ jobs:
       - name: Install root dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts --filter .
 
-      - name: Check supabase/migrations
+      - name: Check db/migrations
         run: pnpm check:migrations --base origin/main
