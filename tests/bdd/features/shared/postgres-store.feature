@@ -16,7 +16,7 @@ Feature: Student data in plain Postgres
       And no migration names a Supabase role or the auth schema
 
   @rule-0477 @ears-ubiquitous
-  Rule: The reader's server shall read and write student data in the Postgres database at PRIVATE_DATABASE_URL.
+  Rule: The reader shall read and write student data in the Postgres database at PRIVATE_DATABASE_URL.
 
     Scenario: A lab visit on a Postgres deployment is stored in Postgres
       Given the reader's server is deployed with a database URL
