@@ -63,6 +63,8 @@ function createHelpQueueService() {
   const explanations = rune<Annotation[]>([]);
   /** True when the last explanation was not kept. */
   const explainFailed = rune(false);
+  /** Offers whose explanation is being posted: a second send waits for the first. */
+  const explaining = rune<string[]>([]);
 
   let stops: Array<() => void> = [];
   let reads = 0;
@@ -130,9 +132,10 @@ function createHelpQueueService() {
   async function closing(id: string, run: () => Promise<HelpDeskResult>): Promise<boolean> {
     lastResolved = null;
     const kept = await act(id, run);
-    const request = kept ? lastResolved : null;
+    const request = kept ? (lastResolved as HelpRequest | null) : null;
     lastResolved = null;
-    if (request) offers.value = [...offers.value.filter((r) => r.id !== id), request];
+    // The lecturer may have moved to another course's queue while the action was in flight.
+    if (request && request.ref.courseId === courseId.value) offers.value = [...offers.value.filter((r) => r.id !== id), request];
     return kept;
   }
 
@@ -225,6 +228,7 @@ function createHelpQueueService() {
     offers,
     explanations,
     explainFailed,
+    explaining,
 
     /** The text an offer starts with: the lecturer's hint, when they typed one. */
     draftFor(request: HelpRequest): string {
@@ -234,13 +238,18 @@ function createHelpQueueService() {
     /** Posts the explanation for everyone on the offered request's step: a banner there and a toast elsewhere in the course. */
     async explain(id: string, body: string): Promise<boolean> {
       const request = offers.value.find((r) => r.id === id);
-      if (!request || !body.trim()) return false;
-      const result = await adapters().feedbackDesk.broadcast(request.ref, body, placeOf(request.ref).step);
-      explainFailed.value = !result.ok;
-      if (!result.ok) return false;
-      offers.value = offers.value.filter((r) => r.id !== id);
-      hearExplanation(result.annotation);
-      return true;
+      if (!request || !body.trim() || explaining.value.includes(id)) return false;
+      explaining.value = [...explaining.value, id];
+      try {
+        const result = await adapters().feedbackDesk.broadcast(request.ref, body, placeOf(request.ref).step);
+        explainFailed.value = !result.ok;
+        if (!result.ok) return false;
+        offers.value = offers.value.filter((r) => r.id !== id);
+        hearExplanation(result.annotation);
+        return true;
+      } finally {
+        explaining.value = explaining.value.filter((e) => e !== id);
+      }
     },
 
     /** The lecturer passes on explaining a resolved request. */
@@ -261,6 +270,7 @@ function createHelpQueueService() {
       offers.value = [];
       explanations.value = [];
       explainFailed.value = false;
+      explaining.value = [];
     }
   };
 }

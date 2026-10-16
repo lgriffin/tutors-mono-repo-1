@@ -1,5 +1,5 @@
 /**
- * Lecturer feedback on a lab step (Rules 0403, 0404, 0406, 0408, 0409, 0566): the reader's
+ * Lecturer feedback on a lab step (Rules 0403, 0404, 0406, 0408, 0409, 0566, 0568, 0569, 0570): the reader's
  * feedbackService over the in-memory feedback desk, which runs the Feedback use cases as the person
  * signed in, and the reader's markdown renderer and sanitiser.
  */
@@ -35,7 +35,7 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     const watch = feed.watch.bind(feed);
     feed.watch = (courseId, listener) => (watched.push(courseId), watch(courseId, listener));
     configureAdapters({ ...anonymousAdapters({ clock, renderer: markdownRenderer }), anonymous: false, feedbackDesk: as(login), assistanceFeed: feed });
-    return feedbackService.arrive(ref, login !== null);
+    return feedbackService.arrive(ref, login);
   }
 
   AfterEachScenario(() => {
@@ -223,4 +223,76 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
       });
     }
   );
+
+  Rule(
+    "When a signed-in student shares the note of a lab step with the course's lecturers, the reader shall send a copy as a reflection that the step's history shows its educators, and say whether it was sent.",
+    ({ RuleScenario }) => {
+      let sent = false;
+      const shares = async (_ctx: unknown, _login: string, body: string) => {
+        sent = await feedbackService.share({ ref, body, kind: "reflection", updatedAt: clock.now().toISOString() });
+      };
+      RuleScenario("A shared note reaches the lecturer", ({ Given, When, Then, And }) => {
+        Given("{string} opens the step", opens);
+        When("{string} shares the note {string} with the lecturer", shares);
+        Then("the reader shall say the note was sent", () => expect([sent, feedbackService.failure.value]).toEqual([true, null]));
+        And("the step's reflections for {string} shall read {string} from {string}", async (_ctx, lecturer: string, body: string, learner: string) => {
+          await open(lecturer);
+          expect(feedbackService.view.value.history?.reflections.map((r) => [r.body, r.learnerId])).toEqual([[body, learner]]);
+        });
+      });
+      RuleScenario("An empty note is not sent", ({ Given, When, Then }) => {
+        Given("{string} opens the step", opens);
+        When("{string} shares the note {string} with the lecturer", shares);
+        Then("the reader shall say the note was not sent, as {string}", (_ctx, reason: string) => expect([sent, feedbackService.failure.value]).toEqual([false, reason]));
+      });
+    }
+  );
+
+  Rule(
+    "When an educator replies to a reflection shared on a lab step, the reader shall show the reply below that step to the student who shared the reflection only.",
+    ({ RuleScenario }) => {
+      const reflected = async (_ctx: unknown, login: string, body: string) => {
+        expect((await as(login).reflect({ ref, body, kind: "reflection", updatedAt: clock.now().toISOString() })).ok).toBe(true);
+      };
+      const replies = async (_ctx: unknown, lecturer: string, body: string, learner: string) => {
+        await open(lecturer);
+        const reflection = feedbackService.view.value.history!.reflections.find((r) => r.learnerId === learner)!;
+        expect(await feedbackService.reply(reflection, body)).toBe(true);
+      };
+      RuleScenario("The student who reflected reads the reply", ({ Given, When, And, Then }) => {
+        Given("{string} has shared the note {string} on the step", reflected);
+        When("{string} replies {string} to the reflection from {string}", replies);
+        And("{string} opens the step", opens);
+        Then("the reader shall show the card {string} below the step", card);
+        And("the card shall say it is on their reflection", () => expect(feedbackService.view.value.personal[0].anchor).toMatchObject({ kind: "reflection" }));
+      });
+      RuleScenario("Another student does not see the reply", ({ Given, When, And, Then }) => {
+        Given("{string} has shared the note {string} on the step", reflected);
+        When("{string} replies {string} to the reflection from {string}", replies);
+        And("{string} opens the step", opens);
+        Then("the reader shall show no banner and no card", nothing);
+      });
+    }
+  );
+
+  Rule("When someone else signs in on the same browser, the reader shall forget the feedback it read for the last person before reading any for them.", ({ RuleScenario }) => {
+    RuleScenario("The next student sees none of the last student's feedback", ({ Given, And, When, Then }) => {
+      let pending: Promise<void>;
+      Given("{string} has written {string} to {string} on the step {string}", writes);
+      And("{string} reads the feedback they received in {string}", async (_ctx, login: string, courseId: string) => {
+        await open(login);
+        await feedbackService.readReceived(courseId);
+        expect(feedbackService.received.value).toHaveLength(1);
+      });
+      When("{string} opens the step", (_ctx, login: string) => {
+        pending = open(login);
+      });
+      Then("the reader shall show no banner and no card", nothing);
+      And("the reader shall hold no received feedback until {string} reads it", async () => {
+        expect(feedbackService.received.value).toBeNull();
+        await pending;
+        nothing();
+      });
+    });
+  });
 });

@@ -8,7 +8,7 @@ import { isFor, isRevoked, newestFirst, revokedAt, type Annotation, type NewAnno
 import { sameStep, stepKey, type Note, type StepRef } from "@tutors/domain/learning";
 import type { AssistanceChange, AssistanceFeed } from "../ports/assistance-feed.ts";
 import type { AssistanceStore } from "../ports/assistance-store.ts";
-import type { FeedbackStore } from "../ports/feedback-store.ts";
+import { RECEIVED_LIMIT, type FeedbackStore } from "../ports/feedback-store.ts";
 import type { FeedbackDesk, FeedbackDeskResult, ReflectionDeskResult, StepFeedbackView } from "../ports/feedback-desk.ts";
 import type { HelpDesk, HelpDeskResult } from "../ports/help-desk.ts";
 import type { InsightsPeriod, InsightsRead } from "../ports/insights-read.ts";
@@ -107,7 +107,9 @@ export class InMemoryFeedbackStore implements FeedbackStore {
   }
   async received(courseId: string, learnerId: string): Promise<Annotation[]> {
     this.check();
-    return newestFirst(this.annotations.filter((a) => a.anchor.ref.courseId === courseId && !isRevoked(a) && isFor(a, learnerId))).map(copy);
+    return newestFirst(this.annotations.filter((a) => a.anchor.ref.courseId === courseId && !isRevoked(a) && isFor(a, learnerId)))
+      .slice(0, RECEIVED_LIMIT)
+      .map(copy);
   }
   async revoke(id: string, at: string): Promise<Annotation | null> {
     this.check();

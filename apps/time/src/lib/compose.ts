@@ -31,6 +31,11 @@ export function composeTime(env: TimeEnv): void {
   if (!client && !anonymous) {
     log.warn("Supabase is not configured (PUBLIC_SUPABASE_URL / PUBLIC_SUPABASE_ANON_KEY missing); running without it");
   }
-  // The dashboard only watches: the reader's server posts the snippet pings.
-  configureAdapters(client ? { ...anonymousAdapters(), anonymous: false, notices: supabaseCourseNotices(client), ...(feedbackDesk ? { feedbackDesk } : {}) } : anonymousAdapters());
+  // The dashboard only watches: the reader's server posts the snippet pings. With no client the
+  // pings are not heard, but feedback on a snippet still goes to the reader.
+  if (!feedbackDesk) {
+    configureAdapters(anonymousAdapters());
+    return;
+  }
+  configureAdapters({ ...anonymousAdapters(), anonymous: false, ...(client ? { notices: supabaseCourseNotices(client) } : {}), feedbackDesk });
 }

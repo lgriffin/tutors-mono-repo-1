@@ -74,37 +74,42 @@ export function annotate({ store, clock, educatorsOf, publish }: FeedbackDeps) {
 /** How a broadcast is announced as a toast to the course's students elsewhere in it (decision D5). */
 export type BroadcastToast = { stepTitle?: string | null; senderName?: string | null };
 
-/** The longest toast description: the start of the explanation, as a lecturer broadcast carries it. */
-const TOAST_CHARS = 280;
+/** What a toast says: it names the step and links to it; the explanation itself is read on the step, where the reader checks who is signed in. */
+export const EXPLANATION_TOAST = "Your lecturer posted an explanation for everyone on this step";
 
-/** The course notice a broadcast is toasted as: who explained what, on which step, with a link to it (Rule 0564). */
+/** The course notice a broadcast is toasted as: who explained, on which step, with a link to it (Rule 0564). */
 export function explanationNotice(annotation: Annotation, toast: BroadcastToast = {}): LecturerBroadcast {
   const ref = annotation.anchor.ref;
-  const plain = annotation.body.replace(/\s+/g, " ").trim();
   return {
     type: "course:broadcast",
     id: `explanation-${annotation.id}`,
     courseId: ref.courseId,
     title: (toast.stepTitle?.trim() || ref.stepId).slice(0, 80),
-    description: plain.length > TOAST_CHARS ? `${plain.slice(0, TOAST_CHARS - 1)}…` : plain,
+    description: EXPLANATION_TOAST,
     actionUrl: `${ref.labRoute}/${ref.stepId}`,
     senderName: toast.senderName?.trim() || "Tutor",
     sentAt: Date.parse(annotation.createdAt) || 0
   };
 }
 
+/** At most one toast per course in a window, as lecturer broadcasts are limited (`createBroadcastLimiter`). */
+export type ToastLimiter = { allow(courseId: string, nowMs: number): boolean };
+
 /**
  * An educator explains something to everyone on a step: an annotation for everyone, then one
  * annotation change to the course's watchers (Rule 0405) and, when notices are given, one toast to
- * the students reading the course (Rule 0564). A feed or notice that fails does not undo the broadcast.
+ * the students reading the course (Rule 0564), unless the limiter says the course had one too
+ * recently; the banner on the step shows regardless. A feed or notice that fails does not undo the broadcast.
  */
-export function broadcast(deps: FeedbackDeps & { feed: AssistanceFeed; notices?: CourseNotices }) {
+export function broadcast(deps: FeedbackDeps & { feed: AssistanceFeed; notices?: CourseNotices; limiter?: ToastLimiter }) {
   const post = annotate(deps);
   return async (ref: StepRef, body: string, author: { login: string }, toast?: BroadcastToast): Promise<AnnotateResult> => {
     const result = await post({ anchor: { ref }, audience: { everyone: true }, body }, author);
     if (!result.ok) return result;
     await deps.feed.publish({ type: "annotation", courseId: ref.courseId, annotation: result.annotation }).catch(() => false);
-    await deps.notices?.post(explanationNotice(result.annotation, toast)).catch(() => false);
+    if (deps.notices && (deps.limiter?.allow(ref.courseId, deps.clock.now().getTime()) ?? true)) {
+      await deps.notices.post(explanationNotice(result.annotation, toast)).catch(() => false);
+    }
     return result;
   };
 }

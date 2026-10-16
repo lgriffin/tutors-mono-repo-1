@@ -1,5 +1,5 @@
 /**
- * Lecturer feedback on the reader's server (Rules 0405, 0564, 0565): the reader's /api/feedback
+ * Lecturer feedback on the reader's server (Rules 0405, 0564, 0565, 0567): the reader's /api/feedback
  * routes over a Postgres database (PGlite) and the process's memory hub, which stands in for Valkey.
  */
 import { describeFeature, loadFeature } from "@amiceli/vitest-cucumber";
@@ -41,11 +41,13 @@ import type { Course } from "../../../../packages/jsr/model/src/tutors.ts";
 import type { Annotation } from "@tutors/domain/feedback";
 import { assistanceTopic, noticeTopic, realtimeHub } from "@tutors/realtime-valkey";
 import { freshBrowser, githubUser, labsOf, publishedCourse } from "../../support/connect.ts";
-import { READER_ORIGIN, readerRequest, setReaderSession } from "../../support/reader-api.ts";
+import { READER_ORIGIN, readerRequest, serveCourseJson, setReaderSession } from "../../support/reader-api.ts";
 import { privateEnv, publicEnv } from "../../support/supabase-recorder.ts";
 import { readStream, type OpenStream } from "../../support/sse-stream.ts";
 import { committedMigrations, pgliteDatabase } from "../../../support/postgres-store.ts";
 import { migrate } from "@tutors/store-postgres";
+import { createBroadcastLimiter } from "@tutors/application";
+import { broadcastLimiter } from "../../../../apps/reader/src/lib/server/snippets.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/feedback-server.feature");
 
@@ -89,6 +91,8 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
   const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
   AfterEachScenario(async () => {
+    // Each scenario starts with no toast sent on the course this minute.
+    Object.assign(broadcastLimiter, createBroadcastLimiter());
     await stream?.close();
     stream = undefined;
     database.down = false;
@@ -177,27 +181,70 @@ describeFeature(feature, ({ Background, Rule, AfterEachScenario }) => {
     }
   );
 
-  Rule("When an educator broadcasts an explanation, tutors shall send the course's students one toast naming the step and linking to it.", ({ RuleScenario }) => {
-    RuleScenario("A student elsewhere in the course hears the toast", ({ Given, When, Then }) => {
-      Given("{string} is streaming the course broadcasts of {string}", (_ctx, name: string, courseId: string) => streamTopic(name, noticeTopic(courseId, "course:broadcast")));
-      When("{string} broadcasts {string} on the step {string} of the first lab", broadcasts);
-      Then(
-        "the broadcast stream shall carry one toast from {string} linking to the step {string} of the first lab and saying {string}",
-        async (_ctx, sender: string, stepId: string, body: string) => {
-          await vi.waitFor(() => expect(stream!.frames).toHaveLength(1));
-          await settle();
-          expect(stream!.frames.map((f) => f.payload)).toEqual([
-            expect.objectContaining({
-              type: "course:broadcast",
-              courseId: course.courseId,
-              senderName: sender,
-              description: body,
-              actionUrl: `${firstLab()}/${stepId}`,
-              title: stepId
-            })
-          ]);
-        }
-      );
-    });
-  });
+  Rule(
+    "When an educator broadcasts an explanation, tutors shall send the course's students one toast naming the step and linking to it, without the explanation's text, and no more than one toast a minute on the course.",
+    ({ RuleScenario }) => {
+      const streaming = (_ctx: unknown, name: string, courseId: string) => streamTopic(name, noticeTopic(courseId, "course:broadcast"));
+      const oneToast = async (_ctx: unknown, sender: string, stepId: string) => {
+        await vi.waitFor(() => expect(stream!.frames).toHaveLength(1));
+        await settle();
+        expect(stream!.frames.map((f) => f.payload)).toEqual([
+          expect.objectContaining({ type: "course:broadcast", courseId: course.courseId, senderName: sender, actionUrl: `${firstLab()}/${stepId}`, title: stepId })
+        ]);
+      };
+
+      RuleScenario("A student elsewhere in the course hears the toast", ({ Given, When, Then, And }) => {
+        Given("{string} is streaming the course broadcasts of {string}", streaming);
+        When("{string} broadcasts {string} on the step {string} of the first lab", broadcasts);
+        Then("the broadcast stream shall carry one toast from {string} linking to the step {string} of the first lab", oneToast);
+        And("the toast shall not carry {string}", (_ctx, body: string) => expect(JSON.stringify(stream!.frames)).not.toContain(body));
+      });
+
+      RuleScenario("A second explanation within the minute is not toasted again", ({ Given, When, And, Then }) => {
+        Given("{string} is streaming the course broadcasts of {string}", streaming);
+        When("{string} broadcasts {string} on the step {string} of the first lab", broadcasts);
+        And("{string} broadcasts {string} on the step {string} of the first lab", broadcasts);
+        Then("the broadcast stream shall carry one toast from {string} linking to the step {string} of the first lab", oneToast);
+        And("Postgres shall hold {int} annotations for {string}", async (_ctx, count: number, audience: string) =>
+          expect((await rows()).filter((r) => r.audience === audience)).toHaveLength(count)
+        );
+      });
+    }
+  );
+
+  Rule(
+    "If a signed-in reader is not admitted to a private course, then the reader shall refuse with 403 to read feedback there or keep a reflection from them on its server.",
+    ({ RuleScenario }) => {
+      const privateCourse = (_ctx: unknown, courseId: string, student: string, educator: string) => {
+        const enrollment = { educators: [educator], whitelist: [student], students: [] };
+        course = publishedCourse(courseId, 2, {}, enrollment);
+        serveCourseJson(courseId, { authLevel: 1, enrollment });
+      };
+      const readsStep = async (_ctx: unknown, name: string, stepId: string) => {
+        as(name);
+        response = await readerRequest("GET", `/api/feedback?${new URLSearchParams(step(stepId))}`);
+      };
+      RuleScenario("An outsider reads nothing from a private course", ({ Given, And, When, Then }) => {
+        Given("the private course {string} admits {string} and is taught by {string}", privateCourse);
+        And("{string} has broadcast {string} on the step {string} of the first lab", broadcasts);
+        When("{string} reads the step {string} of the first lab", readsStep);
+        Then("the reader shall answer {number}", answers);
+      });
+      RuleScenario("An outsider cannot plant a reflection in a private course", ({ Given, When, Then, And }) => {
+        Given("the private course {string} admits {string} and is taught by {string}", privateCourse);
+        When("{string} shares the note {string} on the step {string} of the first lab", async (_ctx, name: string, body: string, stepId: string) => {
+          as(name);
+          response = await readerRequest("POST", "/api/feedback", { action: "reflect", ...step(stepId), kind: "reflection", body });
+        });
+        Then("the reader shall answer {number}", answers);
+        And("Postgres shall hold no reflection", async () => expect((await db.sql.query(`SELECT id FROM feedback_reflections`)).rows).toEqual([]));
+      });
+      RuleScenario("A student on the whitelist reads the course's feedback", ({ Given, And, When, Then }) => {
+        Given("the private course {string} admits {string} and is taught by {string}", privateCourse);
+        And("{string} has broadcast {string} on the step {string} of the first lab", broadcasts);
+        When("{string} reads the step {string} of the first lab", readsStep);
+        Then("the reader shall answer {number}", answers);
+      });
+    }
+  );
 });

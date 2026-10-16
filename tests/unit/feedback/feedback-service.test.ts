@@ -42,10 +42,10 @@ afterEach(() => {
 describe("feedbackService", () => {
   it("offers nothing in anonymous mode or signed out, and reads nothing", async () => {
     install(desk.as(ALICE), true);
-    await feedbackService.arrive(REF, true);
+    await feedbackService.arrive(REF, "alice");
     expect(feedbackService.available.value).toBe(false);
     install(desk.as(ALICE));
-    await feedbackService.arrive(REF, false);
+    await feedbackService.arrive(REF, null);
     expect(feedbackService.available.value).toBe(false);
     expect(await feedbackService.broadcast("x")).toBe(false);
     expect(await feedbackService.share({ ref: REF, body: "x", kind: "note", updatedAt: "" })).toBe(false);
@@ -57,7 +57,7 @@ describe("feedbackService", () => {
     await desk.as(ELLEN).broadcast(REF, "Await the fetch.");
     const student = desk.as(ALICE);
     install(student);
-    await feedbackService.arrive(REF, true);
+    await feedbackService.arrive(REF, "alice");
     expect(feedbackService.banners()).toHaveLength(1);
     const step = vi.spyOn(student, "step").mockRejectedValue(new Error("offline"));
     await vi.advanceTimersByTimeAsync(FEEDBACK_POLL_MS);
@@ -72,15 +72,15 @@ describe("feedbackService", () => {
   it("clears the step's feedback on moving to another step, and a dismissed banner stays dismissed", async () => {
     await desk.as(ELLEN).broadcast(REF, "Await the fetch.");
     install(desk.as(ALICE));
-    await feedbackService.arrive(REF, true);
+    await feedbackService.arrive(REF, "alice");
     const [banner] = feedbackService.banners();
     feedbackService.dismiss(banner.id);
     feedbackService.dismiss(banner.id);
     expect(feedbackService.banners()).toEqual([]);
     expect(feedbackService.dismissed.value).toEqual([banner.id]);
-    await feedbackService.arrive({ ...REF, stepId: "03" }, true);
+    await feedbackService.arrive({ ...REF, stepId: "03" }, "alice");
     expect(feedbackService.view.value.broadcasts).toEqual([]);
-    await feedbackService.arrive(REF, true);
+    await feedbackService.arrive(REF, "alice");
     expect(feedbackService.banners()).toEqual([]);
   });
 
@@ -88,7 +88,7 @@ describe("feedbackService", () => {
     const student = desk.as(ALICE);
     const shared = await student.reflect({ ref: REF, body: "Found it", kind: "discovery", updatedAt: "" });
     install(desk.as(ELLEN));
-    await feedbackService.arrive(REF, true);
+    await feedbackService.arrive(REF, "alice");
     expect(feedbackService.view.value.history?.reflections).toHaveLength(1);
     expect(await feedbackService.annotate("alice", "Nearly.")).toBe(true);
     expect(await feedbackService.reply(shared.ok ? shared.reflection : (null as never), "Good catch.")).toBe(true);
@@ -105,7 +105,7 @@ describe("feedbackService", () => {
     install(desk.as(ELLEN));
     expect(await feedbackService.broadcast("x")).toBe(false);
     expect(await feedbackService.annotate("alice", "x")).toBe(false);
-    await feedbackService.arrive(REF, true);
+    await feedbackService.arrive(REF, "alice");
     const first = feedbackService.broadcast("one");
     expect(await feedbackService.broadcast("two")).toBe(false);
     expect(await first).toBe(true);
@@ -113,7 +113,7 @@ describe("feedbackService", () => {
 
   it("shares a note, says why one was not shared, and reads what was received", async () => {
     install(desk.as(ALICE));
-    await feedbackService.arrive(REF, true);
+    await feedbackService.arrive(REF, "alice");
     expect(await feedbackService.share({ ref: REF, body: " ", kind: "note", updatedAt: "" })).toBe(false);
     expect(feedbackService.failure.value).toBe("no-note");
     expect(await feedbackService.share({ ref: REF, body: "Found it", kind: "note", updatedAt: "" })).toBe(true);
@@ -154,5 +154,44 @@ describe("the help queue's explanation offer", () => {
     expect(helpQueueService.explanations.value).toHaveLength(1);
     await feedback.as(ELLEN).revoke(posted.ok ? posted.annotation.id : "");
     expect(helpQueueService.explanations.value).toEqual([]);
+  });
+
+  it("posts one explanation at a time, and offers nothing for a course the lecturer has left", async () => {
+    const help = new InMemoryHelpDesk({ clock, educators: { cs101: ["ellen"], cs102: ["ellen"] } });
+    const feedback = new InMemoryFeedbackDesk({ clock, feed: help.feed, educators: { cs101: ["ellen"] } });
+    configureAdapters({ ...anonymousAdapters({ clock }), anonymous: false, helpDesk: help.as(ELLEN), feedbackDesk: feedback.as(ELLEN), assistanceFeed: help.feed });
+    await helpQueueService.start("cs101");
+    const asked = await help.as(ALICE).ask(REF, "stuck");
+    const id = asked.ok ? asked.request.id : "";
+    expect(await helpQueueService.resolve(id)).toBe(true);
+    const first = helpQueueService.explain(id, "Because.");
+    expect(helpQueueService.explaining.value).toEqual([id]);
+    expect(await helpQueueService.explain(id, "Because.")).toBe(false);
+    expect(await first).toBe(true);
+    expect(helpQueueService.explaining.value).toEqual([]);
+    expect(feedback.store.annotations).toHaveLength(1);
+
+    const again = await help.as(ALICE).ask({ ...REF, stepId: "03" }, "stuck");
+    const resolving = helpQueueService.resolve(again.ok ? again.request.id : "");
+    await helpQueueService.start("cs102");
+    expect(await resolving).toBe(true);
+    expect(helpQueueService.offers.value).toEqual([]);
+  });
+
+  it("forgets the last person's feedback when someone else signs in, and keeps no older read of it", async () => {
+    await desk.as(ELLEN).annotate({ ref: REF }, { learnerId: "alice" }, "For alice.");
+    install(desk.as(ALICE));
+    await feedbackService.arrive(REF, "alice");
+    feedbackService.dismiss("x");
+    const late = feedbackService.readReceived("cs101");
+    install(desk.as({ login: "bob", name: "Bob" }));
+    await feedbackService.arrive(REF, "bob");
+    await late;
+    expect(feedbackService.received.value).toBeNull();
+    expect(feedbackService.dismissed.value).toEqual([]);
+    await feedbackService.readReceived("cs101");
+    expect(feedbackService.received.value).toEqual([]);
+    await feedbackService.readReceived("cs102");
+    expect(feedbackService.received.value).toEqual([]);
   });
 });

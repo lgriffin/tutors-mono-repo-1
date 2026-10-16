@@ -2,13 +2,14 @@ import type { RequestHandler } from "./$types";
 import { adapters } from "@tutors/svelte-state/adapters";
 import log from "@tutors/logger";
 import { isEducatorOf } from "@tutors/domain/access";
-import { FEEDBACK_MESSAGES, feedback, parseFeedbackPost, parseStep } from "#lib/server/feedback.ts";
+import { admits, FEEDBACK_MESSAGES, feedback, parseFeedbackPost, parseStep } from "#lib/server/feedback.ts";
 import { readJson } from "#lib/server/api/http.ts";
 import { allowedOriginHeaders, answer } from "#lib/server/api/cors.ts";
 
 /**
  * /api/feedback: lecturer feedback on lab steps. A signed-in student reads what was posted for them
- * at a step (Rule 0403) and shares a note as a reflection (Rule 0384); an educator of the course
+ * at a step (Rule 0403) and shares a note as a reflection (Rule 0384), in a course that admits them
+ * (Rule 0567); an educator of the course
  * also reads the step's history and reflections (Rule 0409), annotates a step, a snippet or a
  * reflection for one student, broadcasts an explanation to everyone on the step and revokes
  * (Rules 0400 to 0402, 0405, 0406). Every write runs here as the session's actor. Tutors Live and
@@ -17,6 +18,15 @@ import { allowedOriginHeaders, answer } from "#lib/server/api/cors.ts";
 
 const SIGN_IN = { message: "Sign in with GitHub to read and send feedback" };
 const NOT_KEPT = { message: "Feedback is not kept on this server" };
+const NOT_ADMITTED = { message: "This course does not admit you", reason: "forbidden" };
+const NO_COURSE = { message: "The course could not be read; try again", reason: "unavailable" };
+
+/** Refuses a reader the course does not admit (a private course's whitelist), before anything is read or kept. */
+async function admission(courseId: string, login: string, fetchFn: typeof fetch, cors: Record<string, string>): Promise<Response | null> {
+  const admitted = await admits(courseId, login, fetchFn);
+  if (admitted === null) return answer(503, NO_COURSE, cors);
+  return admitted ? null : answer(403, NOT_ADMITTED, cors);
+}
 
 /** GET /api/feedback?courseId=&labRoute=&stepId=: the step's feedback for the person signed in, from one read of its annotations. */
 export const GET: RequestHandler = async ({ request, url, locals, fetch }) => {
@@ -28,6 +38,8 @@ export const GET: RequestHandler = async ({ request, url, locals, fetch }) => {
   const notes = feedback(fetch);
   if (!notes) return answer(503, NOT_KEPT, cors);
   const login = locals.actor.login;
+  const refused = await admission(ref.courseId, login, fetch, cors);
+  if (refused) return refused;
   try {
     const educators = await notes.educatorsOf(ref.courseId).catch(() => [] as string[]);
     const shown = await notes.step(ref, login);
@@ -51,6 +63,8 @@ export const POST: RequestHandler = async ({ request, url, locals, fetch }) => {
   if (!notes) return answer(503, NOT_KEPT, cors);
   const actor = { login: locals.actor.login };
   if (post.action === "reflect") {
+    const refused = await admission(post.ref.courseId, actor.login, fetch, cors);
+    if (refused) return refused;
     const shared = await notes.reflect({ ref: post.ref, kind: post.kind, body: post.body, updatedAt: new Date(0).toISOString() }, actor.login);
     if (!shared.ok) return answer(shared.reason === "no-note" ? 400 : 503, { message: FEEDBACK_MESSAGES[shared.reason], reason: shared.reason }, cors);
     log.info("A reflection was shared", { courseId: post.ref.courseId });

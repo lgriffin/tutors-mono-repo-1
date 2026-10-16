@@ -15,13 +15,13 @@
   let { courseId, labRoute, stepId }: { courseId: string; labRoute: string; stepId: string } = $props();
 
   const ref = $derived(stepRef(courseId, labRoute, stepId));
-  const signedIn = $derived(!!tutorsId.value?.login);
+  const login = $derived(tutorsId.value?.login || null);
 
   // Only the step and sign-in drive this effect: arrive() reads and writes the service's runes.
   $effect(() => {
     const at = ref;
-    const signed = signedIn;
-    if (at) untrack(() => void feedbackService.arrive(at, signed));
+    const who = login;
+    if (at) untrack(() => void feedbackService.arrive(at, who));
   });
 
   onDestroy(() => feedbackService.leave());

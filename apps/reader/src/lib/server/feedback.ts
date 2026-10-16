@@ -8,6 +8,7 @@
 import { clock } from "@tutors/clock";
 import {
   annotate,
+  courseAdmission,
   broadcast,
   MAX_ANNOTATION_CHARS,
   receivedFeedback,
@@ -21,7 +22,7 @@ import {
 import type { NotesStore } from "@tutors/application/ports";
 import { isNoteKind, stepRef, type Note, type NoteKind, type StepRef } from "@tutors/domain/learning";
 import { readerServer } from "./api/adapters.ts";
-import { educatorsOf, serverNotices } from "./snippets.ts";
+import { accessOf, broadcastLimiter, educatorsOf, serverNotices } from "./snippets.ts";
 
 /** The use cases over this server's adapters, or null when it keeps no feedback (anonymous mode, or not on Postgres). */
 export function feedback(fetchFn: typeof fetch) {
@@ -33,12 +34,22 @@ export function feedback(fetchFn: typeof fetch) {
     history: stepHistory(deps),
     received: receivedFeedback(deps),
     annotate: annotate(deps),
-    broadcast: broadcast({ ...deps, feed: realtime.assistance, notices: serverNotices }),
+    // One toast per course a minute, shared with lecturer broadcasts; the banner on the step shows regardless.
+    broadcast: broadcast({ ...deps, feed: realtime.assistance, notices: serverNotices, limiter: broadcastLimiter }),
     revoke: revokeAnnotation({ ...deps, feed: realtime.assistance }),
     /** The note the student sent, shared as a reflection: the server keeps no notes, so the post is the note (Rule 0384). */
     reflect: (note: Note, learnerId: string) => shareReflection({ store: deps.store, notes: postedNote(note), clock })(note.ref, learnerId),
     educatorsOf: deps.educatorsOf
   };
+}
+
+/**
+ * Whether `login` may read the course, as the reader admits it to the course's pages: a private
+ * course's whitelist names them, or they teach it. Null when the course cannot be read.
+ */
+export async function admits(courseId: string, login: string, fetchFn: typeof fetch): Promise<boolean | null> {
+  const access = await accessOf(courseId, (url) => fetchFn(url));
+  return access ? courseAdmission(access, login) === "admit" : null;
 }
 
 /** A notes store holding only the note a browser posted. */

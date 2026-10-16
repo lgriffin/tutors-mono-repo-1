@@ -38,6 +38,12 @@ function createFeedbackService() {
 
   let poll: ReturnType<typeof setInterval> | null = null;
   let reads = 0;
+  /** Who the feedback on screen was read for: another sign-in forgets it before anything is read. */
+  let reader: string | null = null;
+  /** Bumped when the received list is forgotten, so an older read cannot bring it back. */
+  let receivedReads = 0;
+  /** The course the received list was read for. */
+  let receivedFor: string | null = null;
 
   const visible = () => typeof document === "undefined" || document.visibilityState !== "hidden";
 
@@ -82,11 +88,23 @@ function createFeedbackService() {
     sending,
     failure,
 
-    /** The student arrived at a lab step: signed in, its feedback is read at once and every minute while visible. */
-    async arrive(ref: StepRef, signedIn: boolean): Promise<void> {
+    /**
+     * The student arrived at a lab step: signed in, its feedback is read at once and every minute
+     * while visible. Signing out, or in as someone else, forgets what was read for the last person.
+     */
+    async arrive(ref: StepRef, login: string | null): Promise<void> {
       const moved = !step.value || !sameStep(step.value, ref);
       step.value = ref;
-      available.value = signedIn && !adapters().anonymous;
+      available.value = !!login && !adapters().anonymous;
+      if (login !== reader) {
+        reader = login;
+        reads++;
+        receivedReads++;
+        view.value = EMPTY;
+        dismissed.value = [];
+        received.value = null;
+        receivedFor = null;
+      }
       if (!available.value) {
         stopPolling();
         view.value = EMPTY;
@@ -150,8 +168,14 @@ function createFeedbackService() {
     /** Reads what the student received in the course, newest first (Rule 0409); a failed read keeps the last one. */
     async readReceived(courseId: string): Promise<void> {
       if (!available.value || !courseId) return;
+      if (receivedFor !== courseId) {
+        received.value = null;
+        receivedFor = courseId;
+      }
+      const mine = ++receivedReads;
       try {
-        received.value = await adapters().feedbackDesk.received(courseId);
+        const read = await adapters().feedbackDesk.received(courseId);
+        if (mine === receivedReads && receivedFor === courseId) received.value = read;
       } catch {
         // The last history read stays.
       }
@@ -173,6 +197,9 @@ function createFeedbackService() {
     reset(): void {
       stopPolling();
       reads++;
+      receivedReads++;
+      reader = null;
+      receivedFor = null;
       available.value = false;
       step.value = null;
       view.value = EMPTY;

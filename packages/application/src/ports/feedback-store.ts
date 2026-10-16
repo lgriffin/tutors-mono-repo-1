@@ -2,6 +2,9 @@
 import type { Annotation, NewAnnotation, NewReflection, Reflection } from "@tutors/domain/feedback";
 import type { StepRef } from "@tutors/domain/learning";
 
+/** The most annotations `received` answers with: the newest, as a student's history in one course. */
+export const RECEIVED_LIMIT = 500;
+
 export interface FeedbackStore {
   /** Keeps an annotation and resolves it with its id; rejects when it could not be kept. */
   annotate(annotation: NewAnnotation): Promise<Annotation>;
@@ -9,7 +12,7 @@ export interface FeedbackStore {
   get(id: string): Promise<Annotation | null>;
   /** Every annotation anchored at the step, revoked ones included, oldest first. */
   forStep(ref: StepRef): Promise<Annotation[]>;
-  /** The unrevoked annotations of a course for a learner (addressed to them, or to everyone), newest first. */
+  /** The unrevoked annotations of a course for a learner (addressed to them, or to everyone), newest first, at most RECEIVED_LIMIT. */
   received(courseId: string, learnerId: string): Promise<Annotation[]>;
   /**
    * Marks an annotation revoked at `at`, keeping it; resolves it as it now is, or null when there

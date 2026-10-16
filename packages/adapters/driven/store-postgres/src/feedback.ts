@@ -7,7 +7,7 @@
  * The use cases answer a failed query as "try again", so each one is logged here.
  */
 import log from "@tutors/logger";
-import type { FeedbackStore } from "@tutors/application/ports";
+import { RECEIVED_LIMIT, type FeedbackStore } from "@tutors/application/ports";
 import type { Anchor, Annotation, NewAnnotation, NewReflection, Reflection } from "@tutors/domain/feedback";
 import { isNoteKind, type StepRef } from "@tutors/domain/learning";
 import { iso, run as runQuery, type SqlClient } from "./client.ts";
@@ -109,8 +109,8 @@ export function postgresFeedbackStore(sql: SqlClient): FeedbackStore {
         sql.query(
           `SELECT ${ANNOTATION} FROM feedback_annotations
            WHERE course_id = $1 AND revoked_at IS NULL AND (audience = 'everyone' OR learner_id = $2)
-           ORDER BY created_at DESC, id DESC LIMIT 500`,
-          [courseId, learnerId]
+           ORDER BY created_at DESC, id DESC LIMIT $3`,
+          [courseId, learnerId, RECEIVED_LIMIT]
         )
       );
       return rows.map(annotationFromRow);

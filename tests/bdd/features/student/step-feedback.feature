@@ -110,3 +110,43 @@ Feature: Lecturer feedback on a lab step
     Scenario: A snippet shared from a lab's own page offers no feedback
       Given "alice" shared the snippet "gist-8" from the route "/lab/cs101/lab-01"
       Then Tutors Time shall offer no feedback on the snippet "gist-8"
+
+  @rule-0568 @ears-event-driven
+  Rule: When a signed-in student shares the note of a lab step with the course's lecturers, the reader shall send a copy as a reflection that the step's history shows its educators, and say whether it was sent.
+
+    Scenario: A shared note reaches the lecturer
+      Given "alice" opens the step
+      When "alice" shares the note "I found the off-by-one" with the lecturer
+      Then the reader shall say the note was sent
+      And the step's reflections for "ellen" shall read "I found the off-by-one" from "alice"
+
+    Scenario: An empty note is not sent
+      Given "alice" opens the step
+      When "alice" shares the note "   " with the lecturer
+      Then the reader shall say the note was not sent, as "no-note"
+
+  @rule-0569 @ears-event-driven
+  Rule: When an educator replies to a reflection shared on a lab step, the reader shall show the reply below that step to the student who shared the reflection only.
+
+    Scenario: The student who reflected reads the reply
+      Given "alice" has shared the note "I found the off-by-one" on the step
+      When "ellen" replies "Well spotted." to the reflection from "alice"
+      And "alice" opens the step
+      Then the reader shall show the card "Well spotted." below the step
+      And the card shall say it is on their reflection
+
+    Scenario: Another student does not see the reply
+      Given "alice" has shared the note "I found the off-by-one" on the step
+      When "ellen" replies "Well spotted." to the reflection from "alice"
+      And "bob" opens the step
+      Then the reader shall show no banner and no card
+
+  @rule-0570 @ears-event-driven
+  Rule: When someone else signs in on the same browser, the reader shall forget the feedback it read for the last person before reading any for them.
+
+    Scenario: The next student sees none of the last student's feedback
+      Given "ellen" has written "Nearly there, alice." to "alice" on the step "02"
+      And "alice" reads the feedback they received in "cs101"
+      When "bob" opens the step
+      Then the reader shall show no banner and no card
+      And the reader shall hold no received feedback until "bob" reads it

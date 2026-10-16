@@ -84,7 +84,9 @@
             <div class="help-actions">
               {#if helpQueueService.explainFailed.value}<span class="help-note" role="alert">{t("feedback.notSent")}</span>{/if}
               <button type="button" class="ui-button" onclick={() => helpQueueService.skipExplain(o.id)}>{t("feedback.cancel")}</button>
-              <button type="submit" class="ui-button ui-button-primary" disabled={!draft(o.id).trim()}>{t("feedback.explainSend")}</button>
+              <button type="submit" class="ui-button ui-button-primary" disabled={!draft(o.id).trim() || helpQueueService.explaining.value.includes(o.id)}
+                >{t("feedback.explainSend")}</button
+              >
             </div>
           </form>
         </li>

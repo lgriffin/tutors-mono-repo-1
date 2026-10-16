@@ -7,8 +7,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { feedbackDeskContract, InMemoryAssistanceFeed, InMemoryCourseNotices, InMemoryFeedbackStore } from "@tutors/application/testing";
 import { createDataApi, readerApiFeedbackDesk } from "@tutors/data-api";
+import { EXPLANATION_TOAST } from "@tutors/application";
 
-const server = vi.hoisted(() => ({ data: null as unknown, feed: null as unknown, notices: null as unknown, educators: ["ellen"] as string[] | null }));
+const server = vi.hoisted(() => ({
+  data: null as unknown,
+  feed: null as unknown,
+  notices: null as unknown,
+  educators: ["ellen"] as string[] | null,
+  /** The course's auth level and whitelist; null when its tutors.json cannot be read. */
+  access: {} as { authLevel?: number; enrollment?: { educators?: string[]; whitelist?: string[] } } | null,
+  toasts: true
+}));
 vi.mock("../../../apps/reader/src/lib/server/api/adapters.ts", () => ({
   readerServer: () => ({ data: server.data, realtime: { assistance: server.feed } })
 }));
@@ -17,6 +26,8 @@ vi.mock("../../../apps/reader/src/lib/server/snippets.ts", () => ({
     if (!server.educators) throw new Error("course unreachable");
     return server.educators;
   },
+  accessOf: async () => (server.access ? { ...server.access, enrollment: { educators: server.educators ?? [], ...server.access.enrollment } } : null),
+  broadcastLimiter: { allow: () => server.toasts },
   serverNotices: { post: (n: unknown) => (server.notices as InMemoryCourseNotices).post(n as never), watch: () => () => {} }
 }));
 vi.mock("../../../apps/reader/src/lib/server/api/access.ts", () => ({ allowedOrigins: () => [] }));
@@ -45,6 +56,8 @@ function fresh() {
   server.feed = new InMemoryAssistanceFeed();
   server.notices = new InMemoryCourseNotices();
   server.educators = ["ellen"];
+  server.access = {};
+  server.toasts = true;
 }
 
 beforeEach(fresh);
@@ -71,11 +84,34 @@ describe("POST /api/feedback", () => {
         type: "course:broadcast",
         courseId: "cs101",
         title: "Fetching data",
-        description: "Await the fetch.",
+        description: EXPLANATION_TOAST,
         actionUrl: "/lab/cs101/lab-01/02",
         senderName: "ELLEN"
       })
     ]);
+  });
+
+  it("keeps the explanation's text off the toast, and sends no toast while the course's minute is spent", async () => {
+    await deskAs("ellen").broadcast(ref, "Await the fetch.");
+    expect(JSON.stringify((server.notices as InMemoryCourseNotices).posted)).not.toContain("Await");
+    server.toasts = false;
+    expect((await deskAs("ellen").broadcast(ref, "Again.")).ok).toBe(true);
+    expect((server.notices as InMemoryCourseNotices).posted).toHaveLength(1);
+    expect((await deskAs("alice").step(ref)).broadcasts.map((a) => a.body)).toEqual(["Await the fetch.", "Again."]);
+  });
+
+  it("refuses a reader a private course does not admit, and answers 503 when the course cannot be read", async () => {
+    await deskAs("ellen").broadcast(ref, "Await the fetch.");
+    server.access = { authLevel: 1, enrollment: { whitelist: ["alice"] } };
+    expect((await deskAs("alice").step(ref)).broadcasts).toHaveLength(1);
+    await expect(deskAs("mallory").step(ref)).rejects.toThrow();
+    await expect(deskAs("mallory").received("cs101")).rejects.toThrow();
+    expect(await deskAs("mallory").reflect({ ref, body: "planted", kind: "reflection", updatedAt: "" })).toEqual({ ok: false, reason: "forbidden" });
+    expect((await deskAs("ellen").step(ref)).history?.reflections).toEqual([]);
+    server.access = null;
+    await expect(deskAs("alice").step(ref)).rejects.toThrow();
+    await expect(deskAs("alice").received("cs101")).rejects.toThrow();
+    expect(await deskAs("alice").reflect({ ref, body: "x", kind: "reflection", updatedAt: "" })).toEqual({ ok: false, reason: "unavailable" });
   });
 
   it("treats an annotation for everyone on the step as a broadcast", async () => {
