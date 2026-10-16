@@ -31,6 +31,7 @@ import {
   accessStoreContract,
   assistanceStoreContract,
   feedbackStoreContract,
+  insightsReadContract,
   learningEventSinkContract,
   playgroundSnapshotsContract,
   profileContract,
@@ -38,12 +39,15 @@ import {
   snippetStoreContract,
   type ContractCase
 } from "@tutors/application/testing";
-import type { PlaygroundSnapshots } from "@tutors/application/ports";
+import type { InsightsRead, PlaygroundSnapshots } from "@tutors/application/ports";
+import type { HelpRequest } from "@tutors/domain/assistance";
+import type { Annotation, Reflection } from "@tutors/domain/feedback";
 import {
   migrate,
   postgresAccessStore,
   postgresAssistanceStore,
   postgresFeedbackStore,
+  postgresInsightsRead,
   postgresLearningEventSink,
   postgresPlaygroundSnapshotRows,
   postgresProfile,
@@ -58,6 +62,30 @@ import { privateEnv, recorder } from "../../support/supabase-recorder.ts";
 import { committedMigrations, pgliteDatabase } from "../../../support/postgres-store.ts";
 
 const feature = await loadFeature("tests/bdd/features/shared/postgres-store.feature");
+
+/**
+ * The insights views over rows the Assistance and Feedback stores kept: the contract's rows go in
+ * through those stores, which give them UUIDs, and are read back under the contract's own ids.
+ */
+async function seededInsightsRead(sql: SqlClient, rows: { requests: HelpRequest[]; annotations: Annotation[]; reflections: Reflection[] }): Promise<InsightsRead> {
+  const ids = new Map<string, string>();
+  const assistance = postgresAssistanceStore(sql);
+  const feedback = postgresFeedbackStore(sql);
+  for (const { id, ...request } of rows.requests) ids.set((await assistance.open(request)).id, id);
+  for (const { id, revokedAt, ...annotation } of rows.annotations) {
+    const kept = await feedback.annotate(annotation);
+    if (revokedAt) await feedback.revoke(kept.id, revokedAt);
+    ids.set(kept.id, id);
+  }
+  for (const { id, ...reflection } of rows.reflections) ids.set((await feedback.reflect(reflection)).id, id);
+  const read = postgresInsightsRead(sql);
+  const named = <T extends { id: string }>(found: T[]) => found.map((row) => ({ ...row, id: ids.get(row.id) ?? row.id }));
+  return {
+    helpRequests: async (courseId, period) => named(await read.helpRequests(courseId, period)),
+    annotations: async (courseId, period) => named(await read.annotations(courseId, period)),
+    reflections: async (courseId, period) => named(await read.reflections(courseId, period))
+  };
+}
 
 /** Every table store-postgres reads or writes. */
 const STORE_TABLES = [
@@ -200,7 +228,7 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
     RuleScenario("The Postgres store keeps every store port's contract", ({ When, Then }) => {
       const failures: string[] = [];
       When(
-        "the contract suites of ProfilePort, AccessStore, LearningEventSink, ScormRecords, SnippetStore, PlaygroundSnapshots, AssistanceStore and FeedbackStore run against the Postgres store",
+        "the contract suites of ProfilePort, AccessStore, LearningEventSink, ScormRecords, SnippetStore, PlaygroundSnapshots, AssistanceStore, FeedbackStore and InsightsRead run against the Postgres store",
         async () => {
           const sql: SqlClient = db.sql;
           const rows = postgresPlaygroundSnapshotRows(sql);
@@ -220,7 +248,8 @@ describeFeature(feature, ({ Background, AfterEachScenario, Rule }) => {
             ...snippetStoreContract(() => postgresSnippetStore(sql), new Date().toISOString()),
             ...playgroundSnapshotsContract(snapshots),
             ...assistanceStoreContract(() => postgresAssistanceStore(sql)),
-            ...feedbackStoreContract(() => postgresFeedbackStore(sql))
+            ...feedbackStoreContract(() => postgresFeedbackStore(sql)),
+            ...insightsReadContract((rows) => seededInsightsRead(sql, rows))
           ];
           expect(suites.length).toBeGreaterThan(20);
           for (const c of suites) {

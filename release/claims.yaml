@@ -366,3 +366,19 @@ claims:
     scope: "live:*"
     rule: "0407"
     reason: "Rule 0407: Tutors Live's help queue offers a resolved request as an explanation for everyone on its step"
+
+  # Learning insights in Tutors Time (Rules 0412 to 0414): the course navigation gains an Insights
+  # section (Struggle by step, Help response), whose pages read the reader's GET /api/insights with
+  # the lecturer's session, and a student's page gains a Help and feedback panel read the same way.
+  - artefact: dom
+    scope: "time:*"
+    rule: "0412"
+    reason: "Rule 0412: Tutors Time's course navigation links to the course's insights, where an educator reads its lab steps ranked by requests and waiting time"
+  - artefact: screenshot
+    scope: "time:*"
+    rule: "0412"
+    reason: "Rule 0412: Tutors Time's course navigation links to the course's insights, where an educator reads its lab steps ranked by requests and waiting time"
+  - artefact: network
+    scope: "time:*"
+    rule: "0414"
+    reason: "Rule 0414: a student's page in Tutors Time reads their requests, hints, annotations and reflections from the reader's GET /api/insights"

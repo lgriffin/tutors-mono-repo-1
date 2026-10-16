@@ -38,7 +38,7 @@ Feature: Student data in plain Postgres
   Rule: Tutors shall hold the Postgres store to the same contract suites as the Supabase and in-memory stores for every store port.
 
     Scenario: The Postgres store keeps every store port's contract
-      When the contract suites of ProfilePort, AccessStore, LearningEventSink, ScormRecords, SnippetStore, PlaygroundSnapshots, AssistanceStore and FeedbackStore run against the Postgres store
+      When the contract suites of ProfilePort, AccessStore, LearningEventSink, ScormRecords, SnippetStore, PlaygroundSnapshots, AssistanceStore, FeedbackStore and InsightsRead run against the Postgres store
       Then every case passes
 
   @rule-0479 @ears-unwanted

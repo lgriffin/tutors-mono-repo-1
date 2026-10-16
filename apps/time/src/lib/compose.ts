@@ -6,13 +6,14 @@
  * check are composed on the server (lib/server/api/moodle.ts, lib/server/snippets.ts) from private
  * environment. With PUBLIC_REALTIME=valkey there is no Supabase client: the snippets page streams
  * the pings from the reader's server at PUBLIC_READER_URL (GET /api/realtime/stream, Rule 0482).
- * A lecturer's feedback on a snippet is posted to that reader's /api/feedback with the session.
+ * A lecturer's feedback on a snippet is posted to that reader's /api/feedback with the session, and
+ * the insights pages read that reader's GET /api/insights with it (Rules 0412 to 0414).
  */
 import { createSupabaseClient } from "@tutors/store-supabase";
 import { realtimeClientOptions, supabaseCourseNotices } from "@tutors/realtime-supabase";
 import { realtimeKindOf, valkeyBrowserRealtime } from "@tutors/realtime-valkey";
 import { anonymousAdapters, configureAdapters } from "@tutors/svelte-state/adapters";
-import { createDataApi, readerApiFeedbackDesk } from "@tutors/data-api";
+import { createDataApi, readerApiFeedbackDesk, readerApiInsightsDesk } from "@tutors/data-api";
 import log, { withRequestId } from "@tutors/logger";
 
 export type TimeEnv = { PUBLIC_ANON_MODE?: string; PUBLIC_SUPABASE_URL?: string; PUBLIC_SUPABASE_ANON_KEY?: string; PUBLIC_READER_URL?: string; PUBLIC_REALTIME?: string };
@@ -22,9 +23,11 @@ export function composeTime(env: TimeEnv): void {
   const key = env.PUBLIC_SUPABASE_ANON_KEY;
   const anonymous = env.PUBLIC_ANON_MODE?.trim().toUpperCase() === "TRUE";
   const reader = env.PUBLIC_READER_URL?.trim() || "https://tutors.dev";
-  const feedbackDesk = anonymous ? undefined : readerApiFeedbackDesk(createDataApi(undefined, reader));
-  if (feedbackDesk && realtimeKindOf(env) === "valkey") {
-    configureAdapters({ ...anonymousAdapters(), anonymous: false, notices: valkeyBrowserRealtime({ streamBase: reader, publishBase: reader }).notices, feedbackDesk });
+  const api = anonymous ? undefined : createDataApi(undefined, reader);
+  const feedbackDesk = api ? readerApiFeedbackDesk(api) : undefined;
+  const insightsDesk = api ? readerApiInsightsDesk(api) : undefined;
+  if (feedbackDesk && insightsDesk && realtimeKindOf(env) === "valkey") {
+    configureAdapters({ ...anonymousAdapters(), anonymous: false, notices: valkeyBrowserRealtime({ streamBase: reader, publishBase: reader }).notices, feedbackDesk, insightsDesk });
     return;
   }
   const client = anonymous ? undefined : createSupabaseClient(url, key, withRequestId(), realtimeClientOptions());
@@ -33,9 +36,9 @@ export function composeTime(env: TimeEnv): void {
   }
   // The dashboard only watches: the reader's server posts the snippet pings. With no client the
   // pings are not heard, but feedback on a snippet still goes to the reader.
-  if (!feedbackDesk) {
+  if (!feedbackDesk || !insightsDesk) {
     configureAdapters(anonymousAdapters());
     return;
   }
-  configureAdapters({ ...anonymousAdapters(), anonymous: false, ...(client ? { notices: supabaseCourseNotices(client) } : {}), feedbackDesk });
+  configureAdapters({ ...anonymousAdapters(), anonymous: false, ...(client ? { notices: supabaseCourseNotices(client) } : {}), feedbackDesk, insightsDesk });
 }

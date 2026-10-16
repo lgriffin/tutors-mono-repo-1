@@ -11,9 +11,10 @@
  * the reader at their PUBLIC_READER_URL (Rule 0471).
  */
 import type { QueueEntry } from "@tutors/application";
-import type { PlaygroundSnapshot, ScormRecord, WhiteboardRoom, WhiteboardScene } from "@tutors/application/ports";
+import type { InsightsPeriod, InsightsSpan, PlaygroundSnapshot, ScormRecord, WhiteboardRoom, WhiteboardScene } from "@tutors/application/ports";
 import type { HelpKind, HelpRequest } from "@tutors/domain/assistance";
 import type { Annotation, Reflection } from "@tutors/domain/feedback";
+import type { CourseInsights, StudentProgress } from "@tutors/domain/insights";
 import type { NoteKind } from "@tutors/domain/learning";
 import type { ContentLock } from "@tutors/domain/access";
 import type { CourseVisit } from "@tutors/domain/presence";
@@ -202,4 +203,19 @@ export interface StepFeedbackRead {
 /** GET /api/feedback/mine?courseId=: what the signed-in student received in the course, newest first. */
 export interface ReceivedFeedback {
   annotations: Annotation[];
+}
+
+/**
+ * GET /api/insights?courseId=&span=&day=[&learnerId=]: a course's insights (or, with `learnerId`,
+ * one student's progress) over the span ending with `day`, for an educator of the course; Tutors
+ * Time calls it with the lecturer's session. Answers one of these, or `{ message, reason }`.
+ */
+export type InsightsAsk = { courseId: string; span: InsightsSpan; day: string; learnerId?: string | null };
+export interface CourseInsightsRead {
+  period: InsightsPeriod;
+  insights: CourseInsights;
+}
+export interface StudentInsightsRead {
+  period: InsightsPeriod;
+  progress: StudentProgress;
 }

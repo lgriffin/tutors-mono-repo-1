@@ -7,6 +7,7 @@ import type {
   FeedbackPost,
   HelpPost,
   HelpQueue,
+  InsightsAsk,
   LiveWatch,
   LiveWatchTier,
   LockChange,
@@ -138,6 +139,9 @@ export function createDataApi(fetchFn: FetchFn = (input, init) => globalThis.fet
       if (response?.status === 401) return { broadcasts: [], personal: [], history: null };
       return response?.ok ? ((await response.json()) as StepFeedbackRead) : null;
     },
+    /** Insights carry the session from Tutors Time's origin; the reader answers educators of the course only. Null when unreachable. */
+    getInsights: (ask: InsightsAsk) =>
+      send(call, "GET", withQuery("/api/insights", { courseId: ask.courseId, span: ask.span, day: ask.day, learnerId: ask.learnerId }), undefined, "include"),
     getMyFeedback: async (courseId: string): Promise<ReceivedFeedback | null> => {
       const response = await send(call, "GET", withQuery("/api/feedback/mine", { courseId }));
       if (response?.status === 401) return { annotations: [] };
