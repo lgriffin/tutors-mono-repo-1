@@ -8,6 +8,7 @@ import type { Note, StepRef } from "@tutors/domain/learning";
 import type { AssistanceChange, AssistanceFeed } from "../ports/assistance-feed.ts";
 import type { AssistanceStore } from "../ports/assistance-store.ts";
 import type { FeedbackStore } from "../ports/feedback-store.ts";
+import type { FeedbackDesk, FeedbackDeskResult, ReflectionDeskResult } from "../ports/feedback-desk.ts";
 import type { HelpDesk, HelpDeskResult } from "../ports/help-desk.ts";
 import type { InsightsRead } from "../ports/insights-read.ts";
 import type { NotesStore } from "../ports/notes-store.ts";
@@ -241,6 +242,51 @@ export function feedbackStoreContract(make: Make<FeedbackStore>): ContractCase[]
           "alice's"
         );
         assertEqual(await store.reflections("cs102", "alice"), [], "another course");
+        assertEqual((await store.reflectionsAt(step("cs101"))).map((r) => r.learnerId).sort(), ["alice", "bob"], "at the step");
+        assertEqual(await store.reflectionsAt(step("cs102")), [], "at a step of another course");
+      }
+    },
+    {
+      name: "an annotation reads back by id, and an unknown id reads null",
+      run: async () => {
+        const store = await make();
+        const kept = await store.annotate(annotation("cs101", "02"));
+        assertEqual((await store.get(kept.id))?.body, "Await the fetch.", "by id");
+        assertEqual(await store.get("00000000-0000-4000-8000-000000000000"), null, "unknown");
+        assertEqual(await store.get("not-an-id"), null, "malformed");
+      }
+    },
+    {
+      name: "a revoked annotation is kept with its first revocation time",
+      run: async () => {
+        const store = await make();
+        const kept = await store.annotate(annotation("cs101", "02"));
+        const revoked = await store.revoke(kept.id, "2026-01-05T10:00:00.000Z");
+        assertEqual(revoked?.revokedAt, "2026-01-05T10:00:00.000Z", "revoked");
+        assertEqual((await store.revoke(kept.id, "2026-01-05T11:00:00.000Z"))?.revokedAt, "2026-01-05T10:00:00.000Z", "first time kept");
+        assertEqual(
+          (await store.forStep(step("cs101", "02"))).map((a) => [a.id, a.revokedAt]),
+          [[kept.id, "2026-01-05T10:00:00.000Z"]],
+          "still at the step"
+        );
+        assertEqual(await store.revoke("00000000-0000-4000-8000-000000000000", "2026-01-05T10:00:00.000Z"), null, "unknown");
+      }
+    },
+    {
+      name: "a learner receives broadcasts and their own annotations, unrevoked, newest first",
+      run: async () => {
+        const store = await make();
+        const first = await store.annotate(annotation("cs101", "02", "First"));
+        const mine = await store.annotate({ ...annotation("cs101", "03", "For alice"), audience: { kind: "student", learnerId: "alice" }, createdAt: "2026-01-05T09:05:00.000Z" });
+        await store.annotate({ ...annotation("cs101", "03", "For bob"), audience: { kind: "student", learnerId: "bob" }, createdAt: "2026-01-05T09:06:00.000Z" });
+        const gone = await store.annotate({ ...annotation("cs101", "04", "Revoked"), createdAt: "2026-01-05T09:07:00.000Z" });
+        await store.revoke(gone.id, "2026-01-05T09:08:00.000Z");
+        await store.annotate(annotation("cs102", "02", "Another course"));
+        assertEqual(
+          (await store.received("cs101", "alice")).map((a) => a.id),
+          [mine.id, first.id],
+          "alice's, newest first"
+        );
       }
     }
   ];
@@ -363,7 +409,11 @@ export function helpDeskContract(make: Make<HelpDesks>): ContractCase[] {
       run: async () => {
         const { student, educator } = await make();
         const asked = kept(await student.ask(step("cs101"), "lecturer"), "asked");
-        assertEqual((await educator.queue("cs101")).map((r) => r.kind), ["lecturer"], "queue");
+        assertEqual(
+          (await educator.queue("cs101")).map((r) => r.kind),
+          ["lecturer"],
+          "queue"
+        );
         let refused = false;
         await student.queue("cs101").catch(() => (refused = true));
         assert(refused, "a student may not read the queue");
@@ -402,6 +452,110 @@ export function helpDeskContract(make: Make<HelpDesks>): ContractCase[] {
         const { visitor } = await make();
         assertEqual(outcome(await visitor.ask(step("cs101"), "stuck")), "signed-out", "ask refused");
         assertEqual(await visitor.mine("cs101"), null, "no request of theirs");
+      }
+    }
+  ];
+}
+
+/** Desks over the same feedback, signed in as a student (alice), another student (bob), the course's educator (ellen) and nobody. */
+export type FeedbackDesks = { student: FeedbackDesk; other: FeedbackDesk; educator: FeedbackDesk; visitor: FeedbackDesk };
+
+const feedbackOutcome = (result: FeedbackDeskResult | ReflectionDeskResult): string => (result.ok ? "ok" : result.reason);
+
+function posted(result: FeedbackDeskResult, what: string): Annotation {
+  assert(result.ok, `${what}: refused as ${feedbackOutcome(result)}`);
+  return (result as Extract<FeedbackDeskResult, { ok: true }>).annotation;
+}
+
+export function feedbackDeskContract(make: Make<FeedbackDesks>): ContractCase[] {
+  return [
+    {
+      name: "an educator's broadcast shows to every signed-in student on the step, and only an educator may post one",
+      run: async () => {
+        const { student, other, educator, visitor } = await make();
+        const kept = posted(await educator.broadcast(step("cs101"), "Await the fetch.", "Fetching"), "broadcast");
+        assertEqual([kept.audience.kind, kept.authorId, kept.body], ["everyone", "ellen", "Await the fetch."], "kept");
+        for (const desk of [student, other])
+          assertEqual(
+            (await desk.step(step("cs101"))).broadcasts.map((a) => a.id),
+            [kept.id],
+            "a student sees it"
+          );
+        assertEqual(await visitor.step(step("cs101")), { broadcasts: [], personal: [], history: null }, "a visitor sees nothing");
+        assertEqual((await student.step(step("cs101", "03"))).broadcasts, [], "another step");
+        assertEqual(feedbackOutcome(await student.broadcast(step("cs101"), "Me too")), "forbidden", "a student may not broadcast");
+        assertEqual(feedbackOutcome(await visitor.broadcast(step("cs101"), "Me too")), "signed-out", "nor a visitor");
+        assertEqual(feedbackOutcome(await educator.broadcast(step("cs101"), "  ")), "invalid", "an empty explanation");
+      }
+    },
+    {
+      name: "an annotation for one student shows to that student only",
+      run: async () => {
+        const { student, other, educator } = await make();
+        const kept = posted(await educator.annotate({ ref: step("cs101") }, { learnerId: "alice" }, "Nearly there."), "annotated");
+        assertEqual(
+          (await student.step(step("cs101"))).personal.map((a) => a.id),
+          [kept.id],
+          "alice sees it"
+        );
+        assertEqual((await other.step(step("cs101"))).personal, [], "bob does not");
+        assertEqual(feedbackOutcome(await educator.annotate({ ref: step("cs101") }, {}, "Nobody")), "invalid", "no audience");
+      }
+    },
+    {
+      name: "a revoked annotation stops showing to students and stays in the educator's history",
+      run: async () => {
+        const { student, educator } = await make();
+        const kept = posted(await educator.broadcast(step("cs101"), "Await the fetch."), "broadcast");
+        assertEqual(feedbackOutcome(await student.revoke(kept.id)), "forbidden", "a student may not revoke");
+        const revoked = posted(await educator.revoke(kept.id), "revoked");
+        assert(revoked.revokedAt !== null, "revoked");
+        assertEqual((await student.step(step("cs101"))).broadcasts, [], "gone for the student");
+        const history = (await educator.step(step("cs101"))).history;
+        assertEqual(
+          history?.annotations.map((a) => [a.id, a.revokedAt]),
+          [[kept.id, revoked.revokedAt]],
+          "kept in the history"
+        );
+        assertEqual(feedbackOutcome(await educator.revoke("00000000-0000-4000-8000-000000000000")), "not-found", "unknown");
+      }
+    },
+    {
+      name: "a student reads what they received in the course, and an educator's step has no history for a student",
+      run: async () => {
+        const { student, other, educator } = await make();
+        const everyone = posted(await educator.broadcast(step("cs101"), "For everyone"), "broadcast");
+        const alice = posted(await educator.annotate({ ref: step("cs101", "03") }, { learnerId: "alice" }, "For alice"), "annotated");
+        posted(await educator.annotate({ ref: step("cs101", "03") }, { learnerId: "bob" }, "For bob"), "annotated");
+        assertEqual((await student.received("cs101")).map((a) => a.id).sort(), [everyone.id, alice.id].sort(), "alice's");
+        assertEqual((await other.received("cs101")).length, 2, "bob's");
+        assertEqual((await student.step(step("cs101"))).history, null, "no history for a student");
+      }
+    },
+    {
+      name: "a shared note reaches the step's history as a reflection, and the educator replies to that student",
+      run: async () => {
+        const { student, other, educator } = await make();
+        const note: Note = { ref: step("cs101"), body: "The loop ran once too many.", kind: "discovery", updatedAt: "2026-01-05T09:00:00.000Z" };
+        assertEqual(feedbackOutcome(await student.reflect({ ...note, body: " " })), "no-note", "an empty note");
+        const shared = await student.reflect(note);
+        assert(shared.ok, "shared");
+        const reflection = (shared as Extract<ReflectionDeskResult, { ok: true }>).reflection;
+        assertEqual([reflection.learnerId, reflection.body, reflection.kind], ["alice", note.body, "discovery"], "the copy");
+        const history = (await educator.step(step("cs101"))).history;
+        assertEqual(
+          history?.reflections.map((r) => r.id),
+          [reflection.id],
+          "in the step's history"
+        );
+        const reply = posted(await educator.annotate({ ref: step("cs101"), reflectionId: reflection.id }, { learnerId: "alice" }, "Good catch."), "replied");
+        assertEqual(reply.anchor, { kind: "reflection", ref: step("cs101"), reflectionId: reflection.id }, "anchored to the reflection");
+        assertEqual(
+          (await student.step(step("cs101"))).personal.map((a) => a.id),
+          [reply.id],
+          "alice reads the reply"
+        );
+        assertEqual((await other.step(step("cs101"))).personal, [], "bob does not");
       }
     }
   ];

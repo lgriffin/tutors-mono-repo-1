@@ -4,6 +4,7 @@ import type {
   Catalogue,
   CourseVisitReport,
   ErrorReport,
+  FeedbackPost,
   HelpPost,
   HelpQueue,
   LiveWatch,
@@ -19,9 +20,11 @@ import type {
   PlaygroundView,
   PresenceReport,
   Profile,
+  ReceivedFeedback,
   Roster,
   ScormSave,
   ScormState,
+  StepFeedbackRead,
   WhiteboardRoom,
   WhiteboardSave,
   WhiteboardScene
@@ -126,6 +129,19 @@ export function createDataApi(fetchFn: FetchFn = (input, init) => globalThis.fet
     getHelpQueue: async (courseId: string) => {
       const response = await send(call, "GET", withQuery("/api/assistance", { courseId }), undefined, "include");
       return response?.ok ? ((await response.json()) as HelpQueue) : null;
+    },
+    // Feedback carries the session from Tutors Live's and Tutors Time's origins too: the reader decides from it who may post.
+    postFeedback: (post: FeedbackPost) => send(call, "POST", "/api/feedback", post, "include"),
+    // Nobody signed in reads no feedback; any other failure is null.
+    getStepFeedback: async (courseId: string, labRoute: string, stepId: string): Promise<StepFeedbackRead | null> => {
+      const response = await send(call, "GET", withQuery("/api/feedback", { courseId, labRoute, stepId }), undefined, "include");
+      if (response?.status === 401) return { broadcasts: [], personal: [], history: null };
+      return response?.ok ? ((await response.json()) as StepFeedbackRead) : null;
+    },
+    getMyFeedback: async (courseId: string): Promise<ReceivedFeedback | null> => {
+      const response = await send(call, "GET", withQuery("/api/feedback/mine", { courseId }));
+      if (response?.status === 401) return { annotations: [] };
+      return response?.ok ? ((await response.json()) as ReceivedFeedback) : null;
     }
   };
 }

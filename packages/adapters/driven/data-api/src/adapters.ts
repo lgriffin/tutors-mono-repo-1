@@ -5,8 +5,23 @@
  */
 import { courseVisitOf, onlineStatusFor, parseSentiment, parseSharing, type CourseVisit, type PresenceEvent, type StoredPresence } from "@tutors/domain/presence";
 import type { Course } from "@tutors/domain/course";
-import type { AccessStore, HelpDesk, HelpDeskRefusal, HelpDeskResult, LearningEventSink, PlaygroundSnapshots, ProfilePort, ScormRecords, WhiteboardStore } from "@tutors/application/ports";
+import type {
+  AccessStore,
+  FeedbackDesk,
+  FeedbackDeskRefusal,
+  FeedbackDeskResult,
+  ReflectionDeskResult,
+  HelpDesk,
+  HelpDeskRefusal,
+  HelpDeskResult,
+  LearningEventSink,
+  PlaygroundSnapshots,
+  ProfilePort,
+  ScormRecords,
+  WhiteboardStore
+} from "@tutors/application/ports";
 import type { HelpRequest } from "@tutors/domain/assistance";
+import type { Annotation, Reflection } from "@tutors/domain/feedback";
 import log from "@tutors/logger";
 import { dataApi, type DataApi } from "./client.ts";
 
@@ -217,6 +232,70 @@ export function readerApiHelpDesk(api: DataApi = dataApi): HelpDesk {
       const answer = await api.getHelpQueue(courseId);
       if (!answer) throw new Error("The help queue could not be read");
       return answer.queue.map((entry) => entry.request);
+    }
+  };
+}
+
+const FEEDBACK_REFUSALS: readonly FeedbackDeskRefusal[] = ["invalid", "forbidden", "not-found", "unavailable", "no-note"];
+
+/** What the reader answered a feedback post with, read as a HelpDesk answer is: 401 signed out, a 503 naming nothing not kept, else the refusal it named. */
+async function feedbackAnswer<T>(
+  response: Response | null,
+  pick: (body: Record<string, unknown>) => T | undefined
+): Promise<{ ok: true; value: T } | { ok: false; reason: FeedbackDeskRefusal; detail?: string }> {
+  if (!response) return { ok: false, reason: "unavailable" };
+  const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  const value = body ? pick(body) : undefined;
+  if (response.ok && value) return { ok: true, value };
+  if (response.status === 401) return { ok: false, reason: "signed-out" };
+  const named = FEEDBACK_REFUSALS.find((r) => r === body?.reason);
+  const detail = typeof body?.detail === "string" ? body.detail : undefined;
+  if (named) return detail ? { ok: false, reason: named, detail } : { ok: false, reason: named };
+  if (response.status === 503) return { ok: false, reason: "not-kept" };
+  return { ok: false, reason: response.status === 400 ? "invalid" : "unavailable" };
+}
+
+async function annotationAnswer(response: Response | null): Promise<FeedbackDeskResult> {
+  const answer = await feedbackAnswer(response, (body) => body.annotation as Annotation | undefined);
+  return answer.ok ? { ok: true, annotation: answer.value } : answer;
+}
+
+/**
+ * Lecturer feedback through /api/feedback: the reader's server runs each ask as the session's
+ * actor. From Tutors Live's and Tutors Time's origins the calls carry the lecturer's session.
+ */
+export function readerApiFeedbackDesk(api: DataApi = dataApi): FeedbackDesk {
+  return {
+    async step(ref) {
+      const read = await api.getStepFeedback(ref.courseId, ref.labRoute, ref.stepId);
+      if (!read) throw new Error("The step's feedback could not be read");
+      return { broadcasts: read.broadcasts ?? [], personal: read.personal ?? [], history: read.history ?? null };
+    },
+    async received(courseId) {
+      const read = await api.getMyFeedback(courseId);
+      if (!read) throw new Error("Your feedback could not be read");
+      return read.annotations ?? [];
+    },
+    annotate: async (anchor, audience, body) =>
+      annotationAnswer(
+        await api.postFeedback({
+          action: "annotate",
+          ...anchor.ref,
+          snippetId: anchor.snippetId ?? null,
+          reflectionId: anchor.reflectionId ?? null,
+          learnerId: audience.learnerId ?? null,
+          everyone: audience.everyone === true,
+          body
+        })
+      ),
+    broadcast: async (ref, body, stepTitle) => annotationAnswer(await api.postFeedback({ action: "broadcast", ...ref, body, stepTitle: stepTitle ?? null })),
+    revoke: async (id) => annotationAnswer(await api.postFeedback({ action: "revoke", id })),
+    async reflect(note): Promise<ReflectionDeskResult> {
+      const answer = await feedbackAnswer(
+        await api.postFeedback({ action: "reflect", ...note.ref, kind: note.kind, body: note.body }),
+        (body) => body.reflection as Reflection | undefined
+      );
+      return answer.ok ? { ok: true, reflection: answer.value } : { ok: false, reason: answer.reason };
     }
   };
 }

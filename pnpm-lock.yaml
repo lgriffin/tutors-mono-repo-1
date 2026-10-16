@@ -519,6 +519,9 @@ importers:
       '@tutors/data-api':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/data-api
+      '@tutors/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@tutors/identity-better-auth':
         specifier: workspace:*
         version: link:../../packages/adapters/driven/identity-better-auth

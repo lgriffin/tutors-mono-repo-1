@@ -31,5 +31,6 @@ export * from "./assistance-store.ts";
 export * from "./assistance-feed.ts";
 export * from "./help-desk.ts";
 export * from "./feedback-store.ts";
+export * from "./feedback-desk.ts";
 export * from "./notes-store.ts";
 export * from "./insights-read.ts";

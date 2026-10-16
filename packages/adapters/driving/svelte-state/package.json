@@ -15,7 +15,8 @@
     "./rbac": "./src/rbac/index.ts",
     "./learning": "./src/learning/index.ts",
     "./assistance/help": "./src/assistance/help.svelte.ts",
-    "./assistance/queue": "./src/assistance/queue.svelte.ts"
+    "./assistance/queue": "./src/assistance/queue.svelte.ts",
+    "./feedback/step": "./src/feedback/step.svelte.ts"
   },
   "dependencies": {
     "@marp-team/marp-core": "^4.3.1",

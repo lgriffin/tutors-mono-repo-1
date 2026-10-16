@@ -37,6 +37,12 @@
     errorMessage = null;
   }
 
+  /** On a lab step, the step's own route, so a lecturer's feedback on the snippet lands on that step. */
+  function sharedFrom(route: string): string {
+    const path = typeof location === "undefined" ? "" : location.pathname;
+    return route && path.startsWith(`${route}/`) ? path : route;
+  }
+
   async function submit() {
     if (creating) return;
     if (!content.trim()) {
@@ -54,7 +60,7 @@
     errorMessage = null;
     const lo = currentLo.value;
     const outcome = await snippetService.share(
-      { courseId, filename: filename.trim() || "snippet.txt", content, title: title.trim(), loRoute: lo?.route ?? "", loTitle: lo?.title ?? "" },
+      { courseId, filename: filename.trim() || "snippet.txt", content, title: title.trim(), loRoute: sharedFrom(lo?.route ?? ""), loTitle: lo?.title ?? "" },
       { login, name: tutorsId.value?.name ?? null }
     );
     creating = false;
@@ -110,7 +116,8 @@
                 <label class="label font-semibold" for="gist-content">{t("gist.content")}</label>
                 <span class="text-xs" class:text-[var(--ui-danger)]={tooLarge}>{kb(bytes)} / {kb(snippetService.maxBytes)}</span>
               </div>
-              <textarea id="gist-content" class="input h-64 w-full resize-y rounded-sm font-mono text-sm" bind:value={content} placeholder={t("gist.contentPlaceholder")}></textarea>
+              <textarea id="gist-content" class="input h-64 w-full resize-y rounded-sm font-mono text-sm" bind:value={content} placeholder={t("gist.contentPlaceholder")}
+              ></textarea>
             </div>
 
             <details>
@@ -149,7 +156,20 @@
 {/if}
 
 <style>
-  .share-snippet { position: fixed; right: var(--space-6); bottom: var(--space-6); z-index: 40; }
-  .share-button { display: inline-flex; align-items: center; gap: var(--space-2); border-radius: 999px; box-shadow: 0 4px 12px rgb(0 0 0 / 0.2); }
-  .warn { background: var(--ui-selected); }
+  .share-snippet {
+    position: fixed;
+    right: var(--space-6);
+    bottom: var(--space-6);
+    z-index: 40;
+  }
+  .share-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
+  }
+  .warn {
+    background: var(--ui-selected);
+  }
 </style>

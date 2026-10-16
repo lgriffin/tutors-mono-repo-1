@@ -119,14 +119,19 @@ const es: Record<string, string> = {
   "home.connectedAs": "Conectado como:",
   "home.favourites": "Favoritos",
   "home.recentlyAccessed": "Accedidos recientemente",
-  "home.values.title": "Los <span class=\"font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone\">Valores</span> del proyecto",
+  "home.values.title":
+    'Los <span class="font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone">Valores</span> del proyecto',
   "home.developer.title": "Experiencia del desarrollador",
-  "home.developer.description": "La <b>Experiencia del desarrollador</b> prioriza la especificación e implementación de <b>componentes y servicios robustos, bien documentados y de bajo acoplamiento</b>, integrados en un <b>conjunto de herramientas coherente</b> abierto a contribuciones de <b>diversas habilidades</b>.",
+  "home.developer.description":
+    "La <b>Experiencia del desarrollador</b> prioriza la especificación e implementación de <b>componentes y servicios robustos, bien documentados y de bajo acoplamiento</b>, integrados en un <b>conjunto de herramientas coherente</b> abierto a contribuciones de <b>diversas habilidades</b>.",
   "home.educator.title": "Experiencia del educador",
-  "home.educator.description": "La <b>Experiencia del educador</b> prioriza la creación de <b>rutas guiadas</b> a través de un currículo mediante la creación de materiales didácticos que son <b>autónomos, estructuralmente alineados, componibles, auditables, extensibles, versionados</b> y <b>independientes</b>.",
+  "home.educator.description":
+    "La <b>Experiencia del educador</b> prioriza la creación de <b>rutas guiadas</b> a través de un currículo mediante la creación de materiales didácticos que son <b>autónomos, estructuralmente alineados, componibles, auditables, extensibles, versionados</b> y <b>independientes</b>.",
   "home.learner.title": "Experiencia del estudiante",
-  "home.learner.description": "La <b>Experiencia del estudiante</b> prioriza las interacciones web que son <b>atractivas, contextuales, enlazables, buscables, accesibles</b> y <b>responsivas</b>. Además, la experiencia debe fomentar un sentido de <b>comunidad</b> y <b>conexión</b> entre los estudiantes.",
-  "home.credits.title": "Un proyecto completamente <span class=\"font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone\">Open Source</span>",
+  "home.learner.description":
+    "La <b>Experiencia del estudiante</b> prioriza las interacciones web que son <b>atractivas, contextuales, enlazables, buscables, accesibles</b> y <b>responsivas</b>. Además, la experiencia debe fomentar un sentido de <b>comunidad</b> y <b>conexión</b> entre los estudiantes.",
+  "home.credits.title":
+    'Un proyecto completamente <span class="font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone">Open Source</span>',
   "home.credits.description": "Tutors es un proyecto de código abierto disponible de forma gratuita en GitHub bajo la licencia MIT.",
   "home.credits.viewSource": "Ver código fuente",
 
@@ -203,7 +208,8 @@ Tutors es una aplicación de código abierto; el componente de recopilación de 
 
   // Footer
   "footer.version": "Tutors v:",
-  "footer.message": "Un [Kit de herramientas de aprendizaje web abierto](/course/tutors-reference-manual): Explore las [Novedades de Tutors](https://tutors.dev/note/tutors-reference-manual/side/note-whats-new)",
+  "footer.message":
+    "Un [Kit de herramientas de aprendizaje web abierto](/course/tutors-reference-manual): Explore las [Novedades de Tutors](https://tutors.dev/note/tutors-reference-manual/side/note-whats-new)",
   "footer.sponsorsAlt": "patrocinadores",
   "footer.setuAlt": "South East Technological University",
 
@@ -225,7 +231,8 @@ Tutors es una aplicación de código abierto; el componente de recopilación de 
   "lecturer.locks.unlocked": "Desbloqueado",
   "lecturer.locks.empty": "No se encontró contenido bloqueable",
   "lecturer.locks.showToStudents": "Mostrar contenido bloqueado a los estudiantes",
-  "lecturer.locks.showToStudentsHelp": "Los estudiantes ven los elementos bloqueados en gris y no pueden abrirlos. Si está desactivado, se ocultan a los estudiantes, en el árbol del curso y en la versión para LLM.",
+  "lecturer.locks.showToStudentsHelp":
+    "Los estudiantes ven los elementos bloqueados en gris y no pueden abrirlos. Si está desactivado, se ocultan a los estudiantes, en el árbol del curso y en la versión para LLM.",
   "lecturer.enrollment.title": "Inscripción",
   "lecturer.enrollment.whitelist": "Lista blanca",
   "lecturer.enrollment.students": "Estudiantes",
@@ -616,7 +623,47 @@ Tutors es una aplicación de código abierto; el componente de recopilación de 
   "help.stale": "La última lectura falló; cola leída a las",
   "help.refused": "No se pudo leer la cola de ayuda. Inicia sesión en el lector como profesor de este curso.",
   "help.actionFailed": "No se completó; se volvió a leer la cola.",
-  "help.loading": "Leyendo la cola de ayuda…"
+  "help.loading": "Leyendo la cola de ayuda…",
+
+  // Lecturer feedback (PR E of the learning plan)
+  "feedback.banner": "Explicación para todos en este paso",
+  "feedback.dismiss": "Ocultar",
+  "feedback.from": "De",
+  "feedback.forYou": "Comentarios para ti",
+  "feedback.onStep": "Sobre este paso",
+  "feedback.onSnippet": "Sobre tu fragmento",
+  "feedback.onReflection": "Sobre tu reflexión",
+  "feedback.educatorPanel": "Comentarios en este paso",
+  "feedback.audience": "Para",
+  "feedback.everyone": "Todos en este paso",
+  "feedback.oneStudent": "Un estudiante",
+  "feedback.studentLogin": "Usuario de GitHub del estudiante",
+  "feedback.body": "Comentario (markdown)",
+  "feedback.post": "Publicar",
+  "feedback.notSent": "El comentario no se envió. Inténtalo de nuevo.",
+  "feedback.forbidden": "Solo un docente de este curso puede hacerlo.",
+  "feedback.notKept": "Este servidor no guarda comentarios.",
+  "feedback.history": "Publicado en este paso",
+  "feedback.historyEmpty": "Aún no hay nada publicado en este paso.",
+  "feedback.toEveryone": "Para todos",
+  "feedback.to": "Para",
+  "feedback.revoke": "Retirar",
+  "feedback.revoked": "Retirado",
+  "feedback.reflections": "Reflexiones compartidas aquí",
+  "feedback.reply": "Responder",
+  "feedback.share": "Compartir con el docente",
+  "feedback.shared": "Compartido con tus docentes. Tu nota sigue siendo tuya.",
+  "feedback.shareFailed": "La nota no se compartió. Inténtalo de nuevo.",
+  "feedback.received": "Comentarios recibidos",
+  "feedback.receivedEmpty": "Aún no hay comentarios en este curso.",
+  "feedback.explain": "Convertir en una explicación para todos",
+  "feedback.explainLabel": "Explicación para todos en",
+  "feedback.explainSend": "Publicar explicación",
+  "feedback.explanationPosted": "Explicación publicada en",
+  "feedback.cancel": "Cancelar",
+  "feedback.snippet": "Enviar comentario",
+  "feedback.sent": "Enviado al estudiante",
+  "feedback.snippetLabel": "Comentario para este estudiante sobre su fragmento"
 };
 
 export default es;

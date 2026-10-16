@@ -119,14 +119,19 @@ const de: Record<string, string> = {
   "home.connectedAs": "Verbunden als:",
   "home.favourites": "Favoriten",
   "home.recentlyAccessed": "Zuletzt besucht",
-  "home.values.title": "Die <span class=\"font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone\">Werte</span> des Projekts",
+  "home.values.title":
+    'Die <span class="font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone">Werte</span> des Projekts',
   "home.developer.title": "Entwicklererfahrung",
-  "home.developer.description": "Die <b>Entwicklererfahrung</b> priorisiert die Spezifikation und Implementierung von <b>robusten, gut dokumentierten, lose gekoppelten Komponenten und Diensten</b>, integriert in ein <b>kohärentes Toolkit</b>, das für Beiträge von <b>unterschiedlichen Fähigkeiten</b> offen ist.",
+  "home.developer.description":
+    "Die <b>Entwicklererfahrung</b> priorisiert die Spezifikation und Implementierung von <b>robusten, gut dokumentierten, lose gekoppelten Komponenten und Diensten</b>, integriert in ein <b>kohärentes Toolkit</b>, das für Beiträge von <b>unterschiedlichen Fähigkeiten</b> offen ist.",
   "home.educator.title": "Erziehererfahrung",
-  "home.educator.description": "Die <b>Erziehererfahrung</b> priorisiert die Erstellung von <b>geführten Wegen</b> durch ein Curriculum mittels der Erstellung von Lernmaterialien, die <b>autonom, strukturell ausgerichtet, zusammensetzbar, prüfbar, erweiterbar, versioniert</b> und <b>unabhängig</b> sind.",
+  "home.educator.description":
+    "Die <b>Erziehererfahrung</b> priorisiert die Erstellung von <b>geführten Wegen</b> durch ein Curriculum mittels der Erstellung von Lernmaterialien, die <b>autonom, strukturell ausgerichtet, zusammensetzbar, prüfbar, erweiterbar, versioniert</b> und <b>unabhängig</b> sind.",
   "home.learner.title": "Lernerfahrung",
-  "home.learner.description": "Die <b>Lernerfahrung</b> priorisiert Web-Interaktionen, die <b>ansprechend, kontextuell, verlinkbar, durchsuchbar, zugänglich</b> und <b>responsiv</b> sind. Darüber hinaus sollte die Erfahrung ein Gefühl von <b>Gemeinschaft</b> und <b>Verbindung</b> unter den Lernenden fördern.",
-  "home.credits.title": "Ein vollständig <span class=\"font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone\">Open Source</span> Projekt",
+  "home.learner.description":
+    "Die <b>Lernerfahrung</b> priorisiert Web-Interaktionen, die <b>ansprechend, kontextuell, verlinkbar, durchsuchbar, zugänglich</b> und <b>responsiv</b> sind. Darüber hinaus sollte die Erfahrung ein Gefühl von <b>Gemeinschaft</b> und <b>Verbindung</b> unter den Lernenden fördern.",
+  "home.credits.title":
+    'Ein vollständig <span class="font-bold !text-5xl inline-block bg-gradient-to-br from-primary-500 to-secondary-500 bg-clip-text text-transparent box-decoration-clone">Open Source</span> Projekt',
   "home.credits.description": "Tutors ist ein Open-Source-Projekt, das kostenlos unter der MIT-Lizenz auf GitHub verfügbar ist.",
   "home.credits.viewSource": "Quellcode anzeigen",
 
@@ -203,7 +208,8 @@ Tutors ist eine Open-Source-Anwendung - die Komponente zur Datenerfassung [finde
 
   // Footer
   "footer.version": "Tutors v:",
-  "footer.message": "Ein [Offenes Web-Lern-Toolkit](/course/tutors-reference-manual): Entdecken Sie, [Was ist neu in Tutors](https://tutors.dev/note/tutors-reference-manual/side/note-whats-new)",
+  "footer.message":
+    "Ein [Offenes Web-Lern-Toolkit](/course/tutors-reference-manual): Entdecken Sie, [Was ist neu in Tutors](https://tutors.dev/note/tutors-reference-manual/side/note-whats-new)",
   "footer.sponsorsAlt": "Sponsoren",
   "footer.setuAlt": "South East Technological University",
 
@@ -225,7 +231,8 @@ Tutors ist eine Open-Source-Anwendung - die Komponente zur Datenerfassung [finde
   "lecturer.locks.unlocked": "Entsperrt",
   "lecturer.locks.empty": "Keine sperrbaren Inhalte gefunden",
   "lecturer.locks.showToStudents": "Gesperrte Inhalte für Studierende anzeigen",
-  "lecturer.locks.showToStudentsHelp": "Studierende sehen gesperrte Inhalte ausgegraut und können sie nicht öffnen. Wenn aus, sind gesperrte Inhalte für Studierende, im Kursbaum und in der LLM-Version ausgeblendet.",
+  "lecturer.locks.showToStudentsHelp":
+    "Studierende sehen gesperrte Inhalte ausgegraut und können sie nicht öffnen. Wenn aus, sind gesperrte Inhalte für Studierende, im Kursbaum und in der LLM-Version ausgeblendet.",
   "lecturer.enrollment.title": "Einschreibung",
   "lecturer.enrollment.whitelist": "Whitelist",
   "lecturer.enrollment.students": "Studierende",
@@ -616,7 +623,47 @@ Tutors ist eine Open-Source-Anwendung - die Komponente zur Datenerfassung [finde
   "help.stale": "Letztes Lesen fehlgeschlagen; Warteschlange gelesen um",
   "help.refused": "Die Hilfewarteschlange konnte nicht gelesen werden. Melden Sie sich im Reader als Lehrkraft dieses Kurses an.",
   "help.actionFailed": "Das hat nicht geklappt; die Warteschlange wurde neu gelesen.",
-  "help.loading": "Hilfewarteschlange wird gelesen…"
+  "help.loading": "Hilfewarteschlange wird gelesen…",
+
+  // Lecturer feedback (PR E of the learning plan)
+  "feedback.banner": "Erklärung für alle in diesem Schritt",
+  "feedback.dismiss": "Ausblenden",
+  "feedback.from": "Von",
+  "feedback.forYou": "Feedback für dich",
+  "feedback.onStep": "Zu diesem Schritt",
+  "feedback.onSnippet": "Zu deinem Snippet",
+  "feedback.onReflection": "Zu deiner Reflexion",
+  "feedback.educatorPanel": "Feedback zu diesem Schritt",
+  "feedback.audience": "Für",
+  "feedback.everyone": "Alle in diesem Schritt",
+  "feedback.oneStudent": "Eine Person",
+  "feedback.studentLogin": "GitHub-Login der Person",
+  "feedback.body": "Feedback (Markdown)",
+  "feedback.post": "Senden",
+  "feedback.notSent": "Das Feedback wurde nicht gesendet. Versuche es erneut.",
+  "feedback.forbidden": "Nur Lehrende dieses Kurses können das.",
+  "feedback.notKept": "Feedback wird auf diesem Server nicht gespeichert.",
+  "feedback.history": "Zu diesem Schritt gesendet",
+  "feedback.historyEmpty": "Zu diesem Schritt wurde noch nichts gesendet.",
+  "feedback.toEveryone": "An alle",
+  "feedback.to": "An",
+  "feedback.revoke": "Zurückziehen",
+  "feedback.revoked": "Zurückgezogen",
+  "feedback.reflections": "Hier geteilte Reflexionen",
+  "feedback.reply": "Antworten",
+  "feedback.share": "Mit Lehrenden teilen",
+  "feedback.shared": "Mit deinen Lehrenden geteilt. Deine Notiz bleibt deine.",
+  "feedback.shareFailed": "Die Notiz wurde nicht geteilt. Versuche es erneut.",
+  "feedback.received": "Erhaltenes Feedback",
+  "feedback.receivedEmpty": "Noch kein Feedback in diesem Kurs.",
+  "feedback.explain": "In eine Erklärung für alle umwandeln",
+  "feedback.explainLabel": "Erklärung für alle in",
+  "feedback.explainSend": "Erklärung senden",
+  "feedback.explanationPosted": "Erklärung gesendet zu",
+  "feedback.cancel": "Abbrechen",
+  "feedback.snippet": "Feedback senden",
+  "feedback.sent": "An die Person gesendet",
+  "feedback.snippetLabel": "Feedback an diese Person zu ihrem Snippet"
 };
 
 export default de;

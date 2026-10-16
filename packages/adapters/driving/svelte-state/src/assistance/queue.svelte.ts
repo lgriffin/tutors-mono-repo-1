@@ -8,8 +8,14 @@
  * read again every QUEUE_REFRESH_MS; where the deployment streams the course's queue
  * (AssistanceFeed, Valkey) each change shows at once between reads. A read that fails keeps the
  * queue on screen and says when it was last read (Rule 0393).
+ *
+ * A request the lecturer resolves here is offered as an explanation for everyone on its step,
+ * pre-filled with the step and any hint (Rule 0407), posted through the FeedbackDesk; that offer is
+ * the only link from Assistance to Feedback. Explanations broadcast on the course, from here or
+ * from the reader, show as they are heard on the stream (Rule 0405).
  */
 import { isLive, queueOrder, shouldEscalate, waitingMs, type Escalation, type HelpRequest } from "@tutors/domain/assistance";
+import { isBroadcast, isRevoked, type Annotation } from "@tutors/domain/feedback";
 import type { StepRef } from "@tutors/domain/learning";
 import type { HelpDeskRefusal, HelpDeskResult, Unsubscribe } from "@tutors/application/ports";
 import { adapters } from "../adapters.ts";
@@ -51,11 +57,19 @@ function createHelpQueueService() {
   const working = rune<string[]>([]);
   /** Why the lecturer's last action was not kept, or null. */
   const failure = rune<HelpDeskRefusal | null>(null);
+  /** Requests the lecturer resolved here, offered as an explanation for everyone on their step (Rule 0407). */
+  const offers = rune<HelpRequest[]>([]);
+  /** Explanations broadcast on the course while the page is open, newest first (Rule 0405). */
+  const explanations = rune<Annotation[]>([]);
+  /** True when the last explanation was not kept. */
+  const explainFailed = rune(false);
 
   let stops: Array<() => void> = [];
   let reads = 0;
   /** Changes heard (stream or the lecturer's own actions) since the read in flight started: reapplied over its answer. */
   let heardSinceRead: HelpRequest[] = [];
+  /** The request the lecturer's last action closed, as it was kept. */
+  let lastResolved: HelpRequest | null = null;
 
   const clockMs = () => adapters().clock.nowMs();
 
@@ -104,11 +118,29 @@ function createHelpQueueService() {
         return false;
       }
       failure.value = null;
+      if (!isLive(result.request)) lastResolved = result.request;
       merge(result.request);
       return true;
     } finally {
       working.value = working.value.filter((w) => w !== id);
     }
+  }
+
+  /** An action that closes a request; once kept, the request is offered as an explanation for everyone on its step (Rule 0407). */
+  async function closing(id: string, run: () => Promise<HelpDeskResult>): Promise<boolean> {
+    lastResolved = null;
+    const kept = await act(id, run);
+    const request = kept ? lastResolved : null;
+    lastResolved = null;
+    if (request) offers.value = [...offers.value.filter((r) => r.id !== id), request];
+    return kept;
+  }
+
+  /** A broadcast heard on the stream shows once; a revoked one leaves the list. */
+  function hearExplanation(annotation: Annotation): void {
+    if (annotation.anchor.ref.courseId !== courseId.value || !isBroadcast(annotation)) return;
+    const others = explanations.value.filter((a) => a.id !== annotation.id);
+    explanations.value = isRevoked(annotation) ? others : [annotation, ...others];
   }
 
   function stop(): void {
@@ -136,8 +168,12 @@ function createHelpQueueService() {
       failure.value = null;
       status.value = "loading";
       now.value = clockMs();
+      offers.value = [];
+      explanations.value = [];
+      explainFailed.value = false;
       const unwatch: Unsubscribe = adapters().assistanceFeed.watch(id, (change) => {
         if (change.type === "help-request") merge(change.request);
+        else hearExplanation(change.annotation);
       });
       const tick = setInterval(() => (now.value = clockMs()), TICK_MS);
       const reread = setInterval(() => void refresh(), QUEUE_REFRESH_MS);
@@ -158,7 +194,13 @@ function createHelpQueueService() {
       return requests.value
         .filter(isLive)
         .sort(queueOrder)
-        .map((request) => ({ request, waitingMs: waitingMs(request, at), escalation: shouldEscalate(request, at), online: online(request.learnerId), where: placeOf(request.ref) }));
+        .map((request) => ({
+          request,
+          waitingMs: waitingMs(request, at),
+          escalation: shouldEscalate(request, at),
+          online: online(request.learnerId),
+          where: placeOf(request.ref)
+        }));
     },
 
     /** The lecturer says they are on the way. */
@@ -166,18 +208,44 @@ function createHelpQueueService() {
       return act(id, () => adapters().helpDesk.act(id, "acknowledge"));
     },
 
-    /** The lecturer answers a Need-a-hint request with a hint they typed (Rule 0397). */
+    /** The lecturer answers a Need-a-hint request with a hint they typed (Rule 0397); the hint can then be posted for everyone on the step. */
     answerHint(id: string, hintText: string): Promise<boolean> {
       if (!hintText.trim()) {
         failure.value = "hint-required";
         return Promise.resolve(false);
       }
-      return act(id, () => adapters().helpDesk.answerHint(id, hintText));
+      return closing(id, () => adapters().helpDesk.answerHint(id, hintText));
     },
 
-    /** The lecturer resolves the request. */
+    /** The lecturer resolves the request; once kept, it is offered as an explanation for everyone on its step (Rule 0407). */
     resolve(id: string): Promise<boolean> {
-      return act(id, () => adapters().helpDesk.act(id, "resolve"));
+      return closing(id, () => adapters().helpDesk.act(id, "resolve"));
+    },
+
+    offers,
+    explanations,
+    explainFailed,
+
+    /** The text an offer starts with: the lecturer's hint, when they typed one. */
+    draftFor(request: HelpRequest): string {
+      return request.hintText ?? "";
+    },
+
+    /** Posts the explanation for everyone on the offered request's step: a banner there and a toast elsewhere in the course. */
+    async explain(id: string, body: string): Promise<boolean> {
+      const request = offers.value.find((r) => r.id === id);
+      if (!request || !body.trim()) return false;
+      const result = await adapters().feedbackDesk.broadcast(request.ref, body, placeOf(request.ref).step);
+      explainFailed.value = !result.ok;
+      if (!result.ok) return false;
+      offers.value = offers.value.filter((r) => r.id !== id);
+      hearExplanation(result.annotation);
+      return true;
+    },
+
+    /** The lecturer passes on explaining a resolved request. */
+    skipExplain(id: string): void {
+      offers.value = offers.value.filter((r) => r.id !== id);
     },
 
     /** Forgets the course: for tests and leaving the page. */
@@ -190,6 +258,9 @@ function createHelpQueueService() {
       working.value = [];
       failure.value = null;
       now.value = 0;
+      offers.value = [];
+      explanations.value = [];
+      explainFailed.value = false;
     }
   };
 }

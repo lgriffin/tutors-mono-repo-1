@@ -6,11 +6,13 @@
  * check are composed on the server (lib/server/api/moodle.ts, lib/server/snippets.ts) from private
  * environment. With PUBLIC_REALTIME=valkey there is no Supabase client: the snippets page streams
  * the pings from the reader's server at PUBLIC_READER_URL (GET /api/realtime/stream, Rule 0482).
+ * A lecturer's feedback on a snippet is posted to that reader's /api/feedback with the session.
  */
 import { createSupabaseClient } from "@tutors/store-supabase";
 import { realtimeClientOptions, supabaseCourseNotices } from "@tutors/realtime-supabase";
 import { realtimeKindOf, valkeyBrowserRealtime } from "@tutors/realtime-valkey";
 import { anonymousAdapters, configureAdapters } from "@tutors/svelte-state/adapters";
+import { createDataApi, readerApiFeedbackDesk } from "@tutors/data-api";
 import log, { withRequestId } from "@tutors/logger";
 
 export type TimeEnv = { PUBLIC_ANON_MODE?: string; PUBLIC_SUPABASE_URL?: string; PUBLIC_SUPABASE_ANON_KEY?: string; PUBLIC_READER_URL?: string; PUBLIC_REALTIME?: string };
@@ -19,9 +21,10 @@ export function composeTime(env: TimeEnv): void {
   const url = env.PUBLIC_SUPABASE_URL;
   const key = env.PUBLIC_SUPABASE_ANON_KEY;
   const anonymous = env.PUBLIC_ANON_MODE?.trim().toUpperCase() === "TRUE";
-  if (!anonymous && realtimeKindOf(env) === "valkey") {
-    const reader = env.PUBLIC_READER_URL?.trim() || "https://tutors.dev";
-    configureAdapters({ ...anonymousAdapters(), anonymous: false, notices: valkeyBrowserRealtime({ streamBase: reader, publishBase: reader }).notices });
+  const reader = env.PUBLIC_READER_URL?.trim() || "https://tutors.dev";
+  const feedbackDesk = anonymous ? undefined : readerApiFeedbackDesk(createDataApi(undefined, reader));
+  if (feedbackDesk && realtimeKindOf(env) === "valkey") {
+    configureAdapters({ ...anonymousAdapters(), anonymous: false, notices: valkeyBrowserRealtime({ streamBase: reader, publishBase: reader }).notices, feedbackDesk });
     return;
   }
   const client = anonymous ? undefined : createSupabaseClient(url, key, withRequestId(), realtimeClientOptions());
@@ -29,5 +32,5 @@ export function composeTime(env: TimeEnv): void {
     log.warn("Supabase is not configured (PUBLIC_SUPABASE_URL / PUBLIC_SUPABASE_ANON_KEY missing); running without it");
   }
   // The dashboard only watches: the reader's server posts the snippet pings.
-  configureAdapters(client ? { ...anonymousAdapters(), anonymous: false, notices: supabaseCourseNotices(client) } : anonymousAdapters());
+  configureAdapters(client ? { ...anonymousAdapters(), anonymous: false, notices: supabaseCourseNotices(client), ...(feedbackDesk ? { feedbackDesk } : {}) } : anonymousAdapters());
 }

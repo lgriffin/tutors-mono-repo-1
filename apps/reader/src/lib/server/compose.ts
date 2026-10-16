@@ -9,12 +9,14 @@
  * and course notices: Supabase Realtime over the service client (the default), or `valkey`, Valkey
  * pub/sub at PRIVATE_VALKEY_URL that the realtime stream routes fan out over server-sent events
  * (realtime-valkey, Rule 0481). Help requests are kept only on Postgres and their queue changes
- * travel only on Valkey (PR B of the learning plan): no Supabase table or channel is added for them.
+ * travel only on Valkey (PR B of the learning plan), and so do lecturer feedback and shared reflections
+ * (PR E): no Supabase table or channel is added for them.
  */
 import type {
   AccessStore,
   AssistanceFeed,
   AssistanceStore,
+  FeedbackStore,
   LearningEventSink,
   LearningRecords,
   ProfilePort,
@@ -32,6 +34,7 @@ import {
   postgresAssistanceStore,
   postgresCatalogue,
   postgresClient,
+  postgresFeedbackStore,
   postgresLearningEventSink,
   postgresLearningRecords,
   postgresPlaygroundSnapshotRows,
@@ -122,6 +125,8 @@ export type ReaderServerData = {
   recordErrors(rows: AppErrorRow[]): Promise<void>;
   /** Help requests (/api/assistance): Postgres only, as no new Supabase table is added; null on Supabase, where the routes answer 503. */
   assistance: AssistanceStore | null;
+  /** Lecturer feedback and shared reflections (/api/feedback): Postgres only, as no new Supabase table is added; null on Supabase, where the routes answer 503. */
+  feedback: FeedbackStore | null;
 };
 
 /** What the server publishes to browsers, over the broker PUBLIC_REALTIME picks. */
@@ -189,7 +194,8 @@ function supabaseData(db: SupabaseClient): ReaderServerData {
     snippets: supabaseSnippetStore(db),
     playground: supabasePlaygroundSnapshotRows(db),
     recordErrors: (rows) => insertAppErrors(db, rows),
-    assistance: null
+    assistance: null,
+    feedback: null
   };
 }
 
@@ -210,7 +216,8 @@ function postgresData(sql: SqlClient): ReaderServerData {
     snippets: postgresSnippetStore(sql),
     playground: postgresPlaygroundSnapshotRows(sql),
     recordErrors: (rows) => insertPostgresAppErrors(sql, rows),
-    assistance: postgresAssistanceStore(sql)
+    assistance: postgresAssistanceStore(sql),
+    feedback: postgresFeedbackStore(sql)
   };
 }
 
