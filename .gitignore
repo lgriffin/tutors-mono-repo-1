@@ -75,3 +75,6 @@ apps/reader/static/runtimes/pyodide/
 apps/reader/static/runtimes/typescript/
 apps/reader/static/runtimes/katex/
 apps/reader/static/runtimes/config.json
+
+# pnpm db:move archives hold student data (guides/DATA-MOVE.md)
+*.dump
