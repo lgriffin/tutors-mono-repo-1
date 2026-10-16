@@ -46,8 +46,9 @@ jobs:
 
       - name: Run purge
         env:
-          # Set once the deployment runs on the Postgres store (guides/DATA-MOVE.md); then the two below are not read.
-          PRIVATE_DATABASE_URL: ${{ secrets.PRIVATE_DATABASE_URL }}
+          # The store the deployment runs on: Postgres once the DATA_STORE repository variable says so
+          # (guides/DATA-MOVE.md), so a database secret set early never purges the store nobody reads yet.
+          PRIVATE_DATABASE_URL: ${{ vars.DATA_STORE == 'postgres' && secrets.PRIVATE_DATABASE_URL || '' }}
           SUPABASE_URL: ${{ vars.PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm tsx scripts/purge-course-gists.ts

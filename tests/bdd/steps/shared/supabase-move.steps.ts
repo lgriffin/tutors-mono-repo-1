@@ -18,15 +18,23 @@ const SUPABASE_SQL = [
  * The rows of each table, read from Supabase and written into the store in process. Production
  * copies with pg_dump and pg_restore (scripts/db-move.ts), which CI rehearses against a real server
  * (scripts/db-move-rehearsal.sh); PGlite has no pg_dump, and what these steps prove is the plan,
- * the refusals and the checks around the copy.
+ * the refusals and the checks around the copy. Like the restore, it copies in one transaction.
  */
 function inProcessCopier(source: SqlClient, target: SqlClient): Copier {
   return {
-    async copy(tables) {
-      for (const table of tables) {
-        const quoted = `"${table}"`;
-        const { rows } = await source.query<{ row: string }>(`SELECT row_to_json(t)::text AS row FROM ${quoted} t`);
-        for (const { row } of rows) await target.query(`INSERT INTO ${quoted} SELECT * FROM json_populate_record(null::${quoted}, $1::json)`, [row]);
+    async copy(tables, { replace }) {
+      await target.query("BEGIN");
+      try {
+        if (replace && tables.length) await target.query(`TRUNCATE ${tables.map((t) => `"${t}"`).join(", ")}`);
+        for (const table of tables) {
+          const quoted = `"${table}"`;
+          const { rows } = await source.query<{ row: string }>(`SELECT row_to_json(t)::text AS row FROM ${quoted} t`);
+          for (const { row } of rows) await target.query(`INSERT INTO ${quoted} SELECT * FROM json_populate_record(null::${quoted}, $1::json)`, [row]);
+        }
+        await target.query("COMMIT");
+      } catch (error) {
+        await target.query("ROLLBACK");
+        throw error;
       }
     }
   };

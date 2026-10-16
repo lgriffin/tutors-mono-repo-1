@@ -8,8 +8,9 @@
  *   the store has no column for, or a store column that is NOT NULL with no default and missing
  *   in Supabase, blocks the move: the copy would fail half way, or lose a column without saying.
  * - run: copies every row of each planned table with a Copier (pg_dump of the Supabase tables into
- *   one archive, then pg_restore of its data into the store), refusing first, and copying nothing,
- *   when the plan has a blocker or a table to copy already holds rows (unless asked to replace them).
+ *   one archive, then a restore of its data into the store in one transaction), refusing first, and
+ *   copying nothing, when the plan has a blocker or a table to copy already holds rows (unless asked
+ *   to replace them, which the Copier does in that same transaction).
  * - verify: compares each copied table's row count and a checksum of its rows in both databases,
  *   and names each table that differs.
  *
@@ -99,13 +100,18 @@ export async function planMove(source: SqlClient, target: SqlClient): Promise<Mo
     });
   }
   if (!to.size) plan.blockers.push("the store has no tables yet: run `pnpm db:migrate` against it first");
+  else if (!plan.copy.length) plan.blockers.push("Supabase shares no table with the store: check SOURCE_DATABASE_URL names the Supabase database");
   plan.startEmpty = [...to.keys()].filter((table) => !from.has(table)).sort();
   return plan;
 }
 
-/** Copies the rows of the named tables from Supabase into the store: pg_dump and pg_restore in production. */
+/**
+ * Copies the rows of the named tables from Supabase into the store: pg_dump and a restore in
+ * production. With `replace` it empties those tables first, in the same transaction as the copy,
+ * so a copy that fails leaves the store's rows as they were.
+ */
 export interface Copier {
-  copy(tables: string[]): Promise<void>;
+  copy(tables: string[], options: { replace: boolean }): Promise<void>;
 }
 
 export interface MoveRun {
@@ -123,8 +129,8 @@ const countOf = async (sql: SqlClient, table: string) => Number((await sql.query
 
 /**
  * Copies every planned table, or nothing: a blocker in the plan, or a planned table that already
- * holds rows in the store, refuses the whole move before a row is copied. `replace` empties the
- * planned tables first instead, for a second rehearsal or a re-run after a failed one.
+ * holds rows in the store, refuses the whole move before a row is copied. `replace` has the copier
+ * empty the planned tables first instead, for a second rehearsal or a re-run after a failed one.
  */
 export async function runMove(plan: MovePlan, copier: Copier, target: SqlClient, options: { replace?: boolean } = {}): Promise<MoveRun> {
   const tables = plan.copy.map((t) => t.table);
@@ -136,8 +142,7 @@ export async function runMove(plan: MovePlan, copier: Copier, target: SqlClient,
     }
   }
   if (reasons.length) throw new MoveRefused(reasons);
-  if (options.replace && tables.length) await target.query(`TRUNCATE ${tables.map(ident).join(", ")}`);
-  await copier.copy(tables);
+  await copier.copy(tables, { replace: options.replace ?? false });
   await syncSequences(target, tables);
   const copied = [];
   for (const table of tables) copied.push({ table, rows: await countOf(target, table) });
@@ -180,10 +185,12 @@ function checksummed(column: MoveColumn): string {
 
 /**
  * The row count and an order-free checksum of the table's moved columns: the sum of each row's md5
- * (its first 15 hex digits), so the same rows in any order agree and a changed, lost or doubled row does not.
+ * (its first 15 hex digits), so the same rows in any order agree and a changed, lost or doubled row
+ * does not. The row is hashed as a record's text, which quotes values holding a delimiter and writes
+ * a null as nothing, so no two different rows read the same.
  */
 async function fingerprint(sql: SqlClient, table: MoveTable): Promise<{ rows: number; sum: string }> {
-  const row = `md5(concat_ws('|', ${table.columns.map((c) => `coalesce(${checksummed(c)}, '\\N')`).join(", ")}))`;
+  const row = `md5(ROW(${table.columns.map(checksummed).join(", ")})::text)`;
   const { rows } = await sql.query<{ n: string | number; sum: string | null }>(
     `SELECT count(*) AS n, coalesce(sum(('x' || substr(${row}, 1, 15))::bit(60)::bigint::numeric), 0)::text AS sum FROM ${ident(table.table)}`
   );

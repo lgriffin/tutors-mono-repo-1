@@ -46,7 +46,9 @@ may read or change a row (`guides/SERVER-WRITES.md`).
 
 ## On the day
 
-Pick a quiet hour; the reader serves courses throughout, but nothing is recorded while writes are frozen.
+Pick a quiet hour and tell students and lecturers first: the reader and Tutors Time are down for
+the whole freeze, so no course page opens until step 3 brings them back. The rehearsal says how
+long that is.
 
 1. **Freeze writes to Supabase.** Scale the reader and time Deployments to zero, so nothing writes
    learning records while the copy runs (the catalogue and Live do not write to these tables):
@@ -55,16 +57,22 @@ Pick a quiet hour; the reader serves courses throughout, but nothing is recorded
    `SOURCE_DATABASE_URL=… PRIVATE_DATABASE_URL=… pnpm db:move run`. Add `--replace` only when the
    store holds rows from an earlier attempt; without it a store table that already holds rows
    refuses the whole move. Every line must read `ok` and the last `all N tables match`.
-3. **Switch.** In the reader's and time's ConfigMap set `DATA_STORE: postgres`, and in the reader's
-   and Live's set `PUBLIC_REALTIME: valkey` (with `PRIVATE_VALKEY_URL` in their Secrets), then scale
-   the reader and time back up. Check a lab visit lands in `learning_records` in the store.
+3. **Switch.** In the reader's and time's ConfigMap set `DATA_STORE: postgres`, and in the reader's,
+   Live's and time's set `PUBLIC_REALTIME: valkey` (with `PRIVATE_VALKEY_URL` in the reader's and
+   Live's Secrets). A pod reads its environment when it starts, so scale the reader and time back
+   up and restart Live: `oc rollout restart deploy/live-tutors-app`. Check a lab visit lands in
+   `learning_records` in the store, and that Live's course page shows it. Set the repository
+   variable `DATA_STORE` to `postgres` too, so the nightly snippet cleanup purges the store.
 4. **Keep the evidence.** Keep the `pnpm db:move run` output with the release notes. The archive it
    names (`supabase-move-<time>.dump`) holds student data: keep it outside git, and delete it once
    the release is signed off.
 
 **Rolling back.** Until the Supabase adapters are deleted, setting `DATA_STORE` and
-`PUBLIC_REALTIME` back to empty returns the deployment to Supabase, which still holds every row up
-to the freeze; rows written to the store after the switch stay in the store.
+`PUBLIC_REALTIME` back to empty, then restarting the reader, time and Live
+(`oc rollout restart deploy/reader-tutors-app deploy/time-tutors-app deploy/live-tutors-app`),
+returns the deployment to Supabase, which still holds every row up to the freeze. Rows written to
+the store after the switch are not in Supabase: roll back before students use the store, or accept
+losing what they recorded since.
 
 ## Afterwards: deleting Supabase
 
