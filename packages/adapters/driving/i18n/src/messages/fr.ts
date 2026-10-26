@@ -78,7 +78,7 @@ const fr: Record<string, string> = {
   "nav.layout.theme": "Thème",
   "nav.layout.codeStyle": "Style de code",
   "nav.layout.language": "Langue",
-  "nav.layout.tip": "Ouvrir le menu de thème",
+  "nav.layout.tip": "Ouvrir les préférences",
   "nav.info.title": "Infos du cours",
   "nav.info.tip": "Ouvrir les infos du cours",
   "nav.toc.suffix": "Arborescence du cours",
