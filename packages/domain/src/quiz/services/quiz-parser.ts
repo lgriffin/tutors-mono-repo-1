@@ -30,7 +30,8 @@ import type { ParsedQuiz, QuestionType, QuizQuestion } from "../types.ts";
  * wrong answer correct. Returns null if no valid question is found.
  */
 export function parseQuizMarkdown(source: string): ParsedQuiz | null {
-  const sections = splitSections(source)
+  // A file saved on Windows ends lines with \r\n; read it as \n so `---` still separates sections.
+  const sections = splitSections(source.replace(/\r\n?/g, "\n"))
     .map((s) => s.trim())
     .filter(Boolean);
   if (sections.length === 0) return null;
@@ -198,14 +199,12 @@ function extractListField(section: string, key: string): string[] {
 /**
  * Join a field's first-line value with its continuation lines. A lone `|`
  * (the YAML habit) is dropped, continuation lines lose their common
- * indentation, and a value that stays on one line keeps the old quote
- * stripping.
+ * indentation, and quotes around the first line are stripped as they always
+ * were for a one-line value.
  */
 function joinBlock(first: string, rest: string[]): string {
-  const head = first === "|" || first === ">" ? "" : first;
-  const body = dedent(rest);
-  if (!body.trim()) return stripQuotes(head);
-  return `${head}\n${body}`.trim();
+  const head = first === "|" || first === ">" ? "" : stripQuotes(first);
+  return `${head}\n${dedent(rest)}`.trim();
 }
 
 function dedent(lines: string[]): string {

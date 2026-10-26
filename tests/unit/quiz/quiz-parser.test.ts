@@ -159,4 +159,33 @@ describe("parseQuizMarkdown: multi-line text", () => {
     expect(quiz?.questions).toHaveLength(1);
     expect(quiz?.questions[0].text).toBe("What is this?\n~~~md\n---\n~~~");
   });
+
+  it("drops a question section that has no question text", () => {
+    expect(parseQuizMarkdown("title: Quiz\n---\noptions:\n  - a\n  - b\ncorrect: 0")).toBeNull();
+  });
+
+  it("drops a question whose `question:` is empty", () => {
+    expect(parseQuizMarkdown("question:\noptions:\n  - a\n  - b\ncorrect: 0")).toBeNull();
+  });
+
+  it("keeps the first of two `question:` lines", () => {
+    const quiz = parseQuizMarkdown("question: First\nquestion: Second\noptions:\n  - a\n  - b\ncorrect: 0");
+    expect(quiz?.questions[0].text).toBe("First");
+  });
+
+  it("skips blank lines before the first option and after a lone `|`", () => {
+    const quiz = parseQuizMarkdown("question: Which?\noptions:\n\n  - |\n\n    ```js\n    a()\n    ```\n\n    Then b.\n  - b\ncorrect: 0");
+    expect(quiz?.questions[0].options).toEqual(["```js\na()\n```\n\nThen b.", "b"]);
+  });
+
+  it("strips quotes from a quoted first line followed by a code block", () => {
+    const quiz = parseQuizMarkdown('question: "What prints?"\n```js\nf()\n```\noptions:\n  - "Output:"\n    ```\n    1\n    ```\n  - b\ncorrect: 0');
+    expect(quiz?.questions[0].text).toBe("What prints?\n```js\nf()\n```");
+    expect(quiz?.questions[0].options[0]).toBe("Output:\n```\n1\n```");
+  });
+
+  it("reads a quiz saved with Windows line endings", () => {
+    const quiz = parseQuizMarkdown("question: One\r\noptions:\r\n  - a\r\n  - b\r\ncorrect: 0\r\n---\r\nquestion: Two\r\noptions:\r\n  - a\r\n  - b\r\ncorrect: 1\r\n");
+    expect(quiz?.questions.map((q) => q.text)).toEqual(["One", "Two"]);
+  });
 });

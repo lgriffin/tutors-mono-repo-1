@@ -3,8 +3,8 @@ import type { QuizContent } from "../types.ts";
 /** Opening fence of a quiz block: three or more backticks (or tildes) then `quiz`. */
 const OPEN_FENCE = /^\s*(`{3,}|~{3,})\s*quiz\s*$/i;
 
-/** Any fence line, with or without a language after it. */
-const CODE_FENCE = /^\s*(`{3,}|~{3,})/;
+/** Any fence line, with or without a language after it, including one opened on an option's dash line. */
+const CODE_FENCE = /^\s*(?:-\s+)?(`{3,}|~{3,})/;
 
 /** A closing fence is the opening character repeated at least as many times, and nothing else. */
 function closes(line: string, fence: string): boolean {

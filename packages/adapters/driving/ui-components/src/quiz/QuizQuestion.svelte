@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { QuestionType } from "@tutors/domain/quiz";
-  import { currentCodeTheme } from "@tutors/svelte-state/markdown";
+  import { copyCode, currentCodeTheme } from "@tutors/svelte-state/markdown";
   import { isBlockQuizText, quizTextToHtml } from "./quiz-text.ts";
 
   interface Props {
@@ -16,7 +16,7 @@
 </script>
 
 {#key currentCodeTheme.value}
-<fieldset class="space-y-4" {disabled} aria-labelledby={blockStem ? `${id}-stem` : undefined}>
+<fieldset class="space-y-4" {disabled} use:copyCode aria-labelledby={blockStem ? `${id}-stem` : undefined}>
   {#if blockStem}
     <div id="{id}-stem" class="quiz-legend quiz-block"><span class="ui-muted">{questionIndex + 1}.</span> {@html render(text)}</div>
   {:else}
