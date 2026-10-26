@@ -78,7 +78,7 @@ const en = {
   "nav.layout.theme": "Theme",
   "nav.layout.codeStyle": "Code Style",
   "nav.layout.language": "Language",
-  "nav.layout.tip": "Open Theme Menu",
+  "nav.layout.tip": "Open Preferences",
   "nav.info.title": "Course Info",
   "nav.info.tip": "Open course info",
   "nav.toc.suffix": "Course Tree",
