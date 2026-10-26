@@ -132,3 +132,31 @@ describe("parseQuizMarkdown: empty and header-only input", () => {
     expect(parseQuizMarkdown(source)).toBeNull();
   });
 });
+
+describe("parseQuizMarkdown: multi-line text", () => {
+  it("keeps the old reading of options written as bare lines", () => {
+    const quiz = parseQuizMarkdown("question: Pick one\noptions:\n  alpha\n  beta\ncorrect: 1");
+    expect(quiz?.questions[0].options).toEqual(["alpha", "beta"]);
+  });
+
+  it("ends an option list at any other `name: value` line, as before", () => {
+    const quiz = parseQuizMarkdown("question: Pick one\noptions:\n  - a\n  - b\nhint: none\n  - c\ncorrect: 1");
+    expect(quiz?.questions[0].options).toEqual(["a", "b"]);
+  });
+
+  it("accepts a YAML `|` after question and drops the common indentation", () => {
+    const quiz = parseQuizMarkdown("question: |\n  Read this:\n\n  ```py\n  if x:\n      y()\n  ```\noptions:\n  - a\n  - b\ncorrect: 0");
+    expect(quiz?.questions[0].text).toBe("Read this:\n\n```py\nif x:\n    y()\n```");
+  });
+
+  it("keeps a code fence opened on the dash line, with its body at the dash's indent", () => {
+    const quiz = parseQuizMarkdown("question: Which?\noptions:\n  - ```js\n  a()\n  ```\n  - b\ncorrect: 0");
+    expect(quiz?.questions[0].options).toEqual(["```js\na()\n```", "b"]);
+  });
+
+  it("does not split questions on a `---` line inside a tilde fence", () => {
+    const quiz = parseQuizMarkdown("question: What is this?\n~~~md\n---\n~~~\noptions:\n  - a\n  - b\ncorrect: 0");
+    expect(quiz?.questions).toHaveLength(1);
+    expect(quiz?.questions[0].text).toBe("What is this?\n~~~md\n---\n~~~");
+  });
+});
