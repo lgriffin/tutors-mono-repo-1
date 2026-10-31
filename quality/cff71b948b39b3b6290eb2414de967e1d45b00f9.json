@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "commit": "cff71b948b39b3b6290eb2414de967e1d45b00f9",
   "base": "432d46864626ce14e07eb7715e0408c643ca906a",
-  "generatedAt": "2026-10-30T10:37:16Z",
-  "evidence": "https://github.com/lgriffin/tutors-mono-repo-1/actions/runs/41034981511",
+  "generatedAt": "2026-10-31T10:16:27Z",
+  "evidence": "https://github.com/lgriffin/tutors-mono-repo-1/actions/runs/41188192569",
   "nightly": {
     "result": "failure",
     "jobs": {
@@ -12,7 +12,7 @@
       "mutation-nightly": "failure",
       "suite-health": "failure",
       "e2e-stack-nightly": "failure",
-      "timezone-matrix": "success",
+      "timezone-matrix": "failure",
       "lighthouse": "success",
       "load": "success",
       "generator-corpus": "success"
