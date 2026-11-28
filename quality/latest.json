@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "commit": "cff71b948b39b3b6290eb2414de967e1d45b00f9",
   "base": "432d46864626ce14e07eb7715e0408c643ca906a",
-  "generatedAt": "2026-11-27T12:44:44Z",
-  "evidence": "https://github.com/lgriffin/tutors-mono-repo-1/actions/runs/45993389199",
+  "generatedAt": "2026-11-28T04:06:23Z",
+  "evidence": "https://github.com/lgriffin/tutors-mono-repo-1/actions/runs/46101449215",
   "nightly": {
     "result": "failure",
     "jobs": {
